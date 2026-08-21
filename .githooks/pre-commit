@@ -1,0 +1,25 @@
+#!/bin/sh
+
+set -eu
+
+repository_root=$(git rev-parse --show-toplevel)
+staged_zone_files=$(git diff --cached --name-only --diff-filter=ACMR -- | sed -n '/:Zone\.Identifier$/p')
+
+if [ -n "$staged_zone_files" ]; then
+  printf '%s\n' 'Refusing to commit staged Windows download metadata:' >&2
+  printf '%s\n' "$staged_zone_files" >&2
+  printf '%s\n' 'Remove the paths from the index before committing.' >&2
+  exit 1
+fi
+
+zone_files=$(find "$repository_root" \
+  -type f -name '*:Zone.Identifier' \
+  ! -path "$repository_root/.git/*" -print)
+
+if [ -n "$zone_files" ]; then
+  printf '%s\n' 'Removing Windows download metadata:'
+  printf '%s\n' "$zone_files"
+  find "$repository_root" \
+    -type f -name '*:Zone.Identifier' \
+    ! -path "$repository_root/.git/*" -exec rm -f {} +
+fi

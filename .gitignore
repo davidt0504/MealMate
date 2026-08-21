@@ -4,6 +4,8 @@
 *.pyc
 *.swp
 .DS_Store
+# Windows download metadata; optional cleanup hook documented in README.md.
+*:Zone.Identifier
 .atom/
 .buildlog/
 .history
