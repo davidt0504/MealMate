@@ -5,12 +5,12 @@ This is the durable operational source of truth after the MVP as well as during 
 ## Current milestone
 
 **Milestone:** Foundation readiness  
-**Next action:** Complete `PRE-001`. `DEC-001` is Done (2026-08-21); its naming decision is deferred to `DEC-004`, which blocks only `MVP-018`, `MVP-021`, and `MVP-022`. Do not implement the app until `PRE-001` is Done.  
+**Next action:** Complete `PRE-001`. `DEC-001` is Done (2026-08-21); its naming decision is deferred to `DEC-004`, now `Ready` and owner-paced. `DEC-004` directly blocks `MVP-018`, `MVP-021`, and `MVP-022`, and therefore transitively gates `MVP-019` and `MVP-020` — nothing from `MVP-018` onward can start until it is Done. Do not implement the app until `PRE-001` is Done.  
 **Platform:** Android MVP and initial launch. iOS is the first post-launch platform priority.
 
 ## Status contract
 
-`Draft → Ready → In Progress → Verify → Done`. A material source or decision change returns an affected card to Draft. Done requires the card's required evidence to be recorded; approval of one artifact is not approval of another.
+`Draft → Ready → In Progress → Verify → Done`. A material source or decision change returns an affected card to Draft. Done requires the card's required evidence to be recorded; approval of one artifact is not approval of another. Done evidence is recorded in the Evidence log below — one row per card, with each required item labelled `PASS`, `FAIL`, or `NOT VERIFIED` per `docs/task/README.md`.
 
 ## Delivery gates
 
@@ -48,12 +48,12 @@ This is the durable operational source of truth after the MVP as well as during 
 | MVP-016 | Draft | Shopping-list experience | MVP-003, MVP-004, MVP-015 |
 | MVP-017 | Draft | Offline cache and recovery | MVP-008, MVP-009, MVP-013, MVP-014, MVP-016 |
 | DEC-003 | Draft | Cloud/sharing release boundary | MVP-017 |
+| DEC-004 | Ready | Naming clearance and production identity | DEC-001 |
 | MVP-018 | Draft | Real dev backend and durable auth | MVP-017, DEC-003, DEC-004 |
 | MVP-019 | Draft | Privacy-safe observability | MVP-018 |
 | MVP-020 | Draft | Share publication and web preview | MVP-009, MVP-018, DEC-003 |
 | MVP-021 | Draft | Android App Links recipient flow | MVP-020, DEC-004 |
-| MVP-022 | Draft | Android beta readiness | DEC-004, MVP-001–MVP-009, MVP-011–MVP-021, and MVP-010 unless explicitly cut |
-| DEC-004 | Draft | Naming clearance and production identity | DEC-001 |
+| MVP-022 | Draft | Android beta readiness | DEC-004, MVP-001–MVP-009, MVP-011–MVP-021, and MVP-010 unless explicitly cut; all delivery gates through SHARING-SECURITY-READY |
 | OPT-001 | Draft | Structured URL recipe import | MVP-008; optional, never blocks MVP |
 
 MVP-010 may be explicitly cut under the PRD's photo deferral rule, but must not silently disappear. OPT-001 has no dependency path into MVP completion.
@@ -99,12 +99,13 @@ MVP-010 may be explicitly cut under the PRD's photo deferral rule, but must not 
 | D-019 | Retire `MealMate` as the public brand; defer name and production ID to DEC-004 | `com.mealmate.app` is consumed on Play and the name is crowded. Scaffold with temporary `dev.mealmate.temp` / Dart `meal_mate`; replace before MVP-018, MVP-021, MVP-022 |
 | D-020 | Pin Android `minSdk 24` explicitly | `targetSdk`/`compileSdk` inherit Flutter; PRE-001 verifies the default does not exceed 24 |
 | D-021 | Scaffold Android only | Web added at MVP-020 only after deciding Flutter Web vs static Hosting for previews |
+| D-022 | Run the Android emulator on the Windows host; WSL uses `adb` as a TCP client | No `/dev/kvm` on this Win10 Pro 22H2 host and nested virtualization is Win11-only. Applies to PRE-001 and the MVP-003/MVP-004/MVP-005 emulator evidence |
 
 ## Evidence log
 
-| Date | Card | Evidence |
-|---|---|---|
-| 2026-08-21 | DEC-001 | Done. Resolution recorded in the card. Collision check: `com.mealmate.app` Play listing consumed (now 404); ≥5 Play apps titled MealMate; mealmateco.com same-concept; USPTO 97352318 live in appliances class. Decisions 2–3 final; decision 1 → DEC-004. |
+| Date | Card | Result | Evidence |
+|---|---|---|---|
+| 2026-08-21 | DEC-001 | Done | Resolution recorded in the card; decisions 2–3 final, decision 1 descoped to DEC-004. Clearance for `MealMate`: Play package ID — FAIL (`com.mealmate.app` search-index entry; listing URL now 404, i.e. indexed then unpublished, and Play never releases a published ID). Play title — FAIL (≥5 apps titled MealMate). Web/search — FAIL (mealmateco.com, same concept). Trademark — NOT VERIFIED (web-sourced USPTO 97352318, appliances class; no authoritative TESS search). Apple App Store title — NOT VERIFIED (not performed). |
 
 ## Calibration and post-launch
 

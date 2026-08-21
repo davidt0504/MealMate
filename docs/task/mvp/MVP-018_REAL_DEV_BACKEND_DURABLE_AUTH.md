@@ -32,6 +32,7 @@ Prove the local core loop on a separate real development backend and let anonymo
 ## Scope
 
 - Configure the approved dev project, secrets/config boundary, rules/indexes/storage, durable auth provider, upgrade/restart/recovery flows, and Android-device/emulator evidence.
+- Apply DEC-004's rename before any identifier binds to the dev project: `applicationId`, Android manifest label, `pubspec.yaml` name if DEC-004 renamed it, Firebase config, `README.md`, and `docs/`.
 
 ## Non-goals
 
@@ -47,6 +48,7 @@ Prove the local core loop on a separate real development backend and let anonymo
 - **AC-2:** Anonymous household data survives durable-account upgrade and restart.
 - **AC-3:** Collision/cancel/network/retry cases preserve recoverability and honest messaging.
 - **AC-4:** Dev rules, indexes, Storage, and App Check posture pass independent review on Android evidence.
+- **AC-5:** No `dev.mealmate.temp` and no `.temp` application identifier remains in `android/`, `pubspec.yaml`, Firebase config, `README.md`, or `docs/`.
 
 ## Evidence plan
 
@@ -56,6 +58,7 @@ Prove the local core loop on a separate real development backend and let anonymo
 | AC-2 | Real-dev integration scenario |
 | AC-3 | Fault/collision matrix |
 | AC-4 | Deployment diff, rules tests, Android run, fresh-context security review |
+| AC-5 | Targeted identifier grep across the repository |
 
 ## Stop/failure conditions
 

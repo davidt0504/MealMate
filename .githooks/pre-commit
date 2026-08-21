@@ -14,12 +14,12 @@ fi
 
 zone_files=$(find "$repository_root" \
   -type f -name '*:Zone.Identifier' \
-  ! -path "$repository_root/.git/*" -print)
+  ! -path "$repository_root/.git/*" -print 2>/dev/null || true)
 
 if [ -n "$zone_files" ]; then
   printf '%s\n' 'Removing Windows download metadata:'
   printf '%s\n' "$zone_files"
   find "$repository_root" \
     -type f -name '*:Zone.Identifier' \
-    ! -path "$repository_root/.git/*" -exec rm -f {} +
+    ! -path "$repository_root/.git/*" -exec rm -f {} + 2>/dev/null || true
 fi

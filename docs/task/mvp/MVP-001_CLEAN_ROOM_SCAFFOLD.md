@@ -27,7 +27,7 @@ Replace the disposable legacy app with a current, minimal Android Flutter scaffo
 - Scaffold in a temporary directory first; use an explicit replacement allowlist.
 - Preserve `.git`, `docs`, `LICENSE`, and only DEC-001-approved product metadata.
 - Preserve no legacy code, schema, tests, generated platform tree, or migration path.
-- Generate durable identifiers from DEC-001; do not scaffold web/desktop/iOS unless DEC-001 explicitly requires it.
+- Generate the temporary development identifiers DEC-001 §1 specifies; production identity is DEC-004's. Do not scaffold web/desktop/iOS unless DEC-001 explicitly requires it.
 
 ## Scope
 
@@ -44,7 +44,7 @@ Replace the disposable legacy app with a current, minimal Android Flutter scaffo
 ## Acceptance criteria
 
 - **AC-1:** Only the approved preserve set and new scaffold remain.
-- **AC-2:** Product/package identifiers match DEC-001: `applicationId dev.mealmate.temp`, Dart package `meal_mate`, `minSdk 24`; no `com.example` placeholder remains, and the dev identity is documented as temporary pending DEC-004.
+- **AC-2:** Product/package identifiers match DEC-001: `applicationId dev.mealmate.temp`, Dart package `meal_mate`, Android manifest label `MealMate (dev)`, `minSdk 24`; no `com.example` placeholder remains, and the dev identity is documented as temporary pending DEC-004.
 - **AC-3:** Format, analyze, tests, and Android debug build pass.
 - **AC-4:** A fresh-context review confirms no legacy implementation or unauthorized platform surface survived.
 

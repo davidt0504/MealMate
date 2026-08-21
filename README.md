@@ -13,7 +13,9 @@ git config --local core.hooksPath .githooks
 ```
 
 When enabled, the hook prints and removes matching metadata files before each
-commit. It refuses the commit if one has already been staged. Disable the hook
+commit. The cleanup sweeps the entire worktree, including unstaged and
+git-ignored directories, not only the paths being committed. It refuses the
+commit if one has already been staged. Disable the hook
 at any time with:
 
 ```bash

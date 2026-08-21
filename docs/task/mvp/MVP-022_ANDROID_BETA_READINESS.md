@@ -7,7 +7,7 @@
 | Status | Draft |
 | Type | Verification/readiness |
 | Workstream | Release |
-| Depends on | DEC-004, MVP-001–MVP-009, MVP-011–MVP-021, and MVP-010 unless explicitly cut; all delivery gates |
+| Depends on | DEC-004, MVP-001–MVP-009, MVP-011–MVP-021, and MVP-010 unless explicitly cut; all delivery gates through SHARING-SECURITY-READY |
 | Complexity | Complex |
 | Assurance | Elevated |
 | Sequential batching | Final MVP card |
@@ -47,7 +47,7 @@ Produce evidence that Meal Mate is safe and reliable enough for an Android beta 
 - **AC-1:** PRD §24 items 1–11 and every invariant have traceable PASS evidence or an explicitly approved permitted cut.
 - **AC-2:** Security/rules/privacy/abuse/report/deletion/export and public-sharing threat controls pass independent review.
 - **AC-3:** Android clean-install core loop, offline/reconnect, durable auth, links, accessibility, and supported-device performance pass.
-- **AC-4:** Monitoring, rollback, budget/alert, incident owner, Play declarations, privacy/support, domain/signing/store prerequisites are ready or clearly identify an external blocker.
+- **AC-4:** Monitoring, rollback, budget/alert, incident owner, Play declarations, privacy/support, domain/signing/store prerequisites are ready or clearly identify an external blocker, and no temporary `.temp` application identifier reaches the store submission.
 - **AC-5:** A dated go/no-go report distinguishes readiness from actions still requiring authorization.
 
 ## Evidence plan

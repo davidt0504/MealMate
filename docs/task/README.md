@@ -6,7 +6,7 @@ These cards are planning inputs, not approved execution plans. A workflow recomm
 
 `Draft → Ready → In Progress → Verify → Done`
 
-- Only `DEC-001` and `PRE-001` start Ready. `DEC-004` (naming clearance) is owner-paced and gates only the cards that bind a production identifier.
+- `DEC-001` is Done; `PRE-001` and `DEC-004` are Ready. `DEC-004` (naming clearance) is owner-paced: it directly gates the cards that bind a production identifier (`MVP-018`, `MVP-021`, `MVP-022`) and transitively gates `MVP-019` and `MVP-020`.
 - Promote a card only when every dependency is Done and its inputs are current.
 - Return it to Draft after a material product, architecture, or dependency change.
 - Record evidence and status in `docs/ROADMAP.md` at handoff.

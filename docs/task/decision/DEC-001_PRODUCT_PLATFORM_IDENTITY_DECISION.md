@@ -29,11 +29,11 @@ Lock the minimum identity needed to create a clean Android scaffold without acci
 - Android is the MVP/initial-launch client; iOS is post-launch priority.
 - The old implementation is disposable; preserve only `.git`, docs, license, and deliberately selected product metadata.
 - Flutter remains the client framework; web exists in MVP only for public share preview/endpoints.
-- Package/application identity should be durable and non-placeholder.
+- Production package/application identity must be durable and non-placeholder; any pre-production scaffold identity must be unmistakably temporary and traceable to the card that replaces it. *(Amended 2026-08-21 — see Resolution §1.)*
 
 ## Decisions to resolve
 
-1. Final user-facing product spelling and Android application/package identifiers.
+1. ~~Final user-facing product spelling and Android application/package identifiers.~~ **Descoped 2026-08-21 to `DEC-004`** — see Resolution §1.
 2. Minimum supported Android SDK/device posture, based on current Flutter/Firebase compatibility and intended users.
 3. Whether repository-level web support is scaffolded initially or added only with MVP-020.
 
@@ -53,12 +53,14 @@ Lock the minimum identity needed to create a clean Android scaffold without acci
 
 Resolved via `deep-options` and `grill-me`. Decision 1 is split out to `DEC-004`; decisions 2 and 3 are final.
 
+> **Amended 2026-08-21:** locked constraint 4 and decision 1 were rewritten to match this resolution (`docs/ROADMAP.md` D-019). No dependent card's inputs changed; every card affected by D-019 was already Draft. Completion criteria are unchanged.
+
 ### 1. Product spelling and identifiers — deferred to DEC-004
 
 - **Choice:** `MealMate` is retired as the intended public brand. It remains a temporary internal codename only. The final public name and production application/package ID are deferred to `DEC-004` pending naming clearance. Until then the scaffold uses a clearly temporary development identity: `applicationId dev.mealmate.temp`, Dart package `meal_mate`, display name `MealMate (dev)`.
-- **Rationale:** A collision check (2026-08-21) found `com.mealmate.app` already consumed on Google Play (listing now 404 — Play never releases a published package ID), at least five other Play apps titled MealMate, a same-concept competitor at mealmateco.com, and one live USPTO mark (97352318, kitchen appliances class). The package ID is permanent once on Play, so no `com.mealmate.*` identifier may be committed.
+- **Rationale:** A collision check (2026-08-21) found a Play search-index entry for `com.mealmate.app` whose listing URL now returns 404. The index hit is the load-bearing evidence, not the 404: an indexed listing existed and was later unpublished, and Play never releases a published package ID — a 404 on its own is what any never-published identifier returns. Clearance results for `MealMate`, labelled per `DEC-004`'s checklist: Play package ID — **FAIL** (index entry above); Play title — **FAIL** (≥5 apps titled MealMate); web/search — **FAIL** (same-concept competitor at mealmateco.com); trademark — **NOT VERIFIED** (web-sourced USPTO 97352318, kitchen appliances class; no authoritative TESS search performed); Apple App Store title — **NOT VERIFIED** (not performed). The package ID is permanent once on Play, so no `com.mealmate.*` identifier may be committed.
 - **Rejected:** `com.mealmate.app` (consumed); `com.<owner-domain>.mealmate` and `app.mealmate.household` (both keep a crowded brand that the owner declined to accept as an MVP-022 marketing problem); keeping `com.example.meal_mate` (rejected by Play, and the placeholder MVP-001 exists to remove); probing Play Console for ID availability (outside authority boundary).
-- **Reversal cost:** The dev ID is disposable by design. It must be replaced before any card binds an identifier to a real Firebase project, App Links, signing, or Play (`MVP-018`, `MVP-021`, `MVP-022`); after Play submission the production ID is irreversible.
+- **Reversal cost:** The dev ID is disposable by design. It must be replaced before any card binds an identifier to a real Firebase project, App Links, signing, or Play (`MVP-018`, `MVP-021`, `MVP-022`); after Play submission the production ID is irreversible. The reverse-DNS reading `temp.mealmate.dev` was considered and accepted: `MVP-001` through `MVP-017` are emulator-only (D-008) and `DEC-004` gates the first card that registers a package name with any external system, so the identifier never leaves the development machine.
 
 ### 2. Minimum Android SDK — pin `minSdk 24`
 

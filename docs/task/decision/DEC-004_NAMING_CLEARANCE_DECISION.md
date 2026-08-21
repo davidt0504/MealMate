@@ -4,7 +4,7 @@
 
 | Field | Value |
 |---|---|
-| Status | Draft |
+| Status | Ready |
 | Type | Decision |
 | Workstream | Product foundation |
 | Depends on | DEC-001 |
