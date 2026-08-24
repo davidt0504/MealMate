@@ -4,7 +4,7 @@
 
 | Field | Value |
 |---|---|
-| Status | Ready |
+| Status | Done |
 | Type | Readiness |
 | Workstream | Developer environment |
 | Depends on | — |
@@ -14,7 +14,7 @@
 | Recommended workflow | `plan-task` |
 | External actions | SDK downloads may require network/disk; no credentials, signing, or cloud resources |
 
-> **Amended 2026-08-21:** Scope, AC-1, the decision gate, and the AC-1/AC-4 evidence rows were updated for D-020 (minSdk floor) and D-022 (Windows-host emulator). The card's inputs and outcome are unchanged, so it stays `Ready`.
+> **Amended 2026-08-21:** Scope, AC-1, the decision gate, and the AC-1/AC-4 evidence rows were updated for D-020 (minSdk floor) and D-022 (Windows-host emulator). The card's inputs and outcome are unchanged; it stayed `Ready` until completion promoted it to `Done` on 2026-08-22.
 
 ## Outcome and user value
 

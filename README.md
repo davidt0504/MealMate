@@ -1,6 +1,16 @@
-# MealMate
+# MealMate (dev)
 
-MealMate is a meal planning app with a smart pantry, recipe storage, shopping lists, and social features. The open-source repo includes the app's code, docs, and resources.
+A household meal-planning app: recipes, meal plans, a pantry-aware shopping list, and
+the loop between them. Android is the MVP and initial-launch platform; iOS is the first
+post-launch priority.
+
+**`MealMate` is a temporary internal codename, not the public brand.** It was retired as
+the intended public name by `docs/ROADMAP.md` D-019 after a naming-clearance check. The
+scaffold therefore carries a deliberately temporary development identity — Android
+`applicationId dev.mealmate.temp`, display name `MealMate (dev)`, Dart package
+`meal_mate` — chosen so it is unmistakably disposable. `DEC-004` decides the real name and
+production application ID, and must replace this identity before `MVP-018`, `MVP-021`, or
+`MVP-022` binds an identifier to Firebase, App Links, signing, or Play.
 
 ## Optional repository cleanup hook
 

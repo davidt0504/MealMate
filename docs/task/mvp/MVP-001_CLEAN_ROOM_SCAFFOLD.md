@@ -4,7 +4,7 @@
 
 | Field | Value |
 |---|---|
-| Status | Draft |
+| Status | Done |
 | Type | Implementation |
 | Workstream | Foundation |
 | Depends on | DEC-001, PRE-001 |
@@ -64,3 +64,29 @@ Replace the disposable legacy app with a current, minimal Android Flutter scaffo
 ## Handoff
 
 Record evidence/status in `docs/ROADMAP.md`; then promote DEC-002.
+
+## Verification record — 2026-08-22
+
+All four acceptance criteria `PASS`. AC-3 was initially held at `NOT VERIFIED` because a
+permission hook denied every read of the APK path in both the implementer and verifier
+sessions; the owner confirmed the artifact directly on 2026-08-22, closing it. The
+condensed row is in `docs/ROADMAP.md`'s Evidence log; this is the detailed record.
+
+| Criterion | Result | Evidence |
+|---|---|---|
+| AC-1 | **PASS** | `git diff --stat HEAD` = 124 files changed, 257 insertions, 4124 deletions. `ios/ macos/ windows/ linux/ web/` deleted in full; `lib/models/recipe.dart`, `lib/screens/recipe_management/recipe_form_screen.dart`, `test/models/recipe_test.dart`, `android/app/src/main/kotlin/com/example/meal_mate/MainActivity.kt` and the three Groovy `*.gradle` files deleted. Verifier's independent depth-2 sweep found only the 9-entry surviving set plus stock scaffold output and pre-approved regenerated residue; no empty orphan package directory. |
+| AC-2 | **PASS** | `applicationId = "dev.mealmate.temp"`, `namespace = "dev.mealmate.temp"`, `package dev.mealmate.temp`, `android:label="MealMate (dev)"`, `name: meal_mate`, explicit `minSdk = 24` with `targetSdk`/`compileSdk` still inheriting `flutter.*` per D-020. Zero `com.example` on the code surface; the only two occurrences repo-wide are governance prose in this card (AC-2 text) and `DEC-001` (rejected alternatives). Temporary-pending-`DEC-004` documented in `README.md`, `pubspec.yaml`, and the `build.gradle.kts` comment. |
+| AC-3 | **PASS** | `dart format` clean, `flutter analyze` no issues, `flutter test` 1/1 — all passed in the implementer session **and** reran clean in the verifier's independent session. `flutter build apk --debug` reported `✓ Built build/app/outputs/flutter-apk/app-debug.apk`, but every direct read of that path (`ls`, `stat`, `find`) was denied by a permission hook in **both** sessions. Neither party worked around the denial, so AC-3 was first recorded `NOT VERIFIED`. Owner confirmed the artifact directly on 2026-08-22: `-rw-r--r-- 1 davidlinux davidlinux 150419440 Aug 22 22:40 build/app/outputs/flutter-apk/app-debug.apk` (150 MB, matching PRE-001's debug APK size). AC-3 closed **PASS**. |
+| AC-4 | **PASS** | Independent fresh-context verifier: no legacy Dart, schema, or test survives; no non-Android platform tree exists; `.metadata` `migration.platforms` lists only `root` and `android`; no Groovy Gradle file remains; every scaffold config byte-diffs to stock Flutter 3.47.1 apart from the three intended identity edits. |
+
+**AC-3 closed 2026-08-22** by owner confirmation of the APK artifact. Card moved
+`Verify → Done`; Evidence-log row written once; `DEC-002` promoted to `Ready`.
+
+**Carried forward:** the permission hook that blocks reads of `build/app/outputs/flutter-apk/`
+will block the same evidence step on any later card that builds an APK (`MVP-003`, `MVP-022`).
+Worth granting once rather than re-deriving the workaround each time.
+
+**Rollback available:** `/home/davidlinux/mvp001_rollback_2026-08-22/` — `worktree.tar.gz`
+(835K, 532 `.git` entries), `HEAD.sha` (`9eb5c91`), `uncommitted.diff`, `manifest-before.txt`.
+Restore was rehearsed before the destructive step and verified byte-faithful. Nothing has been
+committed or pushed.
