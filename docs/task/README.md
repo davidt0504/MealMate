@@ -6,7 +6,7 @@ These cards are planning inputs, not approved execution plans. A workflow recomm
 
 `Draft → Ready → In Progress → Verify → Done`
 
-- `DEC-001`, `PRE-001`, and `MVP-001` are Done; `DEC-002` and `DEC-004` are Ready. `DEC-004` (naming clearance) is owner-paced: it directly gates the cards that bind a production identifier (`MVP-018`, `MVP-021`, `MVP-022`) and transitively gates `MVP-019` and `MVP-020`.
+- `DEC-001`, `PRE-001`, and `MVP-001` are Done; `DEC-002` is in `Verify` and `DEC-004` is `In Progress`. `DEC-004` (naming clearance) is owner-paced: it directly gates the cards that bind a production identifier (`MVP-018`, `MVP-021`, `MVP-022`) and transitively gates `MVP-019` and `MVP-020`.
 - Promote a card only when every dependency is Done and its inputs are current.
 - Return it to Draft after a material product, architecture, or dependency change.
 - Record evidence and status in `docs/ROADMAP.md` at handoff.
@@ -48,7 +48,7 @@ Use Fable only if locally available and proven on comparable repository work. Mo
 - Standard: implementer runs targeted tests, static analysis, and the card's required manual evidence.
 - Elevated: tests should be derived from acceptance criteria before or independently from implementation when practical; a fresh-context verifier reruns them, investigates failures, and checks material coverage gaps.
 - The verifier begins read-only. Test changes require explicit justification and review; never weaken a test merely to make it pass.
-- Report each required item as `PASS`, `FAIL`, or `NOT VERIFIED`. Only all required `PASS` permits Done.
+- Report each required item as `PASS`, `FAIL`, or `NOT VERIFIED`. Only all required `PASS` permits Done, with one exception: an item may stand at `NOT VERIFIED` and still permit Done when all three hold — (1) the card records why the resolving action is not the card's own work to do, naming the constraint or stop condition that puts it outside scope; (2) the card names where the item is discharged downstream, or states that it is permanently unresolvable and names the residual risk; and (3) the owner accepts that residual risk, recorded in the `docs/ROADMAP.md` Evidence-log row as a dated, attributed clause — `owner-accepted YYYY-MM-DD`, mirroring the form of the `owner-approved 2026-08-22` clause in `MVP-001`'s row. An item whose resolving action is simply unfinished work inside the card's own scope is not covered and still blocks Done, as does any `NOT VERIFIED` missing one of the three. This exception applies to cards reaching Done on or after 2026-08-24; cards already Done are unaffected, whether or not they would have met it.
 - Allow at most two implement/fix/reverify cycles before escalating the underlying design or task boundary.
 
 Subagents may be used when the active environment supports them, but independence comes from separate context and evidence—not from agent count. Never run concurrent writers in the same checkout. Sequential batching is allowed only after the current card is Done.
