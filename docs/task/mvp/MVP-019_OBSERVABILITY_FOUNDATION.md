@@ -14,6 +14,8 @@
 | Recommended workflow | `plan-task` |
 | External actions | Dev-only analytics/crash configuration; production activation requires separate approval |
 
+> **v3 amendment (2026-08-24, D-028/D-029):** Add privacy-safe planner metric hooks (run/version, cycle covered, auto-resolved slots, decisions, swaps, duration bucket, coarse reason codes); never export names, restrictions, recipe text, pantry, notes, or exact schedules; time-in-app is an anti-metric. Authoritative source adds `docs/PRD_v3.md` §19; `PRD_v2` citations are historical. Re-derive this card after DEC-005 is Done; its status stays Draft until then.
+
 ## Outcome and user value
 
 Provide privacy-safe diagnostics and a stable event contract that can reveal failures without collecting sensitive household or recipe content.

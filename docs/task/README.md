@@ -1,12 +1,12 @@
 # Meal Mate Task System
 
-These cards are planning inputs, not approved execution plans. A workflow recommendation is not an invocation or authorization. Read the PRD, roadmap, invariants, and the selected card; do not load the whole task directory by default.
+These cards are planning inputs, not approved execution plans. A workflow recommendation is not an invocation or authorization. Read the PRD, roadmap, invariants, and the selected card; `docs/PRD_v3.md` is authoritative where it conflicts with `docs/PRD_v2.md` (D-028); do not load the whole task directory by default.
 
 ## Lifecycle
 
 `Draft → Ready → In Progress → Verify → Done`
 
-- `DEC-001`, `PRE-001`, and `MVP-001` are Done; `DEC-002` is in `Verify` and `DEC-004` is `In Progress`. `DEC-004` (naming clearance) is owner-paced: it directly gates the cards that bind a production identifier (`MVP-018`, `MVP-021`, `MVP-022`) and transitively gates `MVP-019` and `MVP-020`.
+- `DEC-001`, `PRE-001`, and `MVP-001` are Done; `DEC-002` is Done (2026-08-24) and `DEC-004` is `In Progress`. `PRE-002` is `Ready`; `MVP-002` returned to `Draft` under D-028 (2026-08-24). `DEC-004` (naming clearance) is owner-paced: it directly gates the cards that bind a production identifier (`MVP-018`, `MVP-021`, `MVP-022`) and transitively gates `MVP-019` and `MVP-020`.
 - Promote a card only when every dependency is Done and its inputs are current.
 - Return it to Draft after a material product, architecture, or dependency change.
 - Record evidence and status in `docs/ROADMAP.md` at handoff.

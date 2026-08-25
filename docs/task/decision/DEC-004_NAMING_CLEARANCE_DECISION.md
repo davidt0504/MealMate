@@ -312,16 +312,25 @@ can resolve read-only and which the exception does cover. Either way it must be 
 
 ### Where this leaves DEC-004
 
-`Kimatta` passed every check that could be performed read-only, on both Play and Apple, by two
-independent methods, and **`kimatta.app` is unregistered** — so the preferred identifier scheme
-(`applicationId app.kimatta`, share domain `kimatta.app`, matching future iOS bundle ID) is intact
-and needs no fallback. `app.kimatta` is a valid two-segment application ID; three segments is the
-more common convention, and that remains a judgment call for the resolution step.
+`Kimatta` passed every store check that read-only methods can settle — Play title by two independent
+methods, Apple title by the iTunes Search API alone — and **`kimatta.app` is unregistered**, so the
+preferred identifier scheme (`applicationId app.kimatta`, share domain `kimatta.app`, matching
+future iOS bundle ID) needs no alternate *name*. The fallback the Completion criteria require is an
+alternate application-ID **shape** for this same name — the unscreened three-segment form — not a
+different name. `app.kimatta` is a valid two-segment application ID; three segments is the more
+common convention, and that remains a judgment call for the resolution step. Separately, the
+`app.kimatta` package-ID check cannot be settled read-only at all and therefore stands at
+`NOT VERIFIED` per note 2, notwithstanding a 404 listing URL and a null index search.
 
 Two names are rejected (`Kondate`, `Savora`). `Osusume` is the only backup with no recorded
 encumbrance, and `Ichiju`, `Shitaku`, and `Osusume` are the three *surviving* candidates whose
 `.app` domain is still free — `kondate.app` is also unregistered, but Kondate is rejected.
 
-Open items for resolution: the trademark search above; whether `kimatta.com` (registered since
-2004 to a Japan Registry Services registrant, no same-concept product observed) matters enough to
-pursue; and decisions 2–4 of this card, which this section does not touch.
+Open items for resolution: the trademark search above, which remains the one open item for the
+owner and blocks Done; decision 1 itself — no name is chosen here, and the choice additionally
+awaits the `deep-options` step that note 1 defers to resolution; the two- versus three-segment
+shape for the application ID, the three-segment form being unscreened; the `app.kimatta`
+package-ID availability, which no read-only method can settle and which `D-027` covers on
+owner-recorded acceptance; whether `kimatta.com` (registered since 2004 to a Japan Registry
+Services registrant, no same-concept product observed) matters enough to pursue; and decisions
+2–4 of this card, which this section does not touch.

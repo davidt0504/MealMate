@@ -14,6 +14,8 @@
 | Recommended workflow | `plan-task` |
 | External actions | Real domain association, DNS, and signing require explicit approval; no production/store action |
 
+> **v3 amendment (2026-08-24, D-028/D-029):** Unchanged in principle; routing lands in Flutter (D-023) and resolves against Rust-owned state through the bridge. Authoritative source adds `docs/PRD_v3.md` §13; `PRD_v2` citations are historical. Re-derive this card after DEC-005 is Done; its status stays Draft until then.
+
 ## Outcome and user value
 
 Route standard HTTPS recipe links predictably into the installed Android app while preserving a useful browser preview for everyone else.

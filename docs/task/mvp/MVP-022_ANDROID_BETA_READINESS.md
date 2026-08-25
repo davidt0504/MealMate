@@ -7,12 +7,14 @@
 | Status | Draft |
 | Type | Verification/readiness |
 | Workstream | Release |
-| Depends on | DEC-004, MVP-001–MVP-009, MVP-011–MVP-021, and MVP-010 unless explicitly cut; all delivery gates through SHARING-SECURITY-READY |
+| Depends on | DEC-004, MVP-001–MVP-009, MVP-011–MVP-021, MVP-023, MVP-024, MVP-025, and MVP-010 unless explicitly cut; all delivery gates through SHARING-SECURITY-READY |
 | Complexity | Complex |
 | Assurance | Elevated |
 | Sequential batching | Final MVP card |
 | Recommended workflow | `plan-task` |
 | External actions | Readiness only; production project, paid services, signing, Play submission, DNS, commit/push require separate approval |
+
+> **v3 amendment (2026-08-24, D-028/D-029):** Acceptance now also traces to PRD v3 §26 (Cover My Week, deterministic planner, Rust-owned state). Depends on: +MVP-023, MVP-024, MVP-025. Authoritative source adds `docs/PRD_v3.md` §26; `PRD_v2` citations are historical. Re-derive this card after DEC-005 is Done; its status stays Draft until then.
 
 ## Outcome and user value
 

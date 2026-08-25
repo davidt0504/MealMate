@@ -14,6 +14,8 @@
 | Recommended workflow | `plan-task` |
 | External actions | Creating/configuring a non-production Firebase project and auth credentials requires explicit approval; never production |
 
+> **v3 amendment (2026-08-24, D-028/D-029):** Cloud auth/sync is an optional adapter; core planning never depends on it; no generalized sync engine in MVP. Authoritative source adds `docs/PRD_v3.md` §6.5, §14; `PRD_v2` citations are historical. Re-derive this card after DEC-005 is Done; its status stays Draft until then.
+
 ## Outcome and user value
 
 Prove the local core loop on a separate real development backend and let anonymous users upgrade identity without losing household data.

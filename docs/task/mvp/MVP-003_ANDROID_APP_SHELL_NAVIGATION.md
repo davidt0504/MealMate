@@ -7,12 +7,14 @@
 | Status | Draft |
 | Type | Implementation |
 | Workstream | App shell |
-| Depends on | MVP-002, DEC-002 |
+| Depends on | MVP-002, DEC-002, DEC-005 |
 | Complexity | Focused |
 | Assurance | Standard |
 | Sequential batching | No; calibrate task sizing after completion |
 | Recommended workflow | `plan-task` (no `--auto`) |
 | External actions | None |
+
+> **v3 amendment (2026-08-24, D-028/D-029):** D-023 Riverpod/go_router stands; add a "Cover My Week" destination placeholder (MVP-024). Depends on: +DEC-005. Authoritative source adds `docs/PRD_v3.md` §15–16; `PRD_v2` citations are historical. Re-derive this card after DEC-005 is Done; its status stays Draft until then.
 
 ## Outcome and user value
 

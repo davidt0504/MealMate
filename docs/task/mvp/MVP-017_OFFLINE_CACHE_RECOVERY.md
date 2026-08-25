@@ -14,6 +14,8 @@
 | Recommended workflow | `plan-task` |
 | External actions | Emulator/network controls only |
 
+> **v3 amendment (2026-08-24, D-028/D-029):** SQLite is local-first by construction; this card narrows to restart/recovery, backup/export, and cache behavior for optional cloud adapters. The "Firestore offline persistence is the MVP mechanism" constraint is superseded. Authoritative source adds `docs/PRD_v3.md` §12 "Backup/export", §6.5; `PRD_v2` citations are historical. Re-derive this card after DEC-005 is Done; its status stays Draft until then.
+
 ## Outcome and user value
 
 Make the complete recipe → plan → pantry-aware list → shopping loop dependable through restart and connectivity loss.

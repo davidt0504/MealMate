@@ -14,6 +14,8 @@
 | Recommended workflow | `plan-task` |
 | External actions | None |
 
+> **v3 amendment (2026-08-24, D-028/D-029):** `PantryItem` is Rust-owned; semantics unchanged (invariant 6). Authoritative source adds `docs/PRD_v3.md` §8; `PRD_v2` citations are historical. Re-derive this card after DEC-005 is Done; its status stays Draft until then.
+
 ## Outcome and user value
 
 Let users optionally mark ingredients as present so shopping lists omit known pantry items without demanding inventory maintenance.

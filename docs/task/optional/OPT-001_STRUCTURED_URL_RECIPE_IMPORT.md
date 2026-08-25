@@ -14,6 +14,8 @@
 | Recommended workflow | `deep-options` if extraction boundary is unclear, then `plan-task` |
 | External actions | Network access to public URLs only; obey site access/rights boundaries |
 
+> **v3 amendment (2026-08-24, D-028/D-029):** LLM/OCR import stays at the messy-input boundary (principles §12); accepted output becomes ordinary structured Rust-owned state after deterministic validation. Authoritative source adds `docs/PRD_v3.md` §9.1, §20; `PRD_v2` citations are historical. Re-derive this card after DEC-005 is Done; its status stays Draft until then.
+
 ## Outcome and user value
 
 Let users prefill a new private recipe from deterministic structured metadata at a URL, then confirm and correct it before saving.

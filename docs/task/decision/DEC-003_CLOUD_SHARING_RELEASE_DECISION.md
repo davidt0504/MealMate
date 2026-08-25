@@ -14,6 +14,8 @@
 | Recommended workflow | `deep-options`; then `grill-me` for owner risk/cost choices |
 | External actions | Research is read-only; creating projects/domains/credentials requires separate approval |
 
+> **v3 amendment (2026-08-24, D-028/D-029):** Cloud is an optional adapter (PRD v3 §6.5); no custom sync engine in MVP; sharing projection unchanged in principle. Authoritative source adds `docs/PRD_v3.md` §6.5, §14, §16; `PRD_v2` citations are historical. Re-derive this card after DEC-005 is Done; its status stays Draft until then.
+
 ## Outcome and user value
 
 Define a safe progression from emulators to a real non-production backend and public sharing, without accidentally creating production exposure.

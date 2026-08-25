@@ -14,6 +14,8 @@
 | Recommended workflow | `plan-task` |
 | External actions | None |
 
+> **v3 amendment (2026-08-24, D-028/D-029):** Shopping-list derivation runs in Rust with the deterministic rules in the pivot prompt ("Shopping-list behavior"); conservative merging stands (invariant 3). Authoritative source adds `docs/PRD_v3.md` §13, §16; `PRD_v2` citations are historical. Re-derive this card after DEC-005 is Done; its status stays Draft until then.
+
 ## Outcome and user value
 
 Generate a trustworthy pantry-aware shopping projection from planned meal components without inventing unsafe unit conversions.

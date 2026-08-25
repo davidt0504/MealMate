@@ -14,6 +14,8 @@
 | Recommended workflow | `plan-task` |
 | External actions | None |
 
+> **v3 amendment (2026-08-24, D-028/D-029):** `Ingredient`, `CustomIngredient`, `IngredientLine`, `Recipe`, and `RecipeProvenance` are Rust-owned SQLite entities; the "Firestore records granular" constraint is historical. Authoritative source adds `docs/PRD_v3.md` §8; `PRD_v2` citations are historical. Re-derive this card after DEC-005 is Done; its status stays Draft until then.
+
 ## Outcome and user value
 
 Store household recipes and ingredients in a structured, evolvable form that retains what the user entered and supports safe later filtering and shopping math.

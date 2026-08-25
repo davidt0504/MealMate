@@ -14,6 +14,8 @@
 | Recommended workflow | `plan-task` |
 | External actions | None |
 
+> **v3 amendment (2026-08-24, D-028/D-029):** No preference questionnaire; progressive profiling only — ask when the immediate payoff is apparent (principles §10). Authoritative source adds `docs/PRD_v3.md` §15; `PRD_v2` citations are historical. Re-derive this card after DEC-005 is Done; its status stays Draft until then.
+
 ## Outcome and user value
 
 Let users begin immediately and optionally set household planning rhythm, meal scope, and restrictions without a sign-in wall or long questionnaire.

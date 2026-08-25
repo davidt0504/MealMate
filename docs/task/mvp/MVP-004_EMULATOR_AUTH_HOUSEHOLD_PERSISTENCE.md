@@ -14,6 +14,8 @@
 | Recommended workflow | `plan-task` |
 | External actions | Local Firebase Emulator Suite only; no cloud project/credentials |
 
+> **v3 amendment (2026-08-24, D-028/D-029):** Durable persistence moves to Rust-owned SQLite (MVP-002); the Firebase emulator is not the durable store. This card narrows to anonymous-first entry and household identity UI over the Rust kernel. Authoritative source adds `docs/PRD_v3.md` §6.4–6.5, §15; `PRD_v2` citations are historical. Re-derive this card after DEC-005 is Done; its status stays Draft until then.
+
 ## Outcome and user value
 
 Let a new user enter anonymously and persist household-owned data against a safe local emulator boundary.

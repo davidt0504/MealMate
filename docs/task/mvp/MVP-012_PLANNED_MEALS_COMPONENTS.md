@@ -14,6 +14,8 @@
 | Recommended workflow | `plan-task` |
 | External actions | None |
 
+> **v3 amendment (2026-08-24, D-028/D-029):** `PlannedMeal`, `MealComponent`, and `MealStub` are Rust-owned; non-recipe meal types are first-class; planned ≠ cooked (invariant 19); locks are Tier-0 (invariant 18). Authoritative source adds `docs/PRD_v3.md` §8; `PRD_v2` citations are historical. Re-derive this card after DEC-005 is Done; its status stays Draft until then.
+
 ## Outcome and user value
 
 Persist a meal occurrence on a real date with one or more recipe components, optional serving scales, and a lock that later automation must respect.

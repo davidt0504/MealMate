@@ -14,6 +14,8 @@
 | Recommended workflow | `plan-task` |
 | External actions | None |
 
+> **v3 amendment (2026-08-24, D-028/D-029):** Recipe reads/writes go through coarse bridge commands (e.g. `save_recipe`), never per-field calls (invariant 21). Authoritative source adds `docs/PRD_v3.md` §6.3, §16; `PRD_v2` citations are historical. Re-derive this card after DEC-005 is Done; its status stays Draft until then.
+
 ## Outcome and user value
 
 Let a household create, browse, inspect, edit, and delete its own recipes without relying on import or starter content.

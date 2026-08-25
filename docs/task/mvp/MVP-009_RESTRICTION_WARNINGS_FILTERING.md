@@ -14,6 +14,8 @@
 | Recommended workflow | `plan-task` |
 | External actions | None; no medical claims |
 
+> **v3 amendment (2026-08-24, D-028/D-029):** Restriction conflicts are Tier-0 hard filtering in the Rust planner, never score weights (invariant 18); unknown safety data stays unknown (invariant 19). Authoritative source adds `docs/PRD_v3.md` §9.4; `PRD_v2` citations are historical. Re-derive this card after DEC-005 is Done; its status stays Draft until then.
+
 ## Outcome and user value
 
 Warn and filter based on known structured ingredients while making uncertainty visible, so users can avoid obvious conflicts without receiving false safety assurance.

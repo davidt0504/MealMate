@@ -1,6 +1,6 @@
 # MVP Invariants
 
-Every MVP card must preserve these constraints. A conflict stops the task and returns it to planning.
+Every MVP card must preserve these constraints. A conflict stops the task and returns it to planning. Items 17–21 apply from PRD v3 (D-028) onward.
 
 1. Household ownership is the core data boundary; solo use is a one-person household.
 2. Ingredients remain structured while original quantity/unit text is retained for display and recovery.
@@ -18,3 +18,8 @@ Every MVP card must preserve these constraints. A conflict stops the task and re
 14. Android is the MVP and initial-launch platform. iOS is post-launch and must not block MVP acceptance.
 15. No task implicitly activates production, paid services, credentials, DNS, signing, or store submission.
 16. Future-phase architecture must not leak into the MVP without measured need and an explicit roadmap decision.
+17. Rust-owned SQLite is the authoritative local source of truth for durable household/food state; Flutter never separately mutates those tables (PRD v3 §12–13).
+18. Hard restrictions, explicit hard vetoes, and locks are Tier-0 constraints, never score weights; a lower tier never compensates for a higher-tier failure (PRD v3 §9.7).
+19. Planned is not cooked; coverage is relative to known information and never claims safety, exact stock, or personalization the model cannot support (PRD v3 §2.2, §10).
+20. The planner is deterministic for the same input snapshot and algorithm version, records reason codes and version, and never mutates historical planner records (PRD v3 §7.7, §9.6, §18).
+21. The Dart↔Rust bridge is coarse-grained: service-level DTO calls; generated bindings are never hand-edited; no SQLite handles or per-field calls cross it (PRD v3 §6.3).

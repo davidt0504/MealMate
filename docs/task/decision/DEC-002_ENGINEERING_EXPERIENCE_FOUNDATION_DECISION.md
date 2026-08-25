@@ -4,7 +4,7 @@
 
 | Field | Value |
 |---|---|
-| Status | Verify |
+| Status | Done |
 | Type | Decision |
 | Workstream | Engineering foundation |
 | Depends on | MVP-001 |
@@ -13,6 +13,8 @@
 | Sequential batching | After MVP-001 is Done |
 | Recommended workflow | `deep-options`; then `grill-me` only for unresolved owner tradeoffs |
 | External actions | None |
+
+> **v3 pointer (2026-08-24, D-028):** decisions 1 and 3's Dart commands stand for presentation code; the `lib/domain` coverage gate, the domain-independence script, the `--coverage` flag, and the `glados` targets named below are superseded — durable domain logic now lives in Rust (see `docs/ROADMAP.md` D-028 and MVP-002). MVP-002 no longer depends on this card. Done 2026-08-24 on the evidence recorded in the roadmap.
 
 ## Outcome and user value
 
@@ -48,7 +50,7 @@ Choose the smallest maintainable Flutter/Dart foundation that makes behavior tes
 
 - Decisions include versions/constraints, rationale, rejected alternatives, test implications, and reversal cost.
 - Commands are Flutter/Dart-specific and runnable in the project environment.
-- Record the contract in the roadmap; MVP-002 may then become Ready.
+- Record the contract in the roadmap; MVP-003 may then become Ready (MVP-002 was retargeted to Rust by D-028).
 
 ## Resolution (2026-08-23)
 
@@ -81,7 +83,7 @@ Resolved via `deep-options` against the current clean-room scaffold (Flutter 3.4
 ```bash
 dart format --output=none --set-exit-if-changed .
 flutter analyze
-flutter test --coverage
+flutter test
 flutter build apk --debug
 ```
 

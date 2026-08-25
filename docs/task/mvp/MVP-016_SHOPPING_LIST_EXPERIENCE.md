@@ -14,6 +14,8 @@
 | Recommended workflow | `plan-task` |
 | External actions | None |
 
+> **v3 amendment (2026-08-24, D-028/D-029):** The list screen consumes bridge DTOs from the Rust derivation (MVP-015); user restores of omitted lines are bridge commands. Authoritative source adds `docs/PRD_v3.md` §6.3, §15; `PRD_v2` citations are historical. Re-derive this card after DEC-005 is Done; its status stays Draft until then.
+
 ## Outcome and user value
 
 Turn the shopping projection into a fast, editable, household-owned list grouped for real store use.

@@ -14,6 +14,8 @@
 | Recommended workflow | `plan-task` |
 | External actions | Emulator storage only unless a later card explicitly authorizes dev cloud |
 
+> **v3 amendment (2026-08-24, D-028/D-029):** Photos are presentation/platform assets referenced from Rust-owned recipe records through the coarse bridge; PRD v3 demotes photo support before cutting controller proof. Authoritative source adds `docs/PRD_v3.md` §6.3, §16; `PRD_v2` citations are historical. Re-derive this card after DEC-005 is Done; its status stays Draft until then.
+
 ## Outcome and user value
 
 Allow a user to attach and replace a useful recipe image with bounded storage, privacy, and recovery behavior.

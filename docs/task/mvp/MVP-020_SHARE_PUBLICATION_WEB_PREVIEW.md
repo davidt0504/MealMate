@@ -14,6 +14,8 @@
 | Recommended workflow | `plan-task` |
 | External actions | Dev hosting/domain only with explicit approval; no production deploy/DNS |
 
+> **v3 amendment (2026-08-24, D-028/D-029):** Cloud sharing is an optional adapter over a projected public representation; the projection is derived from Rust-owned state. Authoritative source adds `docs/PRD_v3.md` §6.5, §14; `PRD_v2` citations are historical. Re-derive this card after DEC-005 is Done; its status stays Draft until then.
+
 ## Outcome and user value
 
 Let an authorized household member publish a privacy-bounded recipe projection, open it on the web without auth, report it, and revoke it.

@@ -14,6 +14,8 @@
 | Recommended workflow | `plan-task` |
 | External actions | None |
 
+> **v3 amendment (2026-08-24, D-028/D-029):** The planning-cycle entity lives in Rust; conceptual meal dates are civil dates, never UTC instants. Authoritative source adds `docs/PRD_v3.md` §8 "Civil dates"; `PRD_v2` citations are historical. Re-derive this card after DEC-005 is Done; its status stays Draft until then.
+
 ## Outcome and user value
 
 Represent and persist a household planning rhythm using real dates, dinner-first defaults, and optional breakfast/lunch scope.
