@@ -4,7 +4,7 @@
 
 | Field | Value |
 |---|---|
-| Status | Draft |
+| Status | See `docs/ROADMAP.md` task register |
 | Type | Implementation |
 | Workstream | Cloud/auth |
 | Depends on | MVP-017, DEC-003, DEC-004 |
@@ -14,7 +14,11 @@
 | Recommended workflow | `plan-task` |
 | External actions | Creating/configuring a non-production Firebase project and auth credentials requires explicit approval; never production |
 
-> **v3 amendment (2026-08-24, D-028/D-029):** Cloud auth/sync is an optional adapter; core planning never depends on it; no generalized sync engine in MVP. Authoritative source adds `docs/PRD_v3.md` §6.5, §14; `PRD_v2` citations are historical. Re-derive this card after DEC-005 is Done; its status stays Draft until then.
+> **Re-derived for PRD v3 on 2026-08-26 (D-029, D-034).** The dated 2026-08-24 banner is folded into the body below. Per D-034 this card's environment-topology, rules-deployment and App Check content is **preserved as written** — `DEC-003` decides it, and re-deriving it here would pre-empt that decision.
+
+## Workflow gate
+
+Before planning, read `docs/ROADMAP.md` and apply the mandatory planning gate in `docs/task/README.md` for `MVP-018`. Before implementation, apply the mandatory execution gate and repeat it as the approved plan's first execution step.
 
 ## Outcome and user value
 
@@ -22,10 +26,14 @@ Prove the local core loop on a separate real development backend and let anonymo
 
 ## Authoritative sources
 
-- `docs/PRD_v2.md` §§14.2, 14.6, 19.2; `docs/ROADMAP.md` D-008, DEC-003 result; `docs/task/MVP_INVARIANTS.md`
+- `docs/PRD_v3.md` §6.5 (cloud is an optional adapter; no generalized sync engine in v3 MVP), §14 item 7 (auth/sync failure cannot break local core planning), §16 "Not MVP"
+- `docs/ROADMAP.md` D-008, D-028, D-030, D-034, DEC-003 result; `docs/task/MVP_INVARIANTS.md` 8, 15, 17
+- Historical (D-028): `docs/PRD_v2.md` §§14.2, 14.6, 19.2
 
 ## Load-bearing constraints
 
+- Cloud auth and sync are an **optional adapter**. Core planning never depends on them, and an auth or sync failure degrades only the optional feature — it can never break the local core loop (PRD §6.5, §14 item 7).
+- No generalized sync engine in the MVP (PRD §16 "Not MVP"). Rust-owned SQLite remains the authoritative local store throughout (invariant 17).
 - Development configuration is visibly separate and fails closed; production remains nonexistent/unconfigured.
 - Rules/indexes deploy from versioned source and are tested before use.
 - Anonymous credential linking preserves UID/household data where possible; collision/recovery behavior is explicit.
@@ -50,7 +58,8 @@ Prove the local core loop on a separate real development backend and let anonymo
 - **AC-2:** Anonymous household data survives durable-account upgrade and restart.
 - **AC-3:** Collision/cancel/network/retry cases preserve recoverability and honest messaging.
 - **AC-4:** Dev rules, indexes, Storage, and App Check posture pass independent review on Android evidence.
-- **AC-5:** No `dev.mealmate.temp` and no `.temp` application identifier remains in `android/`, `pubspec.yaml`, Firebase config, `README.md`, or `docs/`.
+- **AC-5:** No `dev.mealmate.temp` and no `.temp` application identifier remains in `android/`, `pubspec.yaml`, Firebase config, `README.md`, `docs/`, or the Rust crate and package names under `rust/` (DEC-004's rename scope includes the crate names — `docs/task/SEQUENCE.txt` step 41).
+- **AC-6:** A sign-out or identity transition with unsynced local state cannot silently lose household data. *(Transferred from `MVP-017` under D-034: no durable account exists at that card, so the obligation could not be tested there.)*
 
 ## Evidence plan
 
@@ -60,7 +69,8 @@ Prove the local core loop on a separate real development backend and let anonymo
 | AC-2 | Real-dev integration scenario |
 | AC-3 | Fault/collision matrix |
 | AC-4 | Deployment diff, rules tests, Android run, fresh-context security review |
-| AC-5 | Targeted identifier grep across the repository |
+| AC-5 | Targeted identifier grep across the repository, including `rust/**/Cargo.toml` and crate names |
+| AC-6 | Pending-state/sign-out tests plus fresh-context coverage review |
 
 ## Stop/failure conditions
 
@@ -68,4 +78,4 @@ Prove the local core loop on a separate real development backend and let anonymo
 
 ## Handoff
 
-Record evidence/status and REAL-DEV-BACKEND-READY progress in `docs/ROADMAP.md`.
+In one `docs/ROADMAP.md` handoff edit, record the evidence, resulting status, REAL-DEV-BACKEND-READY progress, and **Next implementation task**.

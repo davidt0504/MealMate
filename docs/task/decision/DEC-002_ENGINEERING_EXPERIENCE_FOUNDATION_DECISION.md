@@ -4,7 +4,7 @@
 
 | Field | Value |
 |---|---|
-| Status | Done |
+| Status | See `docs/ROADMAP.md` task register |
 | Type | Decision |
 | Workstream | Engineering foundation |
 | Depends on | MVP-001 |
@@ -15,6 +15,10 @@
 | External actions | None |
 
 > **v3 pointer (2026-08-24, D-028):** decisions 1 and 3's Dart commands stand for presentation code; the `lib/domain` coverage gate, the domain-independence script, the `--coverage` flag, and the `glados` targets named below are superseded — durable domain logic now lives in Rust (see `docs/ROADMAP.md` D-028 and MVP-002). MVP-002 no longer depends on this card. Done 2026-08-24 on the evidence recorded in the roadmap.
+
+## Workflow gate
+
+Before resolving `DEC-002`, read `docs/ROADMAP.md`, confirm every declared dependency is Done with evidence, and confirm the roadmap identifies this card as the current required decision or explicit owner-paced work. This decision does not need to be the Next implementation task and does not occupy the implementation lane. Its result and Done transition require explicit owner approval.
 
 ## Outcome and user value
 
@@ -78,12 +82,12 @@ Resolved via `deep-options` against the current clean-room scaffold (Flutter 3.4
 
 ### 3. Formatting, analysis, test, coverage, and CI command contract
 
-**Chosen commands** (extends the PRE-001 contract):
+**Chosen commands** (extends the PRE-001 contract) — the operative contract is the DEC-002 and PRE-002 command-contract blocks in `docs/ROADMAP.md`; the test line below was updated under D-030 and the coverage gate below it was removed under D-028:
 
 ```bash
 dart format --output=none --set-exit-if-changed .
 flutter analyze
-flutter test
+(cd rust && cargo build --release) && flutter test   # stale .so = false pass; never run alone
 flutter build apk --debug
 ```
 

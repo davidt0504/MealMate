@@ -19,14 +19,26 @@ pub fn core_version() -> String {
     env!("CARGO_PKG_VERSION").to_string()
 }
 
-/// Stub until MVP-002 opens SQLite here; rejects empty/whitespace paths so the
-/// typed-error path is exercisable before storage exists.
-pub fn health_check(db_path: String) -> Result<HealthReport, KimattaError> {
-    let mut result = Err(KimattaError::InvalidPath);
-    if !db_path.trim().is_empty() {
-        result = Ok(HealthReport { db_path, schema_version: 0 });
+impl From<kimatta_storage::StorageError> for KimattaError {
+    fn from(e: kimatta_storage::StorageError) -> Self {
+        KimattaError::Storage {
+            message: e.to_string(),
+        }
     }
-    result
+}
+
+/// Opens the SQLite database at `db_path` (creating it), applies migrations, and reports the
+/// resulting schema version. Empty/whitespace paths are rejected before touching storage.
+pub fn health_check(db_path: String) -> Result<HealthReport, KimattaError> {
+    if db_path.trim().is_empty() {
+        return Err(KimattaError::InvalidPath);
+    }
+    let conn = kimatta_storage::open(&db_path)?;
+    let schema_version = kimatta_storage::schema_version(&conn)?;
+    Ok(HealthReport {
+        db_path,
+        schema_version,
+    })
 }
 
 #[flutter_rust_bridge::frb(init)]

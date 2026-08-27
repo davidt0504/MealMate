@@ -4,7 +4,7 @@
 
 | Field | Value |
 |---|---|
-| Status | Done |
+| Status | See `docs/ROADMAP.md` task register |
 | Type | Readiness |
 | Workstream | Developer environment / architecture pivot |
 | Depends on | MVP-001 |
@@ -15,6 +15,10 @@
 | External actions | `rustup`/`cargo`/`flutter_rust_bridge_codegen` installs write to `~/.cargo` and `~/.rustup` (user-level, network access); no credentials, signing, cloud resources, or system-wide package changes |
 
 This card does not depend on `DEC-002` (Done 2026-08-24): the spike adds no Dart domain code — only the format/analyze/test contract already in force from PRE-001 applies. `MVP-001` is Done, so this card is `Ready`.
+
+## Workflow gate
+
+Before planning or execution, read `docs/ROADMAP.md` and apply the mandatory planning or execution gate in `docs/task/README.md` for `PRE-002`. Do not begin implementation unless it passes. Any implementation plan must repeat the execution gate as its first execution step.
 
 ## Outcome and user value
 

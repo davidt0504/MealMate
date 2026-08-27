@@ -4,7 +4,7 @@
 
 | Field | Value |
 |---|---|
-| Status | In Progress |
+| Status | See `docs/ROADMAP.md` task register |
 | Type | Decision |
 | Workstream | Product foundation |
 | Depends on | DEC-001 |
@@ -13,6 +13,10 @@
 | Sequential batching | No implementation until Done |
 | Recommended workflow | Owner-led naming research; then `deep-options` on the shortlist |
 | External actions | Read-only public searches (app stores, web, trademark databases). No Play Console, domain purchase, trademark filing, or Firebase project creation without separate owner authorization. |
+
+## Workflow gate
+
+Before resolving `DEC-004`, read `docs/ROADMAP.md`, confirm every declared dependency is Done with evidence, and confirm the roadmap identifies this card as the current required decision or explicit owner-paced work. This decision does not need to be the Next implementation task and does not occupy the implementation lane. Its result and Done transition require explicit owner approval.
 
 ## Outcome and user value
 

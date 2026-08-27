@@ -1,10 +1,12 @@
-# MVP-017 — Offline cache and recovery
+# MVP-017 — Offline durability and recovery
 
 > Planning input, not an approved execution plan. Recommended workflows do not invoke or authorize themselves.
 
+> Retitled 2026-08-26 under D-034; formerly "Offline cache and recovery". The ID and filename are kept because the register and two other cards cite `MVP-017`. There is no cache to manage once SQLite is the local source of truth; what remains is durability, recovery, and backup.
+
 | Field | Value |
 |---|---|
-| Status | Draft |
+| Status | See `docs/ROADMAP.md` task register |
 | Type | Implementation |
 | Workstream | Reliability/offline |
 | Depends on | MVP-008, MVP-009, MVP-013, MVP-014, MVP-016 |
@@ -12,57 +14,70 @@
 | Assurance | Elevated |
 | Sequential batching | No |
 | Recommended workflow | `plan-task` |
-| External actions | Emulator/network controls only |
+| External actions | Android emulator and network controls only |
 
-> **v3 amendment (2026-08-24, D-028/D-029):** SQLite is local-first by construction; this card narrows to restart/recovery, backup/export, and cache behavior for optional cloud adapters. The "Firestore offline persistence is the MVP mechanism" constraint is superseded. Authoritative source adds `docs/PRD_v3.md` §12 "Backup/export", §6.5; `PRD_v2` citations are historical. Re-derive this card after DEC-005 is Done; its status stays Draft until then.
+> **Re-derived for PRD v3 on 2026-08-26 (D-029, D-034).** The dated 2026-08-24 banner is folded into the body below.
+
+## Workflow gate
+
+Before planning, read `docs/ROADMAP.md` and apply the mandatory planning gate in `docs/task/README.md` for `MVP-017`. Before implementation, apply the mandatory execution gate and repeat it as the approved plan's first execution step.
 
 ## Outcome and user value
 
-Make the complete recipe → plan → pantry-aware list → shopping loop dependable through restart and connectivity loss.
+Make the complete recipe → plan → pantry-aware list → shopping loop dependable through restart, process death, and a missing network — and give the household a way to get its data back out.
 
 ## Authoritative sources
 
-- `docs/PRD_v2.md` §§7.1, 14.3–14.4, 19.2, 24.8–24.10; `docs/ROADMAP.md` D-011, D-012; `docs/task/MVP_INVARIANTS.md`
+- `docs/PRD_v3.md` §12 (SQLite discipline; "Backup/export"), §6.4–6.5 (local-first; cloud is optional), §14 item 7 (auth/sync failure cannot break local core planning), §16
+- `docs/ROADMAP.md` D-011, D-012, D-028, D-030, D-034; `docs/task/MVP_INVARIANTS.md` 7, 8, 17
+- Historical (D-028): `docs/PRD_v2.md` §§7.1, 14.3–14.4, 19.2, 24.8–24.10
 
 ## Load-bearing constraints
 
-- Deliberately prefetch/cache required household data; do not assume documents happened to be read.
-- Firestore offline persistence is the MVP mechanism; no second database without measured evidence and decision.
-- Pending, rejected, and reconciled writes are visible; destructive outcomes and sign-out risk are explicit.
-- Scope excludes multi-user conflict resolution beyond granular records.
+- SQLite owned by Rust is local-first **by construction**: the core loop is offline by default, not by a caching strategy layered over a remote store, and a second durable store stays out of scope (PRD §6.4, invariant 17).
+- Multi-record state transitions are transactions; an interrupted write leaves the database consistent, never half-applied (PRD §12).
+- Versioned export and a validated restore are in scope: a system that succeeds at being external memory has a higher duty to protect that memory (PRD §12 "Backup/export").
+- Destructive outcomes and any data-loss risk are stated honestly to the user (invariant 8).
+- Cloud adapters are optional and out of the core loop; an adapter failure may degrade an optional feature but can never break local planning (PRD §6.5, §14 item 7).
+- Scope excludes multi-user conflict resolution.
 
 ## Scope
 
-- Define offline readiness, prefetch, connection/pending/error states, retry/recovery, and a deterministic failure test harness across all core features.
+- Define and verify restart and recovery behavior across the core loop: recipes, active cycle and plan, pantry, and shopping list.
+- Database integrity after interrupted writes, a corrupt database file, and a missing database file.
+- Versioned backup/export and a restore that is validated, not merely produced.
+- Honest error, retry, and recovery states in the UI.
+- A deterministic fault-injection harness so each of the above is reproducible.
 
 ## Non-goals
 
-- Full sync engine, collaborative merge UI, background guarantees the OS cannot provide, or uncached public shares.
+- Sync engines, collaborative merge UI, background guarantees the OS cannot provide, quantified conflict resolution.
+- **Transferred out:** the sign-out / identity-transition data-safety obligation this card previously carried as AC-4 moves to `MVP-018` (recorded there as its new AC-6). No durable account exists at this card, so the obligation cannot be tested here; it is not dropped.
 
 ## Decision gates
 
-- If Firestore persistence cannot meet a measured acceptance case, stop for `deep-options`; do not quietly add local storage.
+- Choose the export format and its versioning. If backup or restore appears to need encryption or key management, stop for `deep-options` — PRD §14 item 10 forbids inventing a crypto scheme, and no archive format is decided here.
 
 ## Acceptance criteria
 
-- **AC-1:** After deliberate prefetch and restart, recipes, active cycle/plan, pantry, and list remain usable offline.
-- **AC-2:** Offline create/edit/check actions queue and reconcile correctly after reconnect.
-- **AC-3:** Rejected reconnect writes, deletions, uncached records, and retry paths are truthful and recoverable.
-- **AC-4:** Sign-out/identity transition with pending writes cannot silently lose data.
+- **AC-1:** After restart with no network available, recipes, the active cycle and plan, pantry, and the shopping list remain usable.
+- **AC-2:** Create, edit, and check-off actions commit locally and survive process death mid-transaction with no partial write.
+- **AC-3:** Fault injection over an interrupted write, a corrupt database file, and a missing database file produces truthful, recoverable user-visible state.
+- **AC-4:** A versioned export and its restore round-trip validate — the restored database is equivalent to the source and the export records its schema version.
 
 ## Evidence plan
 
 | Criterion | Required evidence |
 |---|---|
-| AC-1 | Android emulator restart/disconnect scenario matrix |
-| AC-2 | Automated queued-write/reconnect tests |
-| AC-3 | Fault-injection tests and user-visible-state inspection |
-| AC-4 | Pending-write/sign-out tests plus fresh-context coverage review |
+| AC-1 | Android emulator restart matrix with the network disabled |
+| AC-2 | Automated process-death tests asserting transactional integrity |
+| AC-3 | Fault-injection tests plus user-visible-state inspection |
+| AC-4 | Export/restore round-trip test with a schema-version assertion, plus fresh-context coverage review |
 
 ## Stop/failure conditions
 
-- Stop on silent data loss, misleading offline claim, or need for a second database. Two cycles then re-plan.
+- Stop on silent data loss, a misleading offline claim, an invented archive or crypto scheme, or any proposal to add another durable store alongside SQLite. Two cycles then re-plan.
 
 ## Handoff
 
-Record scenario-by-scenario evidence and LOCAL-CORE-LOOP-READY status in `docs/ROADMAP.md`; promote DEC-003 when Done.
+In one `docs/ROADMAP.md` handoff edit, record scenario-by-scenario evidence, the resulting status, LOCAL-CORE-LOOP-READY progress, and **Next implementation task**; select `DEC-003` next only if this card is `Done` and `DEC-003` passes its decision workflow gate.

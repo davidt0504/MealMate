@@ -18,7 +18,7 @@ as the first controller on a deliberately small Household Control Kernel:
   authoritative local **SQLite** store. Crate direction: `household-core <- food-domain <-
   kimatta-application <- kimatta-bridge`; `kimatta-storage` depends on `household-core` (and on `food-domain` once it exists) and is called by `kimatta-application`, or directly by the bridge until that crate exists; the kernel never imports food types.
 
-Current state: **bridge spike landed (PRE-002)** — a health/version bridge exists; no domain Rust yet. See
+Current state: **Rust foundation landed (MVP-002)** — `household-core` (typed household/member identity) and `kimatta-storage` (SQLite, migration v1) are the first domain crates; the bridge `health_check` opens the real database. See
 `docs/V3_IMPLEMENTATION_STATUS.md` for what is complete, deferred, and blocked;
 `docs/V3_MIGRATION_PLAN.md` for the Phase-0 inventory and phase → card map; `docs/PRD_v3.md` and
 `docs/HOUSEHOLD_CONTROL_PRINCIPLES.md` for the product and engineering constitution. Rust
@@ -33,8 +33,8 @@ rustup component add --toolchain 1.98.0 rustfmt clippy
 cargo install flutter_rust_bridge_codegen --version 2.13.0 --locked
 
 flutter_rust_bridge_codegen generate       # after any change under rust/src/api
-(cd rust && cargo build --release)         # host library that `flutter test` loads
-flutter test
+(cd rust && cargo fmt --all --check && cargo clippy --workspace --all-targets -- -D warnings && cargo test --workspace)
+(cd rust && cargo build --release) && flutter test   # stale .so = false pass; never run alone
 flutter build apk --debug
 flutter build apk --release                # ships libkimatta_bridge.so for arm64-v8a, armeabi-v7a, x86_64
 ```

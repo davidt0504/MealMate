@@ -4,7 +4,7 @@
 
 | Field | Value |
 |---|---|
-| Status | Draft |
+| Status | See `docs/ROADMAP.md` task register |
 | Type | Implementation/content |
 | Workstream | Recipes/content |
 | Depends on | MVP-007, MVP-008, MVP-009 |
@@ -14,7 +14,11 @@
 | Recommended workflow | `plan-task` |
 | External actions | Read-only source research allowed; no scraped/licensed purchase content |
 
-> **v3 amendment (2026-08-24, D-028/D-029):** Starter meals are also planner candidates (PRD v3 §9.3) and are loaded through the bridge into Rust-owned state. Authoritative source adds `docs/PRD_v3.md` §9.3, §16; `PRD_v2` citations are historical. Re-derive this card after DEC-005 is Done; its status stays Draft until then.
+> **Re-derived for PRD v3 on 2026-08-26 (D-029, D-034).** The dated 2026-08-24 banner is folded into the body below. The rights and licensing constraints are unchanged by v3.
+
+## Workflow gate
+
+Before planning, read `docs/ROADMAP.md` and apply the mandatory planning gate in `docs/task/README.md` for `MVP-011`. Before implementation, apply the mandatory execution gate and repeat it as the approved plan's first execution step.
 
 ## Outcome and user value
 
@@ -22,10 +26,14 @@ Ship a small set of genuinely useful, tested recipes so first-time planning work
 
 ## Authoritative sources
 
-- `docs/PRD_v2.md` §§7.5, 13.2, 21.3, 24.3; `docs/ROADMAP.md` D-014; `docs/task/MVP_INVARIANTS.md`
+- `docs/PRD_v3.md` §9.3 (candidate generation includes starter meals), §8 (food domain model), §16
+- `docs/ROADMAP.md` D-014, D-028, D-030, D-034; `docs/task/MVP_INVARIANTS.md` 12, 17
+- Historical (D-028): `docs/PRD_v2.md` §§7.5, 13.2, 21.3, 24.3
 
 ## Load-bearing constraints
 
+- Starter meals are planner candidates (PRD §9.3), so every shipped recipe must satisfy the same structured shape MVP-023 hard-filters and scores — a starter recipe that cannot be filtered on restrictions or prep time is not shippable.
+- Starter content is loaded through the bridge into Rust-owned state; it is not a separate parallel store (invariant 17).
 - Use original recipes plus verified US federal/public-domain/CC0 material; CC BY only if attribution survives every relevant surface.
 - Exclude scraped material and BY-SA, NC, or ND licenses for MVP.
 - Maintain a provenance manifest with source, rights basis, author, attribution, modifications, and verification date.
@@ -65,4 +73,4 @@ Ship a small set of genuinely useful, tested recipes so first-time planning work
 
 ## Handoff
 
-Record recipe count, evidence, exclusions, and status in `docs/ROADMAP.md`.
+In one `docs/ROADMAP.md` handoff edit, record the recipe count, evidence, exclusions, resulting status, delivery-gate progress, and **Next implementation task**.

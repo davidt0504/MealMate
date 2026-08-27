@@ -4,7 +4,7 @@
 
 | Field | Value |
 |---|---|
-| Status | Draft |
+| Status | See `docs/ROADMAP.md` task register |
 | Type | Implementation |
 | Workstream | Shopping/UI |
 | Depends on | MVP-003, MVP-004, MVP-015 |
@@ -14,7 +14,11 @@
 | Recommended workflow | `plan-task` |
 | External actions | None |
 
-> **v3 amendment (2026-08-24, D-028/D-029):** The list screen consumes bridge DTOs from the Rust derivation (MVP-015); user restores of omitted lines are bridge commands. Authoritative source adds `docs/PRD_v3.md` §6.3, §15; `PRD_v2` citations are historical. Re-derive this card after DEC-005 is Done; its status stays Draft until then.
+> **Re-derived for PRD v3 on 2026-08-26 (D-029, D-034).** The dated 2026-08-24 banner is folded into the body below.
+
+## Workflow gate
+
+Before planning, read `docs/ROADMAP.md` and apply the mandatory planning gate in `docs/task/README.md` for `MVP-016`. Before implementation, apply the mandatory execution gate and repeat it as the approved plan's first execution step.
 
 ## Outcome and user value
 
@@ -22,13 +26,15 @@ Turn the shopping projection into a fast, editable, household-owned list grouped
 
 ## Authoritative sources
 
-- `docs/PRD_v2.md` §§7.9, 14.4, 24.7; `docs/ROADMAP.md` D-011, D-012; `docs/task/MVP_INVARIANTS.md`
+- `docs/PRD_v3.md` §6.3 (coarse bridge), §13 (Rust owns derivation, Flutter owns presentation), §15
+- `docs/ROADMAP.md` D-011, D-012, D-023, D-028, D-030, D-034; `docs/task/MVP_INVARIANTS.md` 3, 17, 21
+- Historical (D-028): `docs/PRD_v2.md` §§7.9, 14.4, 24.7
 
 ## Load-bearing constraints
 
 - Generated and manual items remain distinguishable and explainable.
 - Users can add, remove, edit, and check off items; purchased items may explicitly flow to pantry.
-- Store each frequently edited item separately to limit sync-conflict damage.
+- The screen consumes bridge DTOs from the MVP-015 derivation and issues bridge commands for edits, check-off, and restoring an omitted line; it holds no durable state (invariants 17, 21).
 - Regeneration has explicit merge/overwrite semantics and cannot silently discard edits.
 
 ## Scope
@@ -48,7 +54,7 @@ Turn the shopping projection into a fast, editable, household-owned list grouped
 - **AC-1:** A plan produces the expected grouped list and explanations.
 - **AC-2:** Manual edits and checked state persist and obey regeneration policy.
 - **AC-3:** Purchased-to-pantry is explicit, idempotent, and reversible.
-- **AC-4:** Item-level data/rules and accessibility behavior pass independent review.
+- **AC-4:** Item-level household scoping and accessibility behavior pass independent review.
 
 ## Evidence plan
 
@@ -57,7 +63,7 @@ Turn the shopping projection into a fast, editable, household-owned list grouped
 | AC-1 | Integration test against MVP-015 fixtures |
 | AC-2 | Restart/regeneration tests |
 | AC-3 | State-transition tests |
-| AC-4 | Rules tests, semantics check, fresh-context review |
+| AC-4 | Rust household-scoping tests, semantics check, fresh-context review |
 
 ## Stop/failure conditions
 
@@ -65,4 +71,4 @@ Turn the shopping projection into a fast, editable, household-owned list grouped
 
 ## Handoff
 
-Record evidence/status in `docs/ROADMAP.md`.
+In one `docs/ROADMAP.md` handoff edit, record the evidence, resulting status, delivery-gate progress, and **Next implementation task**.

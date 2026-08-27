@@ -9,6 +9,10 @@ crate-type = ["cdylib", "staticlib"]
 [dependencies]
 flutter_rust_bridge = "=2.13.0"
 thiserror = "2"
+kimatta-storage = { path = "crates/kimatta-storage" }
 
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(frb_expand)'] }
+
+[workspace]
+members = ["crates/*"]

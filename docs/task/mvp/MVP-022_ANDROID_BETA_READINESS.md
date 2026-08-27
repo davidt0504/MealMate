@@ -4,7 +4,7 @@
 
 | Field | Value |
 |---|---|
-| Status | Draft |
+| Status | See `docs/ROADMAP.md` task register |
 | Type | Verification/readiness |
 | Workstream | Release |
 | Depends on | DEC-004, MVP-001–MVP-009, MVP-011–MVP-021, MVP-023, MVP-024, MVP-025, and MVP-010 unless explicitly cut; all delivery gates through SHARING-SECURITY-READY |
@@ -14,7 +14,11 @@
 | Recommended workflow | `plan-task` |
 | External actions | Readiness only; production project, paid services, signing, Play submission, DNS, commit/push require separate approval |
 
-> **v3 amendment (2026-08-24, D-028/D-029):** Acceptance now also traces to PRD v3 §26 (Cover My Week, deterministic planner, Rust-owned state). Depends on: +MVP-023, MVP-024, MVP-025. Authoritative source adds `docs/PRD_v3.md` §26; `PRD_v2` citations are historical. Re-derive this card after DEC-005 is Done; its status stays Draft until then.
+> **Re-derived for PRD v3 on 2026-08-26 (D-029, D-034).** The dated 2026-08-24 banner is folded into the body below. `MVP-023`, `MVP-024` and `MVP-025` were already on the `Depends on` line and in the register. Per D-034 this card's security, operational, store-readiness and signing content is **preserved as written** — `DEC-003` and `DEC-004` decide it.
+
+## Workflow gate
+
+Before planning, read `docs/ROADMAP.md` and apply the mandatory planning gate in `docs/task/README.md` for `MVP-022`. Before implementation, apply the mandatory execution gate and repeat it as the approved plan's first execution step.
 
 ## Outcome and user value
 
@@ -22,10 +26,13 @@ Produce evidence that Meal Mate is safe and reliable enough for an Android beta 
 
 ## Authoritative sources
 
-- `docs/PRD_v2.md` §§19–21, 24; `docs/ROADMAP.md` gates/decisions; `docs/task/MVP_INVARIANTS.md`
+- `docs/PRD_v3.md` §26 (MVP acceptance test), §22 ("Cover My Week is required MVP proof"), §16, §14
+- `docs/ROADMAP.md` gates/decisions, D-015, D-028, D-030, D-034, and the PRD v3 §26 traceability table; `docs/task/MVP_INVARIANTS.md` 1–21
+- Historical (D-028): `docs/PRD_v2.md` §§19–21, 24
 
 ## Load-bearing constraints
 
+- PRD v3 §22 makes **Cover My Week the required MVP proof** — a CRUD-only build does not satisfy v3. A go recommendation therefore requires `MVP-024`'s acceptance evidence, not merely a green core loop.
 - Reverify the full core loop, offline behavior, rules, auth recovery, public projection, privacy, and accessibility from clean state.
 - Complete threat model, sharing-security gate, abuse/report ownership, cost budgets/alerts plan, and monitoring/runbook.
 - Prepare current Google Play health/privacy/data-safety declarations, deletion/export posture, privacy policy, and support surfaces.
@@ -43,14 +50,16 @@ Produce evidence that Meal Mate is safe and reliable enough for an Android beta 
 ## Decision gates
 
 - Any FAIL/NOT VERIFIED in a required launch control blocks a go recommendation; owner explicitly accepts only risks that are genuinely non-blocking.
+- **What ratio demonstrates the central claim is not decided by PRD v3.** §22 requires Cover My Week as proof and §19 sets no numeric bar. The go/no-go records the measured ratio and the owner's verdict. A fixed pass bar requires an owner decision and its own D-row. Working reference, not binding: Cover My Week active seconds ≤50% of the manual arm's, on the median of the recorded scenarios.
 
 ## Acceptance criteria
 
-- **AC-1:** PRD §24 items 1–11 and every invariant have traceable PASS evidence or an explicitly approved permitted cut.
+- **AC-1:** PRD v3 §26 items **2–17**, plus item 1's **Android half**, and every invariant in `docs/task/MVP_INVARIANTS.md` (1–21), have traceable PASS evidence or an explicitly approved permitted cut, per the §26 traceability table in `docs/ROADMAP.md`. Item 1's iOS half is carried by `PRE-003` post-launch under D-015 and invariant 14 and is **not** an MVP criterion.
 - **AC-2:** Security/rules/privacy/abuse/report/deletion/export and public-sharing threat controls pass independent review.
 - **AC-3:** Android clean-install core loop, offline/reconnect, durable auth, links, accessibility, and supported-device performance pass.
 - **AC-4:** Monitoring, rollback, budget/alert, incident owner, Play declarations, privacy/support, domain/signing/store prerequisites are ready or clearly identify an external blocker, and no temporary `.temp` application identifier reaches the store submission.
 - **AC-5:** A dated go/no-go report distinguishes readiness from actions still requiring authorization.
+- **AC-6:** The go/no-go report records the median ratio from `MVP-024`'s AC-8 measurement and the owner's verdict on whether it demonstrates the central claim.
 
 ## Evidence plan
 
@@ -61,6 +70,7 @@ Produce evidence that Meal Mate is safe and reliable enough for an Android beta 
 | AC-3 | Android emulator/device release-candidate matrix |
 | AC-4 | Operational/store checklist with owners and artifacts |
 | AC-5 | Signed-off go/no-go document; no deployment action |
+| AC-6 | Verdict section in the dated go/no-go document citing the AC-8 record |
 
 ## Stop/failure conditions
 
@@ -68,4 +78,4 @@ Produce evidence that Meal Mate is safe and reliable enough for an Android beta 
 
 ## Handoff
 
-Record the PRODUCTION-BETA-READY result, evidence links, accepted risks, blockers, and the separately authorized next action in `docs/ROADMAP.md`.
+In one `docs/ROADMAP.md` handoff edit, record the PRODUCTION-BETA-READY result, evidence links, accepted risks, blockers, resulting status, delivery-gate progress, and **Next implementation task**; any next action that requires separate authorization remains unauthorized until granted.

@@ -4,7 +4,7 @@
 
 | Field | Value |
 |---|---|
-| Status | Done |
+| Status | See `docs/ROADMAP.md` task register |
 | Type | Decision |
 | Workstream | Architecture pivot |
 | Depends on | PRE-002 |
@@ -13,6 +13,10 @@
 | Sequential batching | After PRE-002 is Done |
 | Recommended workflow | `deep-options`; then `grill-me` only for unresolved owner tradeoffs |
 | External actions | None |
+
+## Workflow gate
+
+Before resolving `DEC-005`, read `docs/ROADMAP.md`, confirm every declared dependency is Done with evidence, and confirm the roadmap identifies this card as the current required decision or explicit owner-paced work. This decision does not need to be the Next implementation task and does not occupy the implementation lane. Its result and Done transition require explicit owner approval.
 
 ## Outcome and user value
 
@@ -58,7 +62,7 @@ Decided from the PRE-002 evidence (`docs/ROADMAP.md` evidence row 2026-08-24 and
 
 1. **Bridge backend — native-assets** (`flutter_rust_bridge_codegen integrate --integration-backend native-assets`; `hook/build.dart` → `flutter_rust_bridge_hooks` 2.13.0 → `native_toolchain_rust`). Rationale: passed every PRE-002 gate with 1 of 2 fixes — debug + release APKs, `libkimatta_bridge.so` for `arm64-v8a`/`armeabi-v7a`/`x86_64`, emulator run, ~10 s edit→APK; one build system, no Gradle plugin. Rejected: cargokit (never needed; archived upstream, Groovy template pinned to AGP 7.3 against this repo's AGP 9.1 — untested risk), hand-rolled `dart:ffi` (duplicate typed models, prompt rule). Reversal cost: one `integrate --integration-backend cargokit` run; Rust and Dart APIs unchanged (FRB migration doc is symmetric). Versions: Flutter 3.47.1, Rust 1.98.0, FRB 2.13.0 across codegen/pub/hooks.
 2. **Core language — commit to Rust.** PRD §22 kill criterion ("release packaging unreliable after the bounded spike") was not met: release packaging succeeded first try. The §22 fallback (temporary Dart core) is rejected as contra-evidence. Reversal trigger: PRE-003 failing on both backends.
-3. **Test coupling — accepted and stated.** Under native-assets every `flutter test` runs the Rust build hook (host, cargo release profile) and the generated loader opens `rust/target/release/libkimatta_bridge.so`, so the contract reads: `(cd rust && cargo build --release)` then `flutter test`. Every dev/CI host needs rustup — unavoidable once the domain is Rust. Widget tests isolate from *loading*, not *building*. Optional later lanes, not decided here: `FLUTTER_NATIVE_ASSETS=false` for widget-only runs (unverified), mocking `RustLibApi` (FRB seam) from MVP-003.
+3. **Test coupling — accepted and stated.** Under native-assets every `flutter test` runs the Rust build hook (host, cargo release profile) and the generated loader opens `rust/target/release/libkimatta_bridge.so`, so the contract reads `(cd rust && cargo build --release) && flutter test` as one line: the hook does not refresh that path, and a stale `.so` yields a false pass rather than a load failure. Every dev/CI host needs rustup — unavoidable once the domain is Rust. Widget tests isolate from *loading*, not *building*. Optional later lanes, not decided here: `FLUTTER_NATIVE_ASSETS=false` for widget-only runs (unverified), mocking `RustLibApi` (FRB seam) from MVP-003.
 4. **Layout and libraries.** `rust/Cargo.toml` stays the bridge package (`kimatta_bridge`, FRB default path) and becomes the workspace root when MVP-002 adds `crates/household-core` and `crates/kimatta-storage` (cargo rejects an empty `crates/*` glob, so the `[workspace]` block lands with the first sibling). Moving the bridge to `crates/kimatta-bridge` is rejected: it touches `flutter_rust_bridge.yaml` and `hook/build.dart` for no functional gain. Libraries: `rusqlite` with `bundled` (SQLite C compiled through the same NDK clang the hook proved; system SQLite headers are not reliably exposed by the NDK) and `rusqlite_migration` (small, tested; dropped only if `cargo tree -i rusqlite` shows more than one version). Versions confirmed at MVP-002 AC-1. `freezed`/`build_runner`/`freezed_annotation` remain as generated-binding tooling (invariant 21); D-024's no-codegen rule still governs hand-written Dart.
 5. **iOS discharge — PRE-003** carries PRE-002 AC-8 (NOT VERIFIED, owner-accepted 2026-08-24). A macOS CI runner now would breach invariant 15 and D-015.
 

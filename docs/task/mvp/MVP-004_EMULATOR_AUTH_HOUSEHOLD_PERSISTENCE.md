@@ -1,68 +1,82 @@
-# MVP-004 — Emulator auth, household, and persistence
+# MVP-004 — Anonymous-first entry and household identity
 
 > Planning input, not an approved execution plan. Recommended workflows do not invoke or authorize themselves.
 
+> Retitled 2026-08-26 under D-034; formerly "Emulator auth, household, and persistence". The ID and filename are kept because the register and four other cards cite `MVP-004`.
+
 | Field | Value |
 |---|---|
-| Status | Draft |
+| Status | See `docs/ROADMAP.md` task register |
 | Type | Implementation |
-| Workstream | Data/auth |
-| Depends on | MVP-002 |
+| Workstream | Identity/entry |
+| Depends on | MVP-002, MVP-003 |
 | Complexity | Complex |
 | Assurance | Elevated |
 | Sequential batching | No |
 | Recommended workflow | `plan-task` |
-| External actions | Local Firebase Emulator Suite only; no cloud project/credentials |
+| External actions | None; on-device evidence uses the Android emulator per D-022 |
 
-> **v3 amendment (2026-08-24, D-028/D-029):** Durable persistence moves to Rust-owned SQLite (MVP-002); the Firebase emulator is not the durable store. This card narrows to anonymous-first entry and household identity UI over the Rust kernel. Authoritative source adds `docs/PRD_v3.md` §6.4–6.5, §15; `PRD_v2` citations are historical. Re-derive this card after DEC-005 is Done; its status stays Draft until then.
+> **Re-derived for PRD v3 on 2026-08-26 (D-029, D-034).** The dated 2026-08-24 banner is folded into the body below. `MVP-003` was added to `Depends on` in the same change (register row and Outcome cell updated together, per D-029): the 2026-08-24 banner narrowed this card to household identity **UI** over the Rust kernel, and that UI needs the shell.
+
+## Workflow gate
+
+Before planning, read `docs/ROADMAP.md` and apply the mandatory planning gate in `docs/task/README.md` for `MVP-004`. Before implementation, apply the mandatory execution gate and repeat it as the approved plan's first execution step.
 
 ## Outcome and user value
 
-Let a new user enter anonymously and persist household-owned data against a safe local emulator boundary.
+Let a new user start using Kimatta immediately, with no account and no network, and give the household a durable identity in Rust-owned SQLite that every later food card hangs off. Household ownership is the core data boundary (invariant 1); MVP-002 made Rust its owner, and this card is where a real household first exists.
 
 ## Authoritative sources
 
-- `docs/PRD_v2.md` §§7.2, 14.2, 14.4, 14.6; `docs/ROADMAP.md` D-008; `docs/task/MVP_INVARIANTS.md`
+- `docs/PRD_v3.md` §6.4 (SQLite owned by Rust), §6.5 (cloud is optional; core MVP planning has no cloud dependency), §7.1 (household identity), §12 (schema/migration discipline), §15 (First run)
+- `docs/ROADMAP.md` D-008, D-015, D-022, D-028, D-030, D-034; `docs/task/MVP_INVARIANTS.md` 1, 8, 15, 17
+- Historical (D-028): `docs/PRD_v2.md` §§7.2, 14.2, 14.4, 14.6
 
 ## Load-bearing constraints
 
-- First write must be protected by deny-by-default, household-scoped rules.
-- Emulator configuration fails closed when absent; never fall through to a real project.
-- Solo user is a one-person household; IDs are stable and ownership explicit.
-- Durable-account upgrade is deferred to MVP-018.
+- Household scoping is enforced in Rust-owned SQLite, not by cloud security rules. A household-scoped read or write never reaches another household's rows (invariants 1, 17).
+- First launch creates a local anonymous identity with no network call and no durable account (invariant 8, PRD §15 "No mandatory durable account").
+- Solo use is a one-person household; IDs are stable and ownership is explicit.
+- Durable-account upgrade, cloud auth, and any sync are deferred to MVP-018; nothing here may depend on them (PRD §6.5).
+- Bootstrap is idempotent: a restart must not produce a second household or a duplicate member.
 
 ## Scope
 
-- Wire anonymous emulator auth, household bootstrap, a minimal repository implementation, rules/indexes, seed/reset tooling, and emulator/rules tests.
+- Create and persist the anonymous local identity, the owning household, and its first member through coarse bridge commands over explicit DTOs (invariant 21).
+- Household identity UI on the MVP-003 shell: show the household, allow renaming, and make solo-versus-household framing visible without demanding setup.
+- Seed and reset tooling against the local database for development.
+- Rust unit tests and bridge integration tests; on-device evidence per D-022.
 
 ## Non-goals
 
-- Real Firebase project, invitations, production auth providers, rich schema, or offline claim verification.
+- Firebase in any form, real or emulated; durable accounts; invitations; multi-user collaboration; production auth providers; rich member profiles.
 
 ## Decision gates
 
-- Resolve any rule/data-shape conflict with MVP-002 before migration-like code appears.
+- Resolve any schema-shape conflict with MVP-002's `household` / `household_member` tables before writing a migration; a change there is a migration, not an edit (PRD §12).
 
 ## Acceptance criteria
 
-- **AC-1:** First launch creates/reuses an anonymous identity and one owned household.
-- **AC-2:** Authorized household reads/writes pass and cross-household/unauthenticated access fails.
-- **AC-3:** Restart retains expected emulator-backed state without duplicate bootstrap records.
-- **AC-4:** Missing emulator configuration cannot contact a cloud backend.
+- **AC-1:** First launch creates exactly one anonymous identity and one owned household; a second launch reuses both.
+- **AC-2:** Household-scoped reads and writes succeed for the owning household and never return or mutate another household's rows.
+- **AC-3:** Restart retains household state in SQLite with no duplicate bootstrap records.
+- **AC-4:** The core entry path makes no network call on first run or on restart.
+- **AC-5:** Identity UI states are accessible and honest when a household has no name set.
 
 ## Evidence plan
 
 | Criterion | Required evidence |
 |---|---|
-| AC-1 | Integration test and emulator data inspection |
-| AC-2 | Automated rules tests, including negative cases |
-| AC-3 | Restart integration test |
-| AC-4 | Fail-closed test/network log; independent security review |
+| AC-1 | Rust unit test plus a bridge integration test asserting reuse on second open |
+| AC-2 | Rust tests with a second household fixture, including negative cases |
+| AC-3 | Restart integration test and on-device database inspection over the D-022 bridge |
+| AC-4 | Network log or airplane-mode emulator run showing no outbound request |
+| AC-5 | Widget test and accessibility inspection record |
 
 ## Stop/failure conditions
 
-- Stop on any real-project connection, permissive rule workaround, credential request, or ambiguous ownership. Two cycles then re-plan.
+- Stop on any network dependency in the entry path, any cloud credential request, ambiguous ownership, or a schema change made without a migration. Two cycles then re-plan.
 
 ## Handoff
 
-Record PASS/FAIL/NOT VERIFIED evidence and status in `docs/ROADMAP.md`.
+In one `docs/ROADMAP.md` handoff edit, record PASS/FAIL/NOT VERIFIED evidence, the resulting status, EMULATOR-PERSISTENCE-READY progress, and **Next implementation task**.

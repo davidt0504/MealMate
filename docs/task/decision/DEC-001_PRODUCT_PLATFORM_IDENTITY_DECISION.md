@@ -4,7 +4,7 @@
 
 | Field | Value |
 |---|---|
-| Status | Done |
+| Status | See `docs/ROADMAP.md` task register |
 | Type | Decision |
 | Workstream | Product foundation |
 | Depends on | — |
@@ -13,6 +13,10 @@
 | Sequential batching | No implementation until Done |
 | Recommended workflow | `deep-options`; then `grill-me` only for unresolved owner tradeoffs |
 | External actions | None |
+
+## Workflow gate
+
+Before resolving `DEC-001`, read `docs/ROADMAP.md`, confirm every declared dependency is Done with evidence, and confirm the roadmap identifies this card as the current required decision or explicit owner-paced work. This decision does not need to be the Next implementation task and does not occupy the implementation lane. Its result and Done transition require explicit owner approval.
 
 ## Outcome and user value
 

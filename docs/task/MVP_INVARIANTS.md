@@ -1,6 +1,6 @@
 # MVP Invariants
 
-Every MVP card must preserve these constraints. A conflict stops the task and returns it to planning. Items 17–21 apply from PRD v3 (D-028) onward.
+Every MVP card must preserve these constraints. A conflict stops the task and returns it to planning. Items 17–21 apply from PRD v3 (D-028) onward. Item 7 was restated from PRD v3 under D-036.
 
 1. Household ownership is the core data boundary; solo use is a one-person household.
 2. Ingredients remain structured while original quantity/unit text is retained for display and recovery.
@@ -8,7 +8,7 @@ Every MVP card must preserve these constraints. A conflict stops the task and re
 4. Planning uses real dates and a household cycle, not a hard-coded week.
 5. A planned meal occurrence supports one or more recipe components and optional serving scale per component.
 6. Pantry is optional binary have/don't-have state, never a required quantified inventory audit.
-7. The core recipe → plan → pantry-aware list → shopping loop remains usable offline with deliberate cache/prefetch and recovery behavior.
+7. The core recipe → plan → pantry-aware list → shopping loop remains usable offline because Rust-owned SQLite is the local source of truth, with durability, recovery and backup behavior rather than a cache layered over a remote store (PRD v3 §6.4–6.5, §12; restated under D-036).
 8. First launch is anonymous-first. Any upgrade preserves data, and data-loss risk is stated honestly.
 9. Core planning has no recurring LLM dependency.
 10. Restriction handling warns from known structured data, exposes uncertainty, and never claims a recipe is “safe.”

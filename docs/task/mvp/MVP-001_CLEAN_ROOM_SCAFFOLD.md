@@ -4,7 +4,7 @@
 
 | Field | Value |
 |---|---|
-| Status | Done |
+| Status | See `docs/ROADMAP.md` task register |
 | Type | Implementation |
 | Workstream | Foundation |
 | Depends on | DEC-001, PRE-001 |
@@ -13,6 +13,10 @@
 | Sequential batching | No |
 | Recommended workflow | `plan-task` (no `--auto`) |
 | External actions | Destructive replacement requires explicit plan approval; no commit/push |
+
+## Workflow gate
+
+Before planning, read `docs/ROADMAP.md` and apply the mandatory planning gate in `docs/task/README.md` for `MVP-001`. Before implementation, apply the mandatory execution gate and repeat it as the approved plan's first execution step.
 
 ## Outcome and user value
 
@@ -63,7 +67,7 @@ Replace the disposable legacy app with a current, minimal Android Flutter scaffo
 
 ## Handoff
 
-Record evidence/status in `docs/ROADMAP.md`; then promote DEC-002.
+In one `docs/ROADMAP.md` handoff edit, record the evidence, resulting status, delivery-gate progress, and **Next implementation task**; select `DEC-002` next only if this card is `Done` and `DEC-002` passes its decision workflow gate.
 
 ## Verification record — 2026-08-22
 

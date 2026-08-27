@@ -3,6 +3,8 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 
+import 'package:path_provider/path_provider.dart';
+
 import 'package:meal_mate/src/rust/api/health.dart';
 import 'package:meal_mate/src/rust/frb_generated.dart';
 
@@ -12,8 +14,8 @@ Future<void> main() async {
   // can locate the probe button for the AC-5 screenshot. Remove with this screen.
   SemanticsBinding.instance.ensureSemantics();
   await RustLib.init();
-  final dbPath =
-      '${Directory.systemTemp.path}${Platform.pathSeparator}kimatta.db';
+  final dir = await getApplicationSupportDirectory();
+  final dbPath = '${dir.path}${Platform.pathSeparator}kimatta.db';
   runApp(
     MaterialApp(
       home: HealthScreen(

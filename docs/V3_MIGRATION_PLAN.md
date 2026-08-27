@@ -62,7 +62,7 @@ Crate dependency direction (kernel never imports food types):
 | 5 — hardening | `MVP-025`, `MVP-017`, `MVP-019` | Fixtures/property tests, benchmarks, recovery/backup, privacy-safe telemetry. |
 | Cloud / sharing / release | `DEC-003`, `MVP-018`, `MVP-020`, `MVP-021`, `MVP-022` | Cloud is an optional adapter; no sync engine in MVP. |
 
-Cards below PRE-002/DEC-005 carry a dated v3 amendment banner and are re-derived one at a time after DEC-005 is Done (D-029).
+Cards below PRE-002/DEC-005 carried a dated amendment banner from 2026-08-24. Twenty-one of them were re-derived in a single pass on 2026-08-26 (D-034), which D-029 permitted; `MVP-003` is re-derived by its own approved plan.
 
 ## 5. Kill criterion
 
@@ -77,4 +77,4 @@ Family Seasons; doctor/school/sports management; generalized household dashboard
 - Never delete functioning code merely because v3 assigns different ownership.
 - Before changing a persisted schema, re-establish whether real user data exists and write a compatibility plan (none is needed today).
 - Generated bridge files are never hand-edited.
-- Owner work in progress is hashed before and after any step that could touch it.
+- Owner work in progress is hashed before and after any step that could touch it. Guarded owner work means the decision cards, the PRD, and the v3 docs. `KNOWN_ISSUES.md` and `KNOWN_ISSUES-low.md` are excluded: they are review-workflow artifacts that `/redteam-code`, `/fix-findings`, `/ki-maintain` and `/tidy` write by design, so hashing them makes a card's evidence false as soon as a review pass runs (D-032).

@@ -4,7 +4,7 @@
 
 | Field | Value |
 |---|---|
-| Status | Draft |
+| Status | See `docs/ROADMAP.md` task register |
 | Type | Implementation / Decision / Readiness |
 | Workstream | <name> |
 | Depends on | <IDs or —> |
@@ -17,6 +17,11 @@
 ## Outcome and user value
 
 <One bounded outcome and why it matters.>
+
+## Workflow gate
+
+- **Implementation / Readiness / Optional:** Before planning or execution, read `docs/ROADMAP.md` and apply the mandatory planning or execution gate in `docs/task/README.md` for `<ID>`. Do not begin implementation unless it passes. Any implementation plan must repeat the execution gate as its first execution step.
+- **Decision:** Before resolving the decision, confirm every declared dependency is Done with evidence and the roadmap identifies `<ID>` as the current required decision or explicit owner-paced work. It does not need to be the Next implementation task and does not occupy the implementation lane.
 
 ## Authoritative sources
 
@@ -57,4 +62,4 @@
 
 ## Handoff
 
-Record PASS/FAIL/NOT VERIFIED evidence, decisions, blockers, and the resulting status in `docs/ROADMAP.md`. Promote dependents only when this card is Done.
+In one `docs/ROADMAP.md` handoff edit, record this card's resulting status, PASS/FAIL/NOT VERIFIED evidence, decisions, blockers, delivery-gate progress, and **Next implementation task**. Select a dependent next only when this card is `Done` and that dependent passes its applicable planning or decision workflow gate; never promote a status without its required evidence and explicit owner approval.

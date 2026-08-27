@@ -1,15 +1,18 @@
-# V3 Implementation Status
+# V3 Pivot Checklist
 
-**Updated:** 2026-08-24 (session 1 of the pivot). Edit this file at every v3 card handoff.
+**Updated:** 2026-08-26 (workflow/status reconciliation). Update this file only when a pivot deliverable or deferral below changes; it is not a live task-status ledger.
 **Authoritative inputs:** `docs/PRD_v3.md`, `docs/HOUSEHOLD_CONTROL_PRINCIPLES.md`, `docs/CODEX_CLAUDE_PIVOT_PROMPT.md`.
 
-> **The pivot is not complete.** No Rust code exists yet; Android and iOS packaging of a Rust-bridged app are unverified. This file records exactly what is and is not done (prompt "Deliverables").
+Live task status, current work, and next work are authoritative only in `docs/ROADMAP.md`.
+
+> **The pivot is not complete.** The Rust kernel/storage foundation landed (MVP-002, 2026-08-24); iOS packaging of the Rust-bridged app is unverified. This file records exactly what is and is not done (prompt "Deliverables").
 
 ## Complete
 
 - Phase-0 repository inventory and component map — `docs/V3_MIGRATION_PLAN.md` (prompt deliverable 1).
 - MVP invariants 17–21 added for Rust ownership, Tier-0 constraints, planned ≠ cooked, deterministic planner, coarse bridge — `docs/task/MVP_INVARIANTS.md`.
-- Cards: `PRE-002` (Rust/FRB toolchain and bridge spike, `Ready`), `DEC-005` (bridge backend and core-language commitment), `MVP-002` rewritten as the Rust kernel/SQLite foundation; outline cards `MVP-023`, `MVP-024`, `MVP-025`, `PRE-003`; dated v3 amendment banners on every other affected card (D-029).
+- Cards: `PRE-002` (Rust/FRB toolchain and bridge spike, `Ready`), `DEC-005` (bridge backend and core-language commitment), `MVP-002` rewritten as the Rust kernel/SQLite foundation; outline cards `MVP-023`, `MVP-024`, `MVP-025`, `PRE-003`; dated amendment banners on every other affected card (D-029). *(Historical: that banner stage ran 2026-08-24 and was discharged 2026-08-26 by D-034 — see the next bullet.)*
+- Card re-derivation, 2026-08-26 (D-034): 21 cards re-derived from PRD v3 (`MVP-004`–`MVP-022`, `DEC-003`, `OPT-001`) and `MVP-023`, `MVP-024`, `MVP-025`, `PRE-003` given full bodies. `MVP-004` gained an `MVP-003` dependency and was retitled; `MVP-017` was retitled and its sign-out obligation transferred to `MVP-018` as a new AC-6; the PRD v3 §26 traceability table landed in `docs/ROADMAP.md`. `MVP-003` was excluded — its next current approved plan must re-derive it before implementation.
 - Roadmap reconciliation — D-028, D-029, register rows, gates, next action, DEC-002 contract note, evidence-row note, traceability note — `docs/ROADMAP.md`.
 - README architecture direction section.
 - DEC-002 flipped to Done on recorded evidence; moved to the EMULATOR-PERSISTENCE-READY gate (D-028).
@@ -17,10 +20,7 @@
 - Pinned toolchain and clean-checkout build commands (deliverable 3) — PRE-002 command contract in `docs/ROADMAP.md`.
 - README architecture section carries the real build commands (deliverable 7).
 - DEC-005 Done (2026-08-24, D-030): Rust core committed on the native-assets backend; MVP-002 promoted to Ready.
-
-## In progress
-
-- None. Next action: `/plan-task docs/task/mvp/MVP-002_ENGINEERING_FOUNDATION_DOMAIN_SPINE.md` (no `--auto`).
+- Rust workspace, SQLite migration foundation, and household-identity tests (prompt deliverables 4–6) — `MVP-002`, Done-eligible pending explicit owner promotion: `rust/` workspace with `crates/household-core` and `crates/kimatta-storage` (`rusqlite` 0.40.2 bundled, `rusqlite_migration` 2.6.0, migration v1, transactional insert, 9 Rust tests); bridge `health_check` opens the real database and reports schema version 1; Rust gate in the command contract. AC-3 verified on-device 2026-08-25 (`emulator-5554`, schema v1 at `/data/user/0/dev.mealmate.temp/files/kimatta.db`); the D-027 block is discharged and all four ACs PASS.
 
 ## Deferred (with the card that discharges each)
 
@@ -28,9 +28,9 @@
 |---|---|
 | 2. Working Rust/Flutter bridge spike | Complete (PRE-002, Done 2026-08-24) |
 | 3. Pinned/documented toolchain and clean-checkout build commands | Complete (PRE-002 command contract in ROADMAP) |
-| 4. Initial Rust workspace/module boundaries | MVP-002 |
-| 5. SQLite migration foundation | MVP-002 |
-| 6. Tests for the first migrated domain primitive (household identity) | MVP-002 |
+| 4. Initial Rust workspace/module boundaries | Complete (MVP-002, 2026-08-24) |
+| 5. SQLite migration foundation | Complete (MVP-002, 2026-08-24) |
+| 6. Tests for the first migrated domain primitive (household identity) | Complete (MVP-002, 2026-08-24) |
 | 7. README architecture update with real build commands | Complete (PRE-002) |
 | Kernel primitives beyond identity (`Policy`, `OutcomeAssessment`, `ActionProposal`, `AttentionRequest`, ledger) | MVP-023 |
 | Planner, coverage assessment, attention requests | MVP-023 |
@@ -38,13 +38,13 @@
 | Fixtures, property tests, beam-width benchmark | MVP-025 |
 | Privacy-safe metric hooks | MVP-019 |
 | iOS build/signing proof | PRE-003 (post-launch, D-015) |
-| PRD v3 §26 per-item traceability table | re-derived with the cards (D-029) |
-| Full re-derivation of bannered cards | one at a time after DEC-005 (D-029) |
+| PRD v3 §26 per-item traceability table | Complete 2026-08-26 — `docs/ROADMAP.md` "MVP acceptance traceability" |
+| Full re-derivation of bannered cards | 21 done 2026-08-26 in one pass (D-034); `MVP-003` remains — its next current approved plan must discharge it before implementation |
 
 ## Blockers
 
 - **iOS packaging cannot be verified on this host** — no macOS or CI. Discharge: `PRE-003`. The prompt's own rule stands: the pivot is not "complete" until Android + iOS packaging is verified.
-- **Emulator runtime evidence depends on owner action** — the D-022 Windows-host emulator, adb server, and firewall rule (PRE-001 prerequisites 1–2) are not agent-operable. PRE-002 AC-5 was captured on 2026-08-24 once the owner started the bridge; PRE-002 AC-8 (iOS) and MVP-002 AC-3 carry D-027 blocks.
+- **Future emulator runtime evidence may depend on owner action** — the D-022 Windows-host emulator, adb server, and firewall rule (PRE-001 prerequisites 1–2) are not always agent-operable. PRE-002 AC-5 and MVP-002 AC-3 were captured after the owner started the bridge; PRE-002 AC-8 (iOS) remains discharged at PRE-003 under D-027.
 
 ## Deviations from the prompt / PRD, with rationale
 
@@ -55,7 +55,7 @@
 | Three crates to start (`household-core`, `kimatta-storage`, `kimatta-bridge`) instead of the five sketched | Empty crates are scaffolding; `food-domain` and `kimatta-application` appear with their first real type/use case. Dependency direction is preserved. |
 | Kernel primitives beyond identity deferred to MVP-023 | Principles §25: only primitives with a call site; the planner is the first call site. |
 | `tracing`, `jiff`, `serde` adopted at first call site rather than up front | PRD §6.6 lists them as "likely choices"; adding unused dependencies adds nothing. |
-| Task cards reconciled by banners + outline cards, not a full rewrite | D-029: a full rewrite before the spike would be redone if DEC-005 invokes the §22 fallback. |
+| Task cards reconciled by banners + outline cards, not a full rewrite | D-029: a full rewrite before the spike would be redone if DEC-005 invokes the §22 fallback. **Superseded 2026-08-26 (D-034)** — the spike settled the question the deferral was hedging, so the full re-derivation ran. |
 
 ## Evidence pointers
 

@@ -4,7 +4,7 @@
 
 | Field | Value |
 |---|---|
-| Status | Draft |
+| Status | See `docs/ROADMAP.md` task register |
 | Type | Optional stretch implementation |
 | Workstream | Recipe import |
 | Depends on | MVP-008 |
@@ -14,7 +14,11 @@
 | Recommended workflow | `deep-options` if extraction boundary is unclear, then `plan-task` |
 | External actions | Network access to public URLs only; obey site access/rights boundaries |
 
-> **v3 amendment (2026-08-24, D-028/D-029):** LLM/OCR import stays at the messy-input boundary (principles §12); accepted output becomes ordinary structured Rust-owned state after deterministic validation. Authoritative source adds `docs/PRD_v3.md` §9.1, §20; `PRD_v2` citations are historical. Re-derive this card after DEC-005 is Done; its status stays Draft until then.
+> **Re-derived for PRD v3 on 2026-08-26 (D-029, D-034).** The dated 2026-08-24 banner is folded into the body below.
+
+## Workflow gate
+
+Before planning or execution, read `docs/ROADMAP.md` and apply the mandatory planning or execution gate in `docs/task/README.md` for `OPT-001`. Do not begin implementation unless it passes. Any implementation plan must repeat the execution gate as its first execution step. Because this card is optional, the owner must explicitly select it without displacing required MVP work.
 
 ## Outcome and user value
 
@@ -22,14 +26,19 @@ Let users prefill a new private recipe from deterministic structured metadata at
 
 ## Authoritative sources
 
-- `docs/PRD_v2.md` §§7.6, 13.2, 21.3, 23; `docs/ROADMAP.md` D-016; `docs/task/MVP_INVARIANTS.md`
+- `docs/PRD_v3.md` §9.1 (LLMs at the messy boundary, never the recurring controller), §9.3 (an LLM may not silently invent a trusted action), §20 (variable-cost LLM convenience), §14 items 4–5 (external and LLM output are untrusted)
+- `docs/HOUSEHOLD_CONTROL_PRINCIPLES.md` §7 (candidate-action completeness), §12 (algorithm hierarchy)
+- `docs/ROADMAP.md` D-016, D-028, D-030, D-034; `docs/task/MVP_INVARIANTS.md` 9, 12, 17
+- Historical (D-028): `docs/PRD_v2.md` §§7.6, 13.2, 21.3, 23
 
 ## Load-bearing constraints
 
-- Parse schema.org/JSON-LD and other explicitly approved deterministic metadata only; no LLM dependency.
+- Parse schema.org/JSON-LD and other explicitly approved deterministic metadata only; no LLM dependency on this path.
 - Preserve source URL, attribution/provenance, original text, uncertainty, and user edits.
 - Never promise support for arbitrary sites, paywalls, blocked pages, hostile markup, or copyright-sensitive republishing.
 - Import is private by default and always requires review/confirmation before save.
+- Imported content is untrusted input. It becomes ordinary structured Rust-owned state only after deterministic validation, and it can never modify policy, restrictions, or authority (PRD §14 item 4, invariant 17).
+- If a later card adds an LLM or OCR lane, it belongs at the messy-input boundary producing *candidates*, never in the deterministic path and never as a source of authoritative state (PRD §9.1, principles §12).
 
 ## Scope
 

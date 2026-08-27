@@ -1,0 +1,117 @@
+# Kimatta v3 — remaining command sequence (one step per fresh session)
+# Written 2026-08-25; workflow gate updated 2026-08-26. The sole source of truth
+# for status, current work, and next work is docs/ROADMAP.md. Do not choose a step
+# from this file until its target card passes docs/task/README.md's mandatory gate.
+# Conventions: one card per session; no --auto anywhere (docs/task/README.md).
+# Every plan must repeat the gate as its first execution step and update roadmap
+# status, evidence, gate progress, and Next implementation task at handoff.
+# Before /execute-plan, supply the approved plan, docs/ROADMAP.md, and its target
+# card; repeat the gate before implementation. /execute-plan never commits — run
+# the commit line it prints. [OWNER] steps remain outside agent authority.
+
+## Discharged preparation (context)
+# DEC-001, PRE-001, MVP-001, DEC-002, PRE-002, and DEC-005 are Done with
+# evidence in docs/ROADMAP.md. MVP-002 is in Verify; all four ACs PASS, including
+# AC-3 on-device 2026-08-25, but its owner status promotion is still outstanding.
+# Former steps 1–2 (bulk v3 card re-derivation) were discharged by D-034 on
+# 2026-08-26. Repository and Codex-owned state contain no accessible path for the
+# earlier referenced MVP-003 plan. If the owner supplies a current approved plan,
+# use it; otherwise create a fresh plan. Either path folds the remaining dated
+# amendment into the card before code changes.
+
+## Remaining implementation sequence
+
+0.  [OWNER — status decision only; no emulator work remains]
+    Review the recorded MVP-002 PASS evidence and explicitly approve or decline
+    the Verify -> Done transition. If approved, update the roadmap row, evidence
+    result, Current implementation task, and Next implementation task together.
+
+3.  [ONLY if no accessible current approved MVP-003 plan is supplied] /plan-task Read docs/PRD_v3.md, docs/ROADMAP.md, docs/task/MVP_INVARIANTS.md, docs/task/mvp/MVP-003_ANDROID_APP_SHELL_NAVIGATION.md, then plan its implementation.
+4.  /execute-plan Read <current approved MVP-003 plan path, or plan path from step 3>, docs/ROADMAP.md, and docs/task/mvp/MVP-003_ANDROID_APP_SHELL_NAVIGATION.md; repeat the mandatory execution gate, then execute the approved plan.
+
+5.  /plan-task Read docs/PRD_v3.md, docs/ROADMAP.md, docs/task/MVP_INVARIANTS.md, docs/task/mvp/MVP-004_EMULATOR_AUTH_HOUSEHOLD_PERSISTENCE.md, then plan its implementation.
+6.  /execute-plan Read <plan path from step 5>, docs/ROADMAP.md, and docs/task/mvp/MVP-004_EMULATOR_AUTH_HOUSEHOLD_PERSISTENCE.md; repeat the mandatory execution gate, then execute the approved plan.
+
+7.  /plan-task Read docs/PRD_v3.md, docs/ROADMAP.md, docs/task/MVP_INVARIANTS.md, docs/task/mvp/MVP-005_PLANNING_CYCLE_MEAL_SCOPE.md, then plan its implementation.
+8.  /execute-plan Read <plan path from step 7>, docs/ROADMAP.md, and docs/task/mvp/MVP-005_PLANNING_CYCLE_MEAL_SCOPE.md; repeat the mandatory execution gate, then execute the approved plan.
+
+9.  /plan-task Read docs/PRD_v3.md, docs/ROADMAP.md, docs/task/MVP_INVARIANTS.md, docs/task/mvp/MVP-007_INGREDIENT_RECIPE_DATA_FOUNDATION.md, then plan its implementation.
+10. /execute-plan Read <plan path from step 9>, docs/ROADMAP.md, and docs/task/mvp/MVP-007_INGREDIENT_RECIPE_DATA_FOUNDATION.md; repeat the mandatory execution gate, then execute the approved plan.
+
+11. /plan-task Read docs/PRD_v3.md, docs/ROADMAP.md, docs/task/MVP_INVARIANTS.md, docs/task/mvp/MVP-006_MINIMAL_ONBOARDING_PREFERENCES.md, then plan its implementation.
+12. /execute-plan Read <plan path from step 11>, docs/ROADMAP.md, and docs/task/mvp/MVP-006_MINIMAL_ONBOARDING_PREFERENCES.md; repeat the mandatory execution gate, then execute the approved plan.
+
+13. /plan-task Read docs/PRD_v3.md, docs/ROADMAP.md, docs/task/MVP_INVARIANTS.md, docs/task/mvp/MVP-008_MANUAL_RECIPE_CRUD.md, then plan its implementation.
+14. /execute-plan Read <plan path from step 13>, docs/ROADMAP.md, and docs/task/mvp/MVP-008_MANUAL_RECIPE_CRUD.md; repeat the mandatory execution gate, then execute the approved plan.
+
+15. /plan-task Read docs/PRD_v3.md, docs/ROADMAP.md, docs/task/MVP_INVARIANTS.md, docs/task/mvp/MVP-009_RESTRICTION_WARNINGS_FILTERING.md, then plan its implementation.
+16. /execute-plan Read <plan path from step 15>, docs/ROADMAP.md, and docs/task/mvp/MVP-009_RESTRICTION_WARNINGS_FILTERING.md; repeat the mandatory execution gate, then execute the approved plan.
+
+17. [OWNER DECISION] Keep or cut MVP-010 (recipe photos) — PRD v3 §16 demotes it
+    before cutting controller proof. If CUT: record the cut in docs/ROADMAP.md,
+    amend MVP-022's dependency line (card cell + register, D-029), skip to step 20.
+18. /plan-task Read docs/PRD_v3.md, docs/ROADMAP.md, docs/task/MVP_INVARIANTS.md, docs/task/mvp/MVP-010_RECIPE_PHOTO_SUPPORT.md, then plan its implementation.
+19. /execute-plan Read <plan path from step 18>, docs/ROADMAP.md, and docs/task/mvp/MVP-010_RECIPE_PHOTO_SUPPORT.md; repeat the mandatory execution gate, then execute the approved plan.
+
+20. /plan-task Read docs/PRD_v3.md, docs/ROADMAP.md, docs/task/MVP_INVARIANTS.md, docs/task/mvp/MVP-011_STARTER_CONTENT_READINESS.md, then plan its implementation.
+21. /execute-plan Read <plan path from step 20>, docs/ROADMAP.md, and docs/task/mvp/MVP-011_STARTER_CONTENT_READINESS.md; repeat the mandatory execution gate, then execute the approved plan.
+
+22. /plan-task Read docs/PRD_v3.md, docs/ROADMAP.md, docs/task/MVP_INVARIANTS.md, docs/task/mvp/MVP-012_PLANNED_MEALS_COMPONENTS.md, then plan its implementation.
+23. /execute-plan Read <plan path from step 22>, docs/ROADMAP.md, and docs/task/mvp/MVP-012_PLANNED_MEALS_COMPONENTS.md; repeat the mandatory execution gate, then execute the approved plan.
+
+24. /plan-task Read docs/PRD_v3.md, docs/ROADMAP.md, docs/task/MVP_INVARIANTS.md, docs/task/mvp/MVP-014_PANTRY.md, then plan its implementation.
+25. /execute-plan Read <plan path from step 24>, docs/ROADMAP.md, and docs/task/mvp/MVP-014_PANTRY.md; repeat the mandatory execution gate, then execute the approved plan.
+
+26. /plan-task Read docs/PRD_v3.md, docs/ROADMAP.md, docs/task/MVP_INVARIANTS.md, docs/task/mvp/MVP-013_PLANNER_EXPERIENCE.md, then plan its implementation.
+27. /execute-plan Read <plan path from step 26>, docs/ROADMAP.md, and docs/task/mvp/MVP-013_PLANNER_EXPERIENCE.md; repeat the mandatory execution gate, then execute the approved plan.
+
+28. /plan-task Read docs/PRD_v3.md, docs/ROADMAP.md, docs/task/MVP_INVARIANTS.md, docs/task/mvp/MVP-015_SHOPPING_AGGREGATION_ENGINE.md, then plan its implementation.
+29. /execute-plan Read <plan path from step 28>, docs/ROADMAP.md, and docs/task/mvp/MVP-015_SHOPPING_AGGREGATION_ENGINE.md; repeat the mandatory execution gate, then execute the approved plan.
+
+30. /plan-task Read docs/PRD_v3.md, docs/ROADMAP.md, docs/task/MVP_INVARIANTS.md, docs/task/mvp/MVP-016_SHOPPING_LIST_EXPERIENCE.md, then plan its implementation.
+31. /execute-plan Read <plan path from step 30>, docs/ROADMAP.md, and docs/task/mvp/MVP-016_SHOPPING_LIST_EXPERIENCE.md; repeat the mandatory execution gate, then execute the approved plan.
+
+32. /plan-task Read docs/PRD_v3.md, docs/HOUSEHOLD_CONTROL_PRINCIPLES.md, docs/CODEX_CLAUDE_PIVOT_PROMPT.md, docs/ROADMAP.md, docs/task/MVP_INVARIANTS.md, docs/task/mvp/MVP-023_FOOD_CONTROLLER_PLANNER_CORE.md, then plan its implementation.
+33. /execute-plan Read <plan path from step 32>, docs/ROADMAP.md, and docs/task/mvp/MVP-023_FOOD_CONTROLLER_PLANNER_CORE.md; repeat the mandatory execution gate, then execute the approved plan.
+
+34. /plan-task Read docs/PRD_v3.md, docs/HOUSEHOLD_CONTROL_PRINCIPLES.md, docs/ROADMAP.md, docs/task/MVP_INVARIANTS.md, docs/task/mvp/MVP-025_PLANNER_FIXTURES_AND_INVARIANT_TESTS.md, then plan its implementation.
+35. /execute-plan Read <plan path from step 34>, docs/ROADMAP.md, and docs/task/mvp/MVP-025_PLANNER_FIXTURES_AND_INVARIANT_TESTS.md; repeat the mandatory execution gate, then execute the approved plan.
+
+36. /plan-task Read docs/PRD_v3.md, docs/HOUSEHOLD_CONTROL_PRINCIPLES.md, docs/ROADMAP.md, docs/task/MVP_INVARIANTS.md, docs/task/mvp/MVP-024_COVER_MY_WEEK_EXPERIENCE.md, then plan its implementation.
+37. /execute-plan Read <plan path from step 36>, docs/ROADMAP.md, and docs/task/mvp/MVP-024_COVER_MY_WEEK_EXPERIENCE.md; repeat the mandatory execution gate, then execute the approved plan.
+
+38. /plan-task Read docs/PRD_v3.md, docs/ROADMAP.md, docs/task/MVP_INVARIANTS.md, docs/task/mvp/MVP-017_OFFLINE_CACHE_RECOVERY.md, then plan its implementation.
+39. /execute-plan Read <plan path from step 38>, docs/ROADMAP.md, and docs/task/mvp/MVP-017_OFFLINE_CACHE_RECOVERY.md; repeat the mandatory execution gate, then execute the approved plan.
+    # -> LOCAL-CORE-LOOP-READY gate.
+
+40. /deep-options Read docs/PRD_v3.md, docs/ROADMAP.md, docs/task/MVP_INVARIANTS.md, and docs/task/decision/DEC-003_CLOUD_SHARING_RELEASE_DECISION.md, then resolve its four decisions and record the resolution in the card.
+
+41. [OWNER] Close DEC-004: run the Kimatta USPTO trademark search (interactive
+    tmsearch.uspto.gov session or paid search), resolve decisions 1-4 in the card
+    (add Rust crate names to the rename scope), flip the ROADMAP row to Done with
+    any D-027 owner-accepted clause. Blocks steps 42-49.
+
+42. /plan-task Read docs/PRD_v3.md, docs/ROADMAP.md, docs/task/MVP_INVARIANTS.md, docs/task/mvp/MVP-018_REAL_DEV_BACKEND_DURABLE_AUTH.md, then plan its implementation.
+    # [OWNER before 43: creating a non-production Firebase project/credentials
+    #  needs separate owner authorization (invariant 15).]
+43. /execute-plan Read <plan path from step 42>, docs/ROADMAP.md, and docs/task/mvp/MVP-018_REAL_DEV_BACKEND_DURABLE_AUTH.md; repeat the mandatory execution gate, then execute the approved plan.
+
+44. /plan-task Read docs/PRD_v3.md, docs/ROADMAP.md, docs/task/MVP_INVARIANTS.md, docs/task/mvp/MVP-019_OBSERVABILITY_FOUNDATION.md, then plan its implementation.
+45. /execute-plan Read <plan path from step 44>, docs/ROADMAP.md, and docs/task/mvp/MVP-019_OBSERVABILITY_FOUNDATION.md; repeat the mandatory execution gate, then execute the approved plan.
+
+46. /plan-task Read docs/PRD_v3.md, docs/ROADMAP.md, docs/task/MVP_INVARIANTS.md, docs/task/mvp/MVP-020_SHARE_PUBLICATION_WEB_PREVIEW.md, then plan its implementation.
+47. /execute-plan Read <plan path from step 46>, docs/ROADMAP.md, and docs/task/mvp/MVP-020_SHARE_PUBLICATION_WEB_PREVIEW.md; repeat the mandatory execution gate, then execute the approved plan.
+
+48. /plan-task Read docs/PRD_v3.md, docs/ROADMAP.md, docs/task/MVP_INVARIANTS.md, docs/task/mvp/MVP-021_ANDROID_APP_LINKS_RECIPIENT_FLOW.md, then plan its implementation.
+49. /execute-plan Read <plan path from step 48>, docs/ROADMAP.md, and docs/task/mvp/MVP-021_ANDROID_APP_LINKS_RECIPIENT_FLOW.md; repeat the mandatory execution gate, then execute the approved plan.
+
+50. /plan-task Read docs/PRD_v3.md, docs/ROADMAP.md, docs/task/MVP_INVARIANTS.md, docs/task/mvp/MVP-022_ANDROID_BETA_READINESS.md, then plan its implementation.
+51. /execute-plan Read <plan path from step 50>, docs/ROADMAP.md, and docs/task/mvp/MVP-022_ANDROID_BETA_READINESS.md; repeat the mandatory execution gate, then execute the approved plan.
+    # -> PRODUCTION-BETA-READY gate; production activation is a separately
+    #    authorized owner action.
+
+## Post-launch / optional (not on the MVP path)
+52. /plan-task Read docs/PRD_v3.md, docs/ROADMAP.md, docs/task/MVP_INVARIANTS.md, and docs/task/readiness/PRE-003_IOS_TOOLCHAIN_READINESS.md, then plan its implementation.   # needs a macOS host or CI
+53. /execute-plan Read <plan path from step 52>, docs/ROADMAP.md, and docs/task/readiness/PRE-003_IOS_TOOLCHAIN_READINESS.md; repeat the mandatory execution gate, then execute the approved plan.
+54. /plan-task Read docs/PRD_v3.md, docs/ROADMAP.md, docs/task/MVP_INVARIANTS.md, and docs/task/optional/OPT-001_STRUCTURED_URL_RECIPE_IMPORT.md, then plan its implementation.   # optional, any time after step 14
+55. /execute-plan Read <plan path from step 54>, docs/ROADMAP.md, and docs/task/optional/OPT-001_STRUCTURED_URL_RECIPE_IMPORT.md; repeat the mandatory execution gate, then execute the approved plan.

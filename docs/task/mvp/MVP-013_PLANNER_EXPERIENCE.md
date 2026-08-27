@@ -4,7 +4,7 @@
 
 | Field | Value |
 |---|---|
-| Status | Draft |
+| Status | See `docs/ROADMAP.md` task register |
 | Type | Implementation |
 | Workstream | Planning/UI |
 | Depends on | MVP-003, MVP-009, MVP-012 |
@@ -14,7 +14,11 @@
 | Recommended workflow | `plan-task` |
 | External actions | None |
 
-> **v3 amendment (2026-08-24, D-028/D-029):** Manual planning is retained; the "Cover My Week" intelligent action moves to MVP-024 on top of the MVP-023 planner. Authoritative source adds `docs/PRD_v3.md` §15; `PRD_v2` citations are historical. Re-derive this card after DEC-005 is Done; its status stays Draft until then.
+> **Re-derived for PRD v3 on 2026-08-26 (D-029, D-034).** The dated 2026-08-24 banner is folded into the body below.
+
+## Workflow gate
+
+Before planning, read `docs/ROADMAP.md` and apply the mandatory planning gate in `docs/task/README.md` for `MVP-013`. Before implementation, apply the mandatory execution gate and repeat it as the approved plan's first execution step.
 
 ## Outcome and user value
 
@@ -22,13 +26,17 @@ Let households place, inspect, move, scale, and lock meal components across thei
 
 ## Authoritative sources
 
-- `docs/PRD_v2.md` §§7.7–7.8, 10.1–10.2, 24.5–24.6; `docs/ROADMAP.md` D-005; `docs/task/MVP_INVARIANTS.md`
+- `docs/PRD_v3.md` §15 ("Manual planning always remains available"), §13 (Flutter owns route/view state), §6.3, §16
+- `docs/ROADMAP.md` D-005, D-023, D-028, D-030, D-034; `docs/task/MVP_INVARIANTS.md` 5, 17, 18, 21
+- Historical (D-028): `docs/PRD_v2.md` §§7.7–7.8, 10.1–10.2, 24.5–24.6
 
 ## Load-bearing constraints
 
 - Render the configured cycle and enabled meal slots, not a fixed week.
 - Preserve locks and multi-component meals; warnings remain visible and explainable.
 - Make common touch actions accessible without drag-only dependence.
+- Manual planning is retained and always available; it is never degraded to push users toward the automated action (PRD §15).
+- The screen consumes a coarse cycle-view DTO and issues bridge commands; it holds no durable state (invariants 17, 21).
 
 ## Scope
 
@@ -36,7 +44,7 @@ Let households place, inspect, move, scale, and lock meal components across thei
 
 ## Non-goals
 
-- Automated plan generation, traditions, nutrition dashboards, collaboration cursors, or notifications.
+- Automated plan generation — the deterministic planner is MVP-023 and the "Cover My Week" action that invokes it is MVP-024, built on top of this screen. Also excluded: traditions, nutrition dashboards, collaboration cursors, notifications.
 
 ## Decision gates
 
@@ -62,4 +70,4 @@ Let households place, inspect, move, scale, and lock meal components across thei
 
 ## Handoff
 
-Record evidence/status in `docs/ROADMAP.md`.
+In one `docs/ROADMAP.md` handoff edit, record the evidence, resulting status, delivery-gate progress, and **Next implementation task**.

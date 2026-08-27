@@ -4,7 +4,7 @@
 
 | Field | Value |
 |---|---|
-| Status | Draft |
+| Status | See `docs/ROADMAP.md` task register |
 | Type | Implementation |
 | Workstream | Recipes/media |
 | Depends on | MVP-004, MVP-008 |
@@ -12,9 +12,13 @@
 | Assurance | Elevated |
 | Sequential batching | No |
 | Recommended workflow | `plan-task` |
-| External actions | Emulator storage only unless a later card explicitly authorizes dev cloud |
+| External actions | Local device storage only; cloud object storage only if MVP-018 or DEC-003 explicitly authorizes it |
 
-> **v3 amendment (2026-08-24, D-028/D-029):** Photos are presentation/platform assets referenced from Rust-owned recipe records through the coarse bridge; PRD v3 demotes photo support before cutting controller proof. Authoritative source adds `docs/PRD_v3.md` §6.3, §16; `PRD_v2` citations are historical. Re-derive this card after DEC-005 is Done; its status stays Draft until then.
+> **Re-derived for PRD v3 on 2026-08-26 (D-029, D-034).** The dated 2026-08-24 banner is folded into the body below.
+
+## Workflow gate
+
+Before planning, read `docs/ROADMAP.md` and apply the mandatory planning gate in `docs/task/README.md` for `MVP-010`. Before implementation, apply the mandatory execution gate and repeat it as the approved plan's first execution step.
 
 ## Outcome and user value
 
@@ -22,17 +26,21 @@ Allow a user to attach and replace a useful recipe image with bounded storage, p
 
 ## Authoritative sources
 
-- `docs/PRD_v2.md` §§7.5, 24; `docs/ROADMAP.md` task-register cut rule; `docs/task/MVP_INVARIANTS.md`
+- `docs/PRD_v3.md` §6.3 (coarse bridge), §13 (platform adapters may stay in Dart/Kotlin), §16 "Demote before cutting controller proof"
+- `docs/ROADMAP.md` task-register cut rule, D-028, D-030, D-034; `docs/task/MVP_INVARIANTS.md` 11, 12, 15, 17, 21
+- Historical (D-028): `docs/PRD_v2.md` §§7.5, 24
 
 ## Load-bearing constraints
 
 - Household media is private by default and separately projected if ever shared.
-- Validate type/size, resize appropriately, clean up replacements/deletes, and show upload failure honestly.
+- Validate type/size, resize appropriately, clean up replacements/deletes, and show save failure honestly.
 - The card may be explicitly cut if the PRD's photo deferral condition is accepted and recorded.
+- A photo is a presentation/platform asset referenced from the Rust-owned recipe record through the coarse bridge; the image bytes do not cross the bridge per field (invariant 21, PRD §6.3). The picker and file handling may stay in Dart/Kotlin where that ecosystem is better (PRD §13).
+- PRD §16 demotes photo support before cutting controller proof, so this card yields to MVP-023 and MVP-024 whenever they contend for the same session.
 
 ## Scope
 
-- Image selection, bounded processing, storage repository, access rules, recipe display, failure/retry, and cleanup tests.
+- Image selection, bounded processing, local storage, per-household file scoping, recipe display, failure/retry, and cleanup tests.
 
 ## Non-goals
 
@@ -45,8 +53,8 @@ Allow a user to attach and replace a useful recipe image with bounded storage, p
 ## Acceptance criteria
 
 - **AC-1:** A valid image can be attached, viewed, replaced, and removed.
-- **AC-2:** Invalid/oversize inputs and failed uploads preserve recipe integrity.
-- **AC-3:** Unauthorized access is rejected and orphan cleanup behavior is tested.
+- **AC-2:** Invalid/oversize inputs and failed saves preserve recipe integrity.
+- **AC-3:** Stored images are scoped to the owning household and unreachable from another household's records; orphan cleanup behavior is tested.
 
 ## Evidence plan
 
@@ -54,7 +62,7 @@ Allow a user to attach and replace a useful recipe image with bounded storage, p
 |---|---|
 | AC-1 | Android integration flow |
 | AC-2 | Failure tests |
-| AC-3 | Rules/cleanup tests plus independent privacy review |
+| AC-3 | Household file-scoping and cleanup tests plus independent privacy review |
 
 ## Stop/failure conditions
 
@@ -62,4 +70,4 @@ Allow a user to attach and replace a useful recipe image with bounded storage, p
 
 ## Handoff
 
-Record Done or an explicit justified cut in `docs/ROADMAP.md`; never silently omit the card.
+In one `docs/ROADMAP.md` handoff edit, record the evidence, delivery-gate progress, **Next implementation task**, and either `Done` or an explicit justified cut; never silently omit this card.

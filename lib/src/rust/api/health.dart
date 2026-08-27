@@ -9,12 +9,12 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:freezed_annotation/freezed_annotation.dart' hide protected;
 part 'health.freezed.dart';
 
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `fmt`, `fmt`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `fmt`, `fmt`, `from`
 
 String coreVersion() => RustLib.instance.api.crateApiHealthCoreVersion();
 
-/// Stub until MVP-002 opens SQLite here; rejects empty/whitespace paths so the
-/// typed-error path is exercisable before storage exists.
+/// Opens the SQLite database at `db_path` (creating it), applies migrations, and reports the
+/// resulting schema version. Empty/whitespace paths are rejected before touching storage.
 Future<HealthReport> healthCheck({required String dbPath}) =>
     RustLib.instance.api.crateApiHealthHealthCheck(dbPath: dbPath);
 

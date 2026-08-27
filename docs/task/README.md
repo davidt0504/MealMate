@@ -1,17 +1,34 @@
 # Meal Mate Task System
 
-These cards are planning inputs, not approved execution plans. A workflow recommendation is not an invocation or authorization. Read the PRD, roadmap, invariants, and the selected card; `docs/PRD_v3.md` is authoritative where it conflicts with `docs/PRD_v2.md` (D-028); do not load the whole task directory by default.
+These cards are planning inputs, not approved execution plans. A workflow recommendation is not an invocation or authorization. Read the PRD, `docs/ROADMAP.md`, the invariants, and the selected card; `docs/PRD_v3.md` is authoritative where it conflicts with `docs/PRD_v2.md` (D-028); do not load the whole task directory by default. `docs/ROADMAP.md` is the only live source for task status, the current implementation task, and the next implementation task.
 
 ## Lifecycle
 
 `Draft → Ready → In Progress → Verify → Done`
 
-- `DEC-001`, `PRE-001`, and `MVP-001` are Done; `DEC-002` is Done (2026-08-24) and `DEC-004` is `In Progress`. `PRE-002` is `Ready`; `MVP-002` returned to `Draft` under D-028 (2026-08-24). `DEC-004` (naming clearance) is owner-paced: it directly gates the cards that bind a production identifier (`MVP-018`, `MVP-021`, `MVP-022`) and transitively gates `MVP-019` and `MVP-020`.
-- Promote a card only when every dependency is Done and its inputs are current.
-- Return it to Draft after a material product, architecture, or dependency change.
-- Record evidence and status in `docs/ROADMAP.md` at handoff.
+- Never copy live status into this README or a task card; read the roadmap register.
+- Promote a card to Ready only when every direct dependency is Done and it is the selected next implementation task. Ready means eligible to plan, not approved to execute.
+- Return it to Draft per the Status contract in `docs/ROADMAP.md`, which carries the single Draft-trigger rule (D-031).
+- Record evidence, status, and the next implementation task together in `docs/ROADMAP.md` at handoff.
 - Approvals are nontransitive: approving a decision, card, or plan approves only that artifact.
 - Recheck plan freshness immediately before execution.
+
+## Mandatory planning, execution, and handoff gates
+
+Before `plan-task` plans an implementation, readiness, or optional card:
+
+1. Confirm the card is the roadmap's **Next implementation task** and its register status is `Ready`.
+2. Confirm every ID in its `Depends on` cell is `Done` in the roadmap register and its evidence row satisfies the current PASS/D-027 contract. The six cards completed before D-035 are covered by the one-time migration audit in the roadmap. For later cards, direct dependencies are sufficient because no new card reaches Done without the same recursive evidence and owner-approval check.
+3. Confirm no other implementation card is `In Progress` or `Verify`. An explicitly owner-paced decision such as `DEC-004` may proceed concurrently and does not occupy the implementation lane.
+4. Review the card against its current sources and decisions. Planning may proceed when card prose needs refresh, but the plan must schedule that refresh before implementation rather than creating a separate process-only task.
+
+An optional or post-launch card must also be explicitly selected as the roadmap's Next implementation task and must not displace required MVP work without an owner decision recorded in the roadmap.
+
+Before a decision workflow resolves a decision card, confirm every declared dependency is Done with an evidence row and confirm the roadmap identifies the decision as either the current required decision or explicitly owner-paced work. A decision does not need to be the Next implementation task and does not occupy the implementation lane. Its result and Done transition still require explicit owner approval.
+
+If any check fails, report the exact conflicting row or missing evidence and stop without changing implementation state. Do not infer a different next task.
+
+Every produced implementation plan must make the execution gate its first execution step. Immediately before code or other scoped implementation changes, `execute-plan` re-reads the roadmap, selected card, and approved plan; repeats checks 1–3; confirms that the plan was produced or revalidated against the current sources and explicitly refreshes any stale card prose before implementation; then moves the card `Ready → In Progress` in the roadmap. A missing, inaccessible, or stale plan stops execution and routes back to `plan-task`; it does not make the card ineligible to plan. At handoff, update the card's status, evidence row, delivery-gate progress, and **Next implementation task** together. Use `Verify` while required evidence or explicit owner status approval remains unresolved. Use `Done` only after the evidence contract and explicit owner approval are both satisfied.
 
 ## Recommended routing
 
@@ -24,7 +41,7 @@ $personal-workflows:deep-options Read docs/task/decision/DEC-001_PRODUCT_PLATFOR
 $personal-workflows:grill-me Read <card-or-draft-plan> and challenge unresolved owner tradeoffs.
 $personal-workflows:plan-task Read docs/task/mvp/MVP-001_CLEAN_ROOM_SCAFFOLD.md and plan its implementation.
 $personal-workflows:redteam-plan Read <proposed-plan-path> and identify correctness, safety, and verification gaps before approval.
-$personal-workflows:execute-plan Read <approved-plan-path> and execute it.
+$personal-workflows:execute-plan Read <approved-plan-path>, docs/ROADMAP.md, and the selected card; repeat the mandatory execution gate, then execute it.
 ```
 
 Claude equivalents use `/deep-options`, `/grill-me`, `/plan-task`, `/redteam-plan`, and `/execute-plan`. The installed execution workflow is `execute-plan`. For Elevated cards, red-team the proposed plan before approval. Never automatically chain commands. Do not use `--auto` for the first three implementation cards or for security, data-loss, destructive, credential, production, DNS, signing, or store-release work.
