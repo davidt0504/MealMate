@@ -1,6 +1,6 @@
 # V3 Pivot Checklist
 
-**Updated:** 2026-08-27 (MVP-002 closeout). Update this file only when a pivot deliverable or deferral below changes; it is not a live task-status ledger.
+**Updated:** 2026-08-28 (MVP-003 card re-derivation, completing D-034). Update this file only when a pivot deliverable or deferral below changes; it is not a live task-status ledger.
 **Authoritative inputs:** `docs/PRD_v3.md`, `docs/HOUSEHOLD_CONTROL_PRINCIPLES.md`, `docs/CODEX_CLAUDE_PIVOT_PROMPT.md`.
 
 Live task status, current work, and next work are authoritative only in `docs/ROADMAP.md`.
@@ -12,7 +12,7 @@ Live task status, current work, and next work are authoritative only in `docs/RO
 - Phase-0 repository inventory and component map — `docs/V3_MIGRATION_PLAN.md` (prompt deliverable 1).
 - MVP invariants 17–21 added for Rust ownership, Tier-0 constraints, planned ≠ cooked, deterministic planner, coarse bridge — `docs/task/MVP_INVARIANTS.md`.
 - Cards: `PRE-002` (Rust/FRB toolchain and bridge spike, `Ready`), `DEC-005` (bridge backend and core-language commitment), `MVP-002` rewritten as the Rust kernel/SQLite foundation; outline cards `MVP-023`, `MVP-024`, `MVP-025`, `PRE-003`; dated amendment banners on every other affected card (D-029). *(Historical: that banner stage ran 2026-08-24 and was discharged 2026-08-26 by D-034 — see the next bullet.)*
-- Card re-derivation, 2026-08-26 (D-034): 21 cards re-derived from PRD v3 (`MVP-004`–`MVP-022`, `DEC-003`, `OPT-001`) and `MVP-023`, `MVP-024`, `MVP-025`, `PRE-003` given full bodies. `MVP-004` gained an `MVP-003` dependency and was retitled; `MVP-017` was retitled and its sign-out obligation transferred to `MVP-018` as a new AC-6; the PRD v3 §26 traceability table landed in `docs/ROADMAP.md`. `MVP-003` was excluded — its next current approved plan must re-derive it before implementation.
+- Card re-derivation, 2026-08-26 (D-034): 21 cards re-derived from PRD v3 (`MVP-004`–`MVP-022`, `DEC-003`, `OPT-001`) and `MVP-023`, `MVP-024`, `MVP-025`, `PRE-003` given full bodies. `MVP-004` gained an `MVP-003` dependency and was retitled; `MVP-017` was retitled and its sign-out obligation transferred to `MVP-018` as a new AC-6; the PRD v3 §26 traceability table landed in `docs/ROADMAP.md`. `MVP-003` was excluded and was re-derived 2026-08-28 by its own approved plan (step 2), completing D-034.
 - Roadmap reconciliation — D-028, D-029, register rows, gates, next action, DEC-002 contract note, evidence-row note, traceability note — `docs/ROADMAP.md`.
 - README architecture direction section.
 - DEC-002 flipped to Done on recorded evidence; moved to the EMULATOR-PERSISTENCE-READY gate (D-028).
@@ -39,7 +39,7 @@ Live task status, current work, and next work are authoritative only in `docs/RO
 | Privacy-safe metric hooks | MVP-019 |
 | iOS build/signing proof | PRE-003 (post-launch, D-015) |
 | PRD v3 §26 per-item traceability table | Complete 2026-08-26 — `docs/ROADMAP.md` "MVP acceptance traceability" |
-| Full re-derivation of bannered cards | 21 done 2026-08-26 in one pass (D-034); `MVP-003` remains — its next current approved plan must discharge it before implementation |
+| Full re-derivation of bannered cards | 21 done 2026-08-26 in one pass (D-034); `MVP-003` discharged 2026-08-28 by its approved plan (step 2), completing D-034 |
 
 ## Blockers
 
