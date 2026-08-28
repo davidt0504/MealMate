@@ -221,3 +221,71 @@ Full review: /home/davidlinux/.claude/reviews/redteam-d036-fix-pass-2026-08-26T1
 
 - **The MVP-011 <-> MVP-023 coupling was decoupled in one direction only** (`docs/task/mvp/MVP-011_STARTER_CONTENT_READINESS.md:35`, against `KNOWN_ISSUES-low.md`'s "MVP-023 requires starter meals as a candidate source but does not depend on MVP-011" entry marked RESOLVED 2026-08-26) -- D-036 took the decoupling option on the MVP-023 side: its scope now states the starter-meal candidate source is built against the shared entity shape and does not require MVP-011's shipped content, and the prior entry is marked RESOLVED as if the coupling is fully handled. The reciprocal half is untouched: `MVP-011:35` still reads "every shipped recipe must satisfy the same structured shape MVP-023 hard-filters and scores", and `docs/task/SEQUENCE.txt` runs MVP-011 at steps 20-21, twelve steps before MVP-023 at 32-33. At MVP-011 planning time that shape exists nowhere -- MVP-023 has not been built, and MVP-011's Authoritative sources cite PRD §9.3, §8 and §16 but not §9.4, where hard filtering is actually specified. Fix: change `MVP-011:35` to cite PRD v3 §9.4's hard-filter inputs directly instead of `MVP-023`, add §9.4 to MVP-011's Authoritative sources, and optionally append one clause to the prior RESOLVED note recording that the MVP-011 side was closed by re-anchoring rather than by a dependency edit. Deferred: naming drift, not an unmeetable requirement -- the constraint names restrictions and prep time, both derivable from PRD §8/§9.4 today.
   **Status:** OPEN
+
+## master -- 2026-08-27
+
+Source: /home/davidlinux/.claude/plans/goofy-juggling-stroustrup.md
+Full review: /home/davidlinux/.claude/reviews/redteam-mvp003-plan-rev8-2026-08-27T1321-869f.md
+
+### LOW
+
+- **Step 1b implements one of the three obligations `docs/task/README.md:66` places on the Elevated fresh-context verifier** (the MVP-003 plan's step 1b, "Fresh-context verifier (README Elevated tier)", against `docs/task/README.md:66`) -- the plan cites the README Elevated tier as 1b's authority and calls it "a **gate**, not a formality". README:66 reads: "Elevated: tests should be derived from acceptance criteria before or independently from implementation when practical; a fresh-context verifier reruns them, investigates failures, and checks material coverage gaps." Step 1b instructs the subagent to rerun `cargo test --workspace` and `(cd rust && cargo build --release) && flutter test`, confirm one AC-3 line in `docs/V3_IMPLEMENTATION_STATUS.md`, and report pass counts. Failure investigation is covered implicitly by "Any failure -> stop", but the material-coverage-gap check is absent -- and that is the half a rerun cannot substitute for, on the card whose promotion to `Done` the whole of step 1c hangs on. Fix: add one clause to the subagent brief -- check MVP-002's four ACs against the tests that claim them and report any criterion with no test carrier -- or state in the plan why a coverage check is not re-run at promotion time (the card already recorded 4/4 PASS at Verify), so the divergence from README:66 is deliberate rather than dropped. Deferred: the rerun half is the load-bearing half at promotion time, and the owner already exercised the coverage judgement when the card reached Verify.
+  **Status:** OPEN
+
+- **The MVP-003 plan's step-7 `setUp` line is uncompilable as written; only the `tearDown` half carries the correction** (the plan's step 7, the line beginning "`setUp`: `tester.view.physicalSize`") -- the line reads "`setUp`: `tester.view.physicalSize = const Size(1080, 2400); tester.view.devicePixelRatio = 2.75;` -- `tearDown`: `...` (done via `addTearDown` inside each `testWidgets`, since `tester` is per-test)." The parenthetical corrects only the tearDown half, but `tester` is equally out of scope in a `setUp` callback: both halves must live inside each `testWidgets` body. An executor transcribing the literal text writes a `setUp` that does not compile. Fix: restate as "at the top of each `testWidgets` body: set `physicalSize`/`devicePixelRatio`, then `addTearDown(...)` for the four resets" -- one sentence, no `setUp`/`tearDown` framing. Deferred: `flutter analyze` catches it within one step of being written.
+  **Status:** OPEN
+
+- **The MVP-003 plan's step 10 marks both `SEQUENCE.txt` MVP-003 steps `Done`, but step 3 is a conditional that will not have run** (the plan's step 10, the `docs/task/SEQUENCE.txt` bullet anchored on `MVP-003_ANDROID_APP_SHELL_NAVIGATION.md`, against `docs/task/SEQUENCE.txt` steps 3 and 4) -- the two hits for the card filename are step 3, `[ONLY if no accessible current approved MVP-003 plan is supplied] /plan-task ...`, and step 4, `/execute-plan`. This plan is the supplied approved plan, so step 3's guard is false and the step never runs; marking it `# Done <TODAY> -- see the docs/ROADMAP.md evidence log.` records a `/plan-task` invocation that did not happen. The plan holds itself to a higher bar elsewhere: step 1c item 9 justifies its `SEQUENCE.txt` step-0 mark with "Step 0 named exactly four targets ... so this mark is honest." Fix: mark step 4 `Done <TODAY>`; mark step 3 with its actual disposition (`not run -- a current approved plan was supplied`), or state in the plan why "Done" is the right mark for a skipped conditional. Deferred: ledger honesty only; both marks retire the same file section and no downstream reader acts on the distinction.
+  **Status:** OPEN
+
+- **The MVP-003 plan's PRE-002 toolchain re-anchor covers the parenthetical but not the second reference to the deleted test in the same bullet** (the plan's step 10, the bullet anchored on `every Dart test -- the fake-fed widget test included`, against `docs/ROADMAP.md:275`) -- the roadmap bullet names the deleted file twice: "...so every Dart test -- **the fake-fed widget test included** -- needs rustup + the pinned toolchain on the host; **the widget test** avoids *loading* the library, not *building* it." Step 10 instructs only "re-anchor the parenthetical to `test/app_test.dart`", leaving the second clause's bare "the widget test" pointing at a file step 6 deletes. Both references are true of `test/app_test.dart` (it is fake-fed via `ProviderScope` overrides and never calls `RustLib.init()`), so the fix is mechanical -- the instruction just does not reach the second site. Fix: name both sites in the bullet, or state the edit as "replace both occurrences of the deleted test's referent in this bullet with `test/app_test.dart`". Deferred: a one-word staleness in a prose bullet whose substance stays correct; mechanical to fix later.
+  **Status:** OPEN
+
+## master -- 2026-08-27
+
+Source: /home/davidlinux/.claude/plans/goofy-juggling-stroustrup.md
+Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-master-mvp003-plan-rev9-2026-08-27T1602-03c3.md
+
+### LOW
+
+- **The MVP-003 plan's font_scale EXIT trap is cleared before the reset is verified** (`/home/davidlinux/.claude/plans/goofy-juggling-stroustrup.md:623`, against `:625`) -- `trap - EXIT` runs one line before the `settings get system font_scale` assertion that checks whether the trap was needed. That read is `|| true`-guarded, so a transient bridge failure yields an empty string, fails the `= "1.0"` comparison, and exits 1 with the safety net already disarmed and the device's real scale unknown -- durable host state inherited by MVP-004 onward. Fix: move `trap - EXIT` to after the assertion.
+  Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-master-mvp003-plan-rev9-2026-08-27T1602-03c3.md
+  **Status:** RESOLVED 2026-08-27 (fixed in the MVP-003 plan, rev 10: `trap - EXIT` moved below the `settings get system font_scale` assertion, so a failed assertion exits with the trap still armed and the 1.0 reset re-runs)
+
+- **The MVP-003 plan's step-9 gate fragment contradicts the block's own `set -euo pipefail` rule** (`/home/davidlinux/.claude/plans/goofy-juggling-stroustrup.md:560`, against `:594`) -- the header states "EVERY fragment starts with `set -euo pipefail`" and that the preamble "is REPEATED VERBATIM at the top of every fragment", but the first of four fragments (through CUT 0) has none; the first occurrence is after the CUT 0 marker. Harmless as written -- the single command carries its own `|| { exit 1; }` -- but any line added there inherits no `-e`, the rev-8 condition the comment exists to prevent. Fix: hoist `set -euo pipefail` above the `status || up` gate, or scope the claim to fragments after CUT 0 and say why the gate is exempt.
+  Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-master-mvp003-plan-rev9-2026-08-27T1602-03c3.md
+  **Status:** RESOLVED 2026-08-27 (fixed in the MVP-003 plan, rev 10: `set -euo pipefail` hoisted above the `status || up` gate, and the header's preamble claim rewritten to what is true per fragment -- measured 1/4/3/3 lines)
+
+## master -- 2026-08-27
+
+Source: /home/davidlinux/.claude/plans/goofy-juggling-stroustrup.md
+Full review: /home/davidlinux/.claude/reviews/redteam-mvp003-plan-rev10-2026-08-27T2030-6780.md
+
+### LOW
+
+- **The MVP-003 plan's precedence rule describes the step-9 and step-10 decision points with pre-§0 arms** (`/home/davidlinux/.claude/plans/goofy-juggling-stroustrup.md:71`) -- it exempts "step 9's `NOT VERIFIED` path, step 10's `Done`-or-`Verify` choice", but step 9 now has three outcome states and step 10's register cell three arms. Both stay correctly exempt, so nothing writes a wrong value; the plan's own branch inventory just under-counts them. Fix: point both at step 9 §0.
+  Full review: /home/davidlinux/.claude/reviews/redteam-mvp003-plan-rev10-2026-08-27T2030-6780.md
+  **Status:** OPEN
+
+- **The MVP-003 plan's step-9 third fragment is a bash syntax error as written** (`/home/davidlinux/.claude/plans/goofy-juggling-stroustrup.md:613`) -- `adb shell input tap <x> <y>`: bash reads the angle brackets as redirections, so `bash -n` over the fragment fails at parse time and the error points at line 4 rather than at the value the executor forgot to substitute. Fails safe (nothing runs). Fix: `"$TAPX" "$TAPY"`, so `set -u` names the missing value.
+  Full review: /home/davidlinux/.claude/reviews/redteam-mvp003-plan-rev10-2026-08-27T2030-6780.md
+  **Status:** OPEN
+
+- **The MVP-003 plan's CUT-0 marker omits the timeout the header calls mandatory for the fragment it opens** (`/home/davidlinux/.claude/plans/goofy-juggling-stroustrup.md:585`, against `:575`) -- CUT 1 and CUT 2 carry `timeout: 180000` inline; CUT 0 carries none, and the install fragment is the one the header says "must NOT inherit the 120s default". A 120s kill mid-install drops the `^Success` line, so the gate classifies a harness timeout as an in-scope card failure. Fix: state `timeout: 300000` in the CUT-0 marker.
+  Full review: /home/davidlinux/.claude/reviews/redteam-mvp003-plan-rev10-2026-08-27T2030-6780.md
+  **Status:** OPEN
+
+## master -- 2026-08-27
+
+Source: /home/davidlinux/.claude/reviews/redteam-mvp003-plan-rev10-2026-08-27T2030-6780.md
+Full review: /home/davidlinux/.claude/reviews/redteam-mvp003-review-audit-2026-08-27T2129-abf3.md
+
+### LOW
+
+- **The rev-10 review's `font_scale` finding cites a contract scoped to a block that gate is not in** (`/home/davidlinux/.claude/plans/goofy-juggling-stroustrup.md:646`, against `:680`) -- the quoted contract actually reads "**The pid block** exits non-zero on any failed gate and prints a line containing `FAIL`", and the pid block starts at `:648`, after the `font_scale` assertion. The gap is real on other grounds (7 of 8 `exit 1` sites carry the token) but the cited authority does not say it. Fix: rebase the finding on the measured token convention, or widen `:680` past the pid block.
+  Full review: /home/davidlinux/.claude/reviews/redteam-mvp003-review-audit-2026-08-27T2129-abf3.md
+  **Status:** OPEN
+
+- **The MVP-003 plan's step-9 CUT-0 sites restate the `S-BRIDGE` arm that §0 claims exclusivity over** (`/home/davidlinux/.claude/plans/goofy-juggling-stroustrup.md:584` and `:585`, against `:686`) -- both say "go to step 10 with status Verify" in prose instead of selecting on §0, while `:686` reads "Nothing else re-enumerates them". They agree with `:688` today, so nothing writes a wrong value; the false exclusivity claim is what lets the next revision leave a site behind. Fix: point both at §0's `S-BRIDGE` row, or narrow `:686` to downstream consumers.
+  Full review: /home/davidlinux/.claude/reviews/redteam-mvp003-review-audit-2026-08-27T2129-abf3.md
+  **Status:** OPEN
