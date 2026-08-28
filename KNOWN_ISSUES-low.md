@@ -1,5 +1,16 @@
 # Known Issues — LOW
 
+## orch/4 -- 2026-08-28
+
+Full review: /home/davidlinux/.local/state/claude-orch/5f7efeea1579/0276579f2864/wt/4/.orch/redteam-app-dart-2026-08-28T1845.md
+
+### LOW
+
+- **`dispose()` can re-run `buildRouter` when the first build threw** (`lib/app/app.dart:21-23`, `:36-39`) -- `_router` is `late final`, initialized on first read inside `build`. Dart re-runs a `late final` initializer if a prior attempt threw, and `dispose()` reads `_router` unconditionally, so a throwing `buildRouter` produces a second construction and a second exception during unmount, obscuring the original. Not reachable today — `buildRouter` cannot throw as `lib/app/router.dart` currently stands — but it becomes reachable as the router grows: `go_router-18.0.0/lib/src/route.dart:1085-1090` asserts a `restorationScopeId` on the `StatefulShellRoute` whenever any branch sets one, which is exactly this router's shape. Fix: make the field nullable and dispose with `_router?.dispose()`, or gate disposal on a `bool` set once `build` completes. Deferred: debug-time diagnosability only, and the guard costs the `late final` idiom the class is built around; revisit if `buildRouter` gains a throwing path.
+  **Status:** OPEN
+
+---
+
 ## master -- 2026-08-24
 
 Full review: /home/davidlinux/.claude/reviews/redteam-dec-004-redteam-pass2-2026-08-24T1320-5bbe.md
@@ -52,13 +63,13 @@ Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-master-2026-0
 ### LOW
 
 - **`_probe` only catches `KimattaError`; any other failure is an unhandled async error** (`lib/main.dart`, `_HealthScreenState._probe`) -- a non-`KimattaError` bridge failure (panic, codec mismatch) escapes the `on KimattaError` clause and the screen keeps showing `probe: not probed`, so a bridge fault reads as "button does nothing". Fix: add a bare `catch (e)` branch rendering `'unexpected: $e'`. Deferred: spike-only screen, removed by MVP-003.
-  **Status:** OPEN
+  **Status:** RESOLVED 2026-08-28 (MVP-003 removed HealthScreen and the spike main())
 
 - **Widget test skips the `hasError` branch of the health `FutureBuilder`** (`test/widget_test.dart`; `lib/main.dart` `HealthScreen.build`) -- the test feeds a completed `report` only; the `'health error: ...'` rendering and the `KimattaError_Storage` variant are touched by no test. Fix: one extra `testWidgets` with `report: Future.error(const KimattaError.storage(message: 'x'))`. Deferred: card scope only requires a fake-fed widget test; screen goes with MVP-003.
-  **Status:** OPEN
+  **Status:** RESOLVED 2026-08-28 (MVP-003 removed HealthScreen and the spike main())
 
 - **Spike-only `ensureSemantics()` left in production `main()`** (`lib/main.dart`, `main()`) -- `SemanticsBinding.instance.ensureSemantics()` was added so `uiautomator dump` could locate the probe button for the AC-5 screenshot; tagged `ponytail:` with a removal note. Fix: delete with `HealthScreen`. Deferred: harmless, removal is bundled with the screen.
-  **Status:** OPEN
+  **Status:** RESOLVED 2026-08-28 (MVP-003 removed HealthScreen and the spike main())
 
 - **PRE-002 command contract duplicated in README with a different step order** (`README.md` "Architecture direction" block; `docs/ROADMAP.md` "PRE-002 command contract") -- README puts `export PATH` before the rustup install and omits the `dart format`/`flutter analyze` gate lines; both sequences work, but future contract edits (MVP-002's `cargo` gate) must land twice with no check. Fix: keep the short clean-checkout block in README and link to the ROADMAP contract for the gate. Deferred: doc hygiene; fold into the next card that edits the contract.
   **Status:** OPEN
@@ -99,7 +110,7 @@ Raised during the fix pass for /home/davidlinux/.claude/reviews/redteam-impl-han
 - **`insert_household` accepts a member belonging to a different existing household** (`rust/crates/kimatta-storage/src/lib.rs`, `insert_household`) -- moved to `KNOWN_ISSUES.md` on 2026-08-25 and re-rated MEDIUM by the arch review of `rust/src`; that entry carries the full text plus the two additions the review made. Tracked there, not here.
   **Status:** MOVED 2026-08-25 -- see `KNOWN_ISSUES.md`, same title.
 
-- **The production database path has no automated test carrier** (`lib/main.dart`, `main()`) -- `getApplicationSupportDirectory()` is called once in `main()`, which no test harness invokes, so nothing catches a regression to the path source. A `PathProviderPlatform` mock would assert the mock rather than the device, so no useful unit test exists. The pre-fix value (`Directory.systemTemp` → `/data/local/tmp` on Android) was unwritable by an app uid, so the regression is silent-at-build-time and fatal at runtime. MVP-002 AC-3's on-device evidence is the only verification; it passed once on 2026-08-25 (`emulator-5554`), but that is a point-in-time check, not a regression guard. Fix: covered indirectly once MVP-004's persistence evidence exercises a real write; MVP-003's card carries a load-bearing constraint to keep the path app-private when it replaces `main()`. Deferred: `HealthScreen` and this `main()` are deleted at MVP-003, so any test written now dies in one card.
+- **The production database path has no automated test carrier** (`lib/features/settings/health_provider.dart`, `healthReportProvider`) -- `getApplicationSupportDirectory()` is called once inside the provider, which every test overrides, so nothing catches a regression to the path source. A `PathProviderPlatform` mock would assert the mock rather than the device, so no useful unit test exists. The pre-fix value (`Directory.systemTemp` → `/data/local/tmp` on Android) was unwritable by an app uid, so the regression is silent-at-build-time and fatal at runtime. MVP-002 AC-3's on-device evidence is the only verification; it passed once on 2026-08-25 (`emulator-5554`), but that is a point-in-time check, not a regression guard. Fix: covered indirectly once MVP-004's persistence evidence exercises a real write; MVP-003's card carries a load-bearing constraint to keep the path app-private when it replaces `main()`. Deferred: `HealthScreen` and the spike `main()` were deleted at MVP-003; the path source moved to `healthReportProvider`, which every test overrides, so the gap survives the move. Re-verified on-device 2026-08-28 (MVP-003 Settings screenshot + run-as listing); still no regression guard — tests override the provider.
   **Status:** OPEN
 
 - **The DEC-002 decision card's own command block has no Rust gate and is a fourth copy of the contract** (`docs/task/decision/DEC-002_ENGINEERING_EXPERIENCE_FOUNDATION_DECISION.md`, the `bash` block under "**Chosen commands**") -- MVP-002 added the Rust gate to three places (both `docs/ROADMAP.md` blocks and `README.md`) but not to this one, which still lists `dart format` / `flutter analyze` / `cargo build --release && flutter test` / `flutter build apk --debug`. It is not covered by the existing README-duplication entry above, which is titled for the *PRE-002* contract; this block is a copy of the *DEC-002* contract. The block's own preamble says "the operative contract is the DEC-002 and PRE-002 command-contract blocks in `docs/ROADMAP.md`", so nothing is currently wrong -- but a reader who trusts the card runs a gate-less sequence. Fix: replace the block with a link to the ROADMAP contract, or add the gate line; either way fold it into the consolidation the README entry above already tracks. Deferred: self-declared non-operative, and consolidating all four copies is a card of its own.
@@ -173,7 +184,7 @@ Full review: /home/davidlinux/.claude/reviews/redteam-mvp003-redteam-pass1-2026-
 ### LOW
 
 - **The `font_scale` set/reset window has no trap and no acknowledgement anywhere in the plan** (`~/.claude/plans/goofy-juggling-stroustrup.md`, the `settings put system font_scale 2.0` / `1.0` pair in step 9, and the On-device bullet of the Verification summary) -- MVP-003 plan step 9 sets `settings put system font_scale 2.0`, captures `settings_scale2.png`, and resets to `1.0`, with no trap between them. Any interruption in that window leaves the emulator at font scale 2.0 for every later session -- a host-state side effect that outlives this card and is inherited by MVP-004 onward. The MVP-003 fix pass recorded this as deferred out-of-scope and stated it was "recorded in the plan's Verification section as 'noted, not fixed'", but it is not: the Verification summary's On-device bullet mentions only "font_scale 2.0 screenshot". (The pass-1 wording also cited a `grep -n 'noted'` hit whose referent the rev-7 pass rewrote; that clause is struck rather than re-anchored.) The acknowledgement lived solely in the handoff doc, which is disposed after review -- the same missing-carrier failure the `KNOWN_ISSUES.md` MEDIUM titled "`docs/ROADMAP.md` contradicts itself on MVP-002 AC-3, and the deferred prose sweep has no carrier" exists to prevent, which is why this entry is the carrier. Fix: wrap the pair (`trap '... settings put system font_scale 1.0' EXIT` before the `font_scale 2.0` line, cleared after the reset), or add one sentence to the plan's Verification summary recording it as a known accepted window; if step 9 has already run, verify the emulator is back at 1.0 before the next evidence card. Deferred: evidence-integrity risk is nil (the four commands are adjacent and all `exit 1` gates in the block sit after the reset), but the host-state risk is durable and needed a home outside the disposed handoff.
-  **Status:** OPEN
+  **Status:** RESOLVED 2026-08-28 (MVP-003 step 9 wraps the 2.0/1.0 pair in a `trap … EXIT` and asserts `settings get system font_scale` reads 1.0 before the fragment ends)
 
 ## master -- 2026-08-26
 
@@ -230,16 +241,16 @@ Full review: /home/davidlinux/.claude/reviews/redteam-mvp003-plan-rev8-2026-08-2
 ### LOW
 
 - **Step 1b implements one of the three obligations `docs/task/README.md:66` places on the Elevated fresh-context verifier** (the MVP-003 plan's step 1b, "Fresh-context verifier (README Elevated tier)", against `docs/task/README.md:66`) -- the plan cites the README Elevated tier as 1b's authority and calls it "a **gate**, not a formality". README:66 reads: "Elevated: tests should be derived from acceptance criteria before or independently from implementation when practical; a fresh-context verifier reruns them, investigates failures, and checks material coverage gaps." Step 1b instructs the subagent to rerun `cargo test --workspace` and `(cd rust && cargo build --release) && flutter test`, confirm one AC-3 line in `docs/V3_IMPLEMENTATION_STATUS.md`, and report pass counts. Failure investigation is covered implicitly by "Any failure -> stop", but the material-coverage-gap check is absent -- and that is the half a rerun cannot substitute for, on the card whose promotion to `Done` the whole of step 1c hangs on. Fix: add one clause to the subagent brief -- check MVP-002's four ACs against the tests that claim them and report any criterion with no test carrier -- or state in the plan why a coverage check is not re-run at promotion time (the card already recorded 4/4 PASS at Verify), so the divergence from README:66 is deliberate rather than dropped. Deferred: the rerun half is the load-bearing half at promotion time, and the owner already exercised the coverage judgement when the card reached Verify.
-  **Status:** OPEN
+  **Status:** RESOLVED 2026-08-28 (fixed in the MVP-003 plan, rev 9–11) -- moot rather than implemented: step 1b was removed entirely, and the divergence from `docs/task/README.md:66` is now recorded in the plan's Context section as a deliberate, visible acceptance. No coverage-gap check was added.
 
 - **The MVP-003 plan's step-7 `setUp` line is uncompilable as written; only the `tearDown` half carries the correction** (the plan's step 7, the line beginning "`setUp`: `tester.view.physicalSize`") -- the line reads "`setUp`: `tester.view.physicalSize = const Size(1080, 2400); tester.view.devicePixelRatio = 2.75;` -- `tearDown`: `...` (done via `addTearDown` inside each `testWidgets`, since `tester` is per-test)." The parenthetical corrects only the tearDown half, but `tester` is equally out of scope in a `setUp` callback: both halves must live inside each `testWidgets` body. An executor transcribing the literal text writes a `setUp` that does not compile. Fix: restate as "at the top of each `testWidgets` body: set `physicalSize`/`devicePixelRatio`, then `addTearDown(...)` for the four resets" -- one sentence, no `setUp`/`tearDown` framing. Deferred: `flutter analyze` catches it within one step of being written.
-  **Status:** OPEN
+  **Status:** RESOLVED 2026-08-28 (fixed in the MVP-003 plan, rev 9–11) -- step 7 now reads "at the top of each `testWidgets` body", with neither `setUp` nor `tearDown` framing.
 
 - **The MVP-003 plan's step 10 marks both `SEQUENCE.txt` MVP-003 steps `Done`, but step 3 is a conditional that will not have run** (the plan's step 10, the `docs/task/SEQUENCE.txt` bullet anchored on `MVP-003_ANDROID_APP_SHELL_NAVIGATION.md`, against `docs/task/SEQUENCE.txt` steps 3 and 4) -- the two hits for the card filename are step 3, `[ONLY if no accessible current approved MVP-003 plan is supplied] /plan-task ...`, and step 4, `/execute-plan`. This plan is the supplied approved plan, so step 3's guard is false and the step never runs; marking it `# Done <TODAY> -- see the docs/ROADMAP.md evidence log.` records a `/plan-task` invocation that did not happen. The plan holds itself to a higher bar elsewhere: step 1c item 9 justifies its `SEQUENCE.txt` step-0 mark with "Step 0 named exactly four targets ... so this mark is honest." Fix: mark step 4 `Done <TODAY>`; mark step 3 with its actual disposition (`not run -- a current approved plan was supplied`), or state in the plan why "Done" is the right mark for a skipped conditional. Deferred: ledger honesty only; both marks retire the same file section and no downstream reader acts on the distinction.
-  **Status:** OPEN
+  **Status:** RESOLVED 2026-08-28 (fixed in the MVP-003 plan, rev 9–11) -- though not as this entry proposed: the guard *did* fire. The earlier plan was not resolvable from the repository, so `/plan-task` ran on 2026-08-28 and produced the rev-11 plan that step 4 then executed. Both marks record steps that actually happened.
 
 - **The MVP-003 plan's PRE-002 toolchain re-anchor covers the parenthetical but not the second reference to the deleted test in the same bullet** (the plan's step 10, the bullet anchored on `every Dart test -- the fake-fed widget test included`, against `docs/ROADMAP.md:275`) -- the roadmap bullet names the deleted file twice: "...so every Dart test -- **the fake-fed widget test included** -- needs rustup + the pinned toolchain on the host; **the widget test** avoids *loading* the library, not *building* it." Step 10 instructs only "re-anchor the parenthetical to `test/app_test.dart`", leaving the second clause's bare "the widget test" pointing at a file step 6 deletes. Both references are true of `test/app_test.dart` (it is fake-fed via `ProviderScope` overrides and never calls `RustLib.init()`), so the fix is mechanical -- the instruction just does not reach the second site. Fix: name both sites in the bullet, or state the edit as "replace both occurrences of the deleted test's referent in this bullet with `test/app_test.dart`". Deferred: a one-word staleness in a prose bullet whose substance stays correct; mechanical to fix later.
-  **Status:** OPEN
+  **Status:** RESOLVED 2026-08-28 (fixed in the MVP-003 plan, rev 9–11) -- step 10 now names both referents, and both were replaced with `test/app_test.dart`.
 
 ## master -- 2026-08-27
 
@@ -288,4 +299,23 @@ Full review: /home/davidlinux/.claude/reviews/redteam-mvp003-review-audit-2026-0
 
 - **The MVP-003 plan's step-9 CUT-0 sites restate the `S-BRIDGE` arm that §0 claims exclusivity over** (`/home/davidlinux/.claude/plans/goofy-juggling-stroustrup.md:584` and `:585`, against `:686`) -- both say "go to step 10 with status Verify" in prose instead of selecting on §0, while `:686` reads "Nothing else re-enumerates them". They agree with `:688` today, so nothing writes a wrong value; the false exclusivity claim is what lets the next revision leave a site behind. Fix: point both at §0's `S-BRIDGE` row, or narrow `:686` to downstream consumers.
   Full review: /home/davidlinux/.claude/reviews/redteam-mvp003-review-audit-2026-08-27T2129-abf3.md
+  **Status:** OPEN
+
+## orch/4 -- 2026-08-28
+
+Source: /home/davidlinux/.claude/reviews/impl-handoff-orch-4-2026-08-28T1752-5375.md
+Full review: /home/davidlinux/.claude/reviews/redteam-mvp003-android-shell-2026-08-28T1805-b91e.md
+
+### LOW
+
+- **`docs/ROADMAP.md`'s Next-implementation-task line omits the blocked-lane qualification** (`docs/ROADMAP.md:9`) -- it names `MVP-004` with no status, but `docs/task/README.md:20` requires the next card be `Ready` (MVP-004 is `Draft`, register `:40`) and `:22` requires no card sit at `Verify` (MVP-003 does, `:39`), so a reader of the compact Current-milestone block can start planning a blocked card. Fix: restore a qualifier -- "`MVP-004` -- `Draft`; blocked until MVP-003 reaches `Done`".
+  Full review: /home/davidlinux/.claude/reviews/redteam-mvp003-android-shell-2026-08-28T1805-b91e.md
+  **Status:** OPEN
+
+- **`App.initialLocation` is silently discarded on rebuild** (`lib/app/app.dart:19`) -- `late final _router = buildRouter(...)` runs once and there is no `didUpdateWidget`, so a second `pumpWidget` of a same-shaped tree reuses `_AppState` and drops a changed `initialLocation` with no error or analyzer warning; `test/app_test.dart:142` already pumps twice and depends on that reuse. A later test varying `initial` across two pumps in one body asserts against the old location. Fix: document the field as construction-time-only, or assert equality in `didUpdateWidget`.
+  Full review: /home/davidlinux/.claude/reviews/redteam-mvp003-android-shell-2026-08-28T1805-b91e.md
+  **Status:** OPEN
+
+- **The tab-traversal test's press count is an undocumented magic number** (`test/app_test.dart:175`) -- exactly five tab events, tuned to `/plan`'s current focusables (the Cover My Week button at `lib/app/router.dart:40` precedes the bar's five destinations), and the `expect(focused, isNotNull)` at `:180` is near-vacuous because `primaryFocus` is always set in a pumped app. When MVP-013 changes the Plan tree the test fails pointing at bar focusability rather than the real cause. Fix: loop tab presses, bounded, until the focused node's ancestor is a `NavigationBar`.
+  Full review: /home/davidlinux/.claude/reviews/redteam-mvp003-android-shell-2026-08-28T1805-b91e.md
   **Status:** OPEN
