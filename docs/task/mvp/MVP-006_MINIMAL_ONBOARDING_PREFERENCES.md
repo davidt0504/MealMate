@@ -50,7 +50,7 @@ Let users begin immediately and optionally set household planning rhythm, meal s
 ## Decision gates
 
 - Beyond the restriction-scope question below, none; defer new preference fields unless required by MVP-009 or MVP-013.
-- **PRD v3 does not decide whether restrictions are household-scoped or member-scoped.** §8 scopes member preferences and says hard restrictions remain hard constraints without assigning their scope. This card records the choice with its reason; `MVP-009`'s filtering and `MVP-023`'s Tier-0 hard filtering both consume it.
+- **PRD v3 does not decide whether restrictions are household-scoped or member-scoped.** §8 scopes member preferences and says hard restrictions remain hard constraints without assigning their scope. This card records the choice with its reason; `MVP-009`'s filtering and `MVP-023`'s Tier-0 hard filtering both consume it. **Resolved (owner, 2026-08-28): household-scoped.** Reason: PRD §8/§9.4/§9.5 put the member dimension in preference *scoring*, not in Tier-0 hard filtering; MVP-009 AC-3 already says "household restrictions"; and no MVP concept records who attends an occurrence, so a member-scoped set would always be unioned to the household set at planning time. Attribution ("Sam: peanuts") is a plan-level UX detail (an optional note), not a scope change. Revisit when attendance or per-member meals exist; that is a migration step, not a redesign.
 
 ## Acceptance criteria
 

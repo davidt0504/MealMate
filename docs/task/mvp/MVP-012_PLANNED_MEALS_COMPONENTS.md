@@ -48,7 +48,7 @@ Persist a meal occurrence on a real date with one or more recipe components, opt
 
 ## Decision gates
 
-- Resolve component ordering/identity and recipe-deletion reference behavior before persistence is finalized.
+- Resolve component ordering/identity and recipe-deletion reference behavior before persistence is finalized. **Recipe-deletion reference behavior resolved (owner, 2026-08-28; recorded in `MVP-008`):** recipes are archived, never hard-deleted, so a component's recipe reference is never dangling; an occurrence whose recipe is archived keeps the reference, stays planned, still derives its shopping lines, and shows an archived marker. Component ordering/identity remains this card's own decision.
 
 ## Acceptance criteria
 

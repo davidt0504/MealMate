@@ -48,7 +48,7 @@ Let a household create, browse, inspect, edit, and delete its own recipes withou
 
 ## Decision gates
 
-- Resolve delete/reference behavior before allowing a referenced recipe to be removed.
+- Resolve delete/reference behavior before allowing a referenced recipe to be removed. **Resolved (owner, 2026-08-28): archive, never hard-delete.** "Delete" sets an `archived_at` marker; the recipe leaves the library, pickers and planner candidates (`MVP-023`); every past and already-planned future occurrence keeps its reference and renders an "archived" marker; restore is available. Reason: PRD §12 (stable immutable IDs, append-oriented audit records) and §7.7 (reason codes name recipe IDs) require references to stay resolvable; blocking deletion would make every cooked recipe permanently undeletable; cascading would destroy history. `MVP-011` reuses the same marker to hide starter recipes; `MVP-012` records the occurrence side.
 
 ## Acceptance criteria
 
