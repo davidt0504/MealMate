@@ -8,6 +8,12 @@
 # Before /execute-plan, supply the approved plan, docs/ROADMAP.md, and its target
 # card; repeat the gate before implementation. /execute-plan never commits — run
 # the commit line it prints. [OWNER] steps remain outside agent authority.
+# orchestrate: auto-approve
+# Pipeline approval (README "Mandatory planning, execution, and handoff gates", 2026-08-28):
+# review + fix loop + independent verifier PASS + merge to integration is the owner-delegated
+# Verify -> Done approval for cards whose External actions row is None/emulator-only; the
+# integration -> master merge is the owner's ratification. Cards needing explicit external
+# approval still stop at Verify.
 
 ## Discharged preparation (context)
 # DEC-001, PRE-001, MVP-001, DEC-002, PRE-002, and DEC-005 are Done with
