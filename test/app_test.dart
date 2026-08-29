@@ -13,12 +13,43 @@ import 'package:meal_mate/src/rust/api/health.dart';
 import 'package:meal_mate/src/rust/api/household.dart';
 import 'package:meal_mate/features/planning/planning_cycle.dart';
 import 'package:meal_mate/features/planning/planning_provider.dart';
+import 'package:meal_mate/features/recipes/recipes_provider.dart';
 import 'package:meal_mate/features/restrictions/restrictions_provider.dart';
 import 'package:meal_mate/features/restrictions/restrictions_screen.dart';
 import 'package:meal_mate/src/rust/api/planning.dart';
+import 'package:meal_mate/src/rust/api/recipe.dart';
 import 'package:meal_mate/src/rust/api/restrictions.dart';
 
-const okReport = HealthReport(dbPath: '/x/kimatta.db', schemaVersion: 4);
+const okReport = HealthReport(dbPath: '/x/kimatta.db', schemaVersion: 5);
+
+/// Two lines, one with every structured field and one with only its text, so the detail and
+/// edit tests exercise both shapes.
+const okRecipe = RecipeDto(
+  id: 'r-1',
+  householdId: 'h-1',
+  title: 'Pancakes',
+  servings: 4,
+  instructions: 'Mix. Fry.',
+  lines: [
+    IngredientLineDto(
+      originalText: '  1/2 cup Flour, sifted ',
+      name: 'Flour',
+      quantity: QuantityDto.exact(numer: 1, denom: 2),
+      unit: UnitDto.known(unit: 'cup'),
+      preparation: 'sifted',
+      optional: false,
+    ),
+    IngredientLineDto(
+      originalText: 'a splash of something',
+      name: 'something',
+      quantity: QuantityDto.unknown(),
+      unit: UnitDto.none(),
+      optional: false,
+    ),
+  ],
+  provenance: RecipeProvenanceDto(kind: 'authored'),
+);
+const okSummary = RecipeSummaryDto(id: 'r-1', title: 'Pancakes');
 const okCycle = PlanningCycleDto(
   householdId: 'h-1',
   anchorDate: '2026-08-29',
@@ -171,6 +202,128 @@ class _FakeRestrictionsNotifier extends RestrictionsNotifier {
   }
 }
 
+/// Same seam as the restriction fakes: `save`, `archive` and `restore` are faked whole, and
+/// the two lifecycle calls re-run `build` (and drop the archived list) so a hook returning a
+/// changed list is what the screen shows next — the real notifier re-lists the same way.
+class _FakeRecipeLibraryNotifier extends RecipeLibraryNotifier {
+  _FakeRecipeLibraryNotifier(
+    this._build,
+    this._save,
+    this._archive,
+    this._restore,
+  );
+
+  final FutureOr<List<RecipeSummaryDto>> Function()? _build;
+  final Future<RecipeDto> Function(RecipeDto)? _save;
+  final Future<RecipeDto> Function(String, String)? _archive;
+  final Future<RecipeDto> Function(String, String)? _restore;
+
+  @override
+  Future<List<RecipeSummaryDto>> build() async {
+    await ref.watch(householdProvider.selectAsync((h) => h.id));
+    return (_build ?? () => const <RecipeSummaryDto>[])();
+  }
+
+  @override
+  Future<RecipeDto> save(RecipeDto recipe) async {
+    final fake = _save;
+    if (fake == null) {
+      throw StateError(
+        'this test taps Save recipe without a `saveRecipe:` hook',
+      );
+    }
+    return fake(recipe);
+  }
+
+  @override
+  Future<RecipeDto> archive(String householdId, String recipeId) async {
+    final fake = _archive;
+    if (fake == null) {
+      throw StateError('this test archives without an `archiveRecipe:` hook');
+    }
+    final stored = await fake(householdId, recipeId);
+    ref.invalidateSelf();
+    ref.invalidate(archivedRecipesProvider);
+    return stored;
+  }
+
+  @override
+  Future<RecipeDto> restore(String householdId, String recipeId) async {
+    final fake = _restore;
+    if (fake == null) {
+      throw StateError('this test restores without a `restoreRecipe:` hook');
+    }
+    final stored = await fake(householdId, recipeId);
+    ref.invalidateSelf();
+    ref.invalidate(archivedRecipesProvider);
+    return stored;
+  }
+}
+
+/// The *real* `RecipeLibraryNotifier` with only its bridge seams replaced, so `save`'s,
+/// `archive`'s and `restore`'s own re-list runs. `_FakeRecipeLibraryNotifier` above overrides
+/// all three wholesale and therefore cannot reach any of them.
+class _SeamedRecipeLibraryNotifier extends RecipeLibraryNotifier {
+  _SeamedRecipeLibraryNotifier(this._onFetch);
+
+  final Future<List<RecipeSummaryDto>> Function(int call) _onFetch;
+  int fetches = 0;
+  int archives = 0;
+  int restores = 0;
+  String? archivedOn;
+
+  @override
+  Future<List<RecipeSummaryDto>> fetchRecipes(String householdId) =>
+      _onFetch(++fetches);
+
+  @override
+  Future<RecipeDto> storeRecipe(RecipeDto recipe) async => okRecipe;
+
+  @override
+  Future<RecipeDto> markArchived(
+    String householdId,
+    String recipeId,
+    String on,
+  ) async {
+    archives++;
+    archivedOn = on;
+    return okRecipe;
+  }
+
+  @override
+  Future<RecipeDto> markRestored(String householdId, String recipeId) async {
+    restores++;
+    return okRecipe;
+  }
+}
+
+class _FakeArchivedRecipesNotifier extends ArchivedRecipesNotifier {
+  _FakeArchivedRecipesNotifier(this._build);
+
+  final FutureOr<List<RecipeSummaryDto>> Function()? _build;
+
+  @override
+  Future<List<RecipeSummaryDto>> build() async {
+    await ref.watch(householdProvider.selectAsync((h) => h.id));
+    return (_build ?? () => const <RecipeSummaryDto>[])();
+  }
+}
+
+/// The eleven unit tokens the real bridge returns (`known_unit_kinds`).
+const unitKindTokens = [
+  'tsp',
+  'tbsp',
+  'cup',
+  'fl_oz',
+  'ml',
+  'l',
+  'g',
+  'kg',
+  'oz',
+  'lb',
+  'piece',
+];
+
 /// The eleven tokens the real bridge returns, so the editor's checkbox list is the same
 /// list in tests as in production without loading the native library.
 const knownKinds = [
@@ -200,8 +353,34 @@ Widget harness({
   Future<List<RestrictionDto>> Function(String, List<RestrictionDto>)?
   saveRestrictions,
   FutureOr<List<String>> Function()? kinds,
+  FutureOr<List<RecipeSummaryDto>> Function()? recipes,
+  FutureOr<List<RecipeSummaryDto>> Function()? archived,
+  FutureOr<RecipeDto?> Function(String)? recipe,
+  Future<RecipeDto> Function(RecipeDto)? saveRecipe,
+  Future<RecipeDto> Function(String, String)? archiveRecipe,
+  Future<RecipeDto> Function(String, String)? restoreRecipe,
+  FutureOr<List<String>> Function()? unitKinds,
 }) => ProviderScope(
   overrides: [
+    // Unconditional, as the restriction overrides are: the "all five destinations" test
+    // visits Recipes, and an un-overridden provider would reach the real bridge.
+    recipeLibraryProvider.overrideWith(
+      () => _FakeRecipeLibraryNotifier(
+        recipes,
+        saveRecipe,
+        archiveRecipe,
+        restoreRecipe,
+      ),
+    ),
+    archivedRecipesProvider.overrideWith(
+      () => _FakeArchivedRecipesNotifier(archived),
+    ),
+    recipeDetailProvider.overrideWith(
+      (_, id) async => (recipe ?? (id) => id == 'r-1' ? okRecipe : null)(id),
+    ),
+    knownUnitKindsProvider.overrideWith(
+      (_) async => (unitKinds ?? () => unitKindTokens)(),
+    ),
     healthReportProvider.overrideWith((_) => (health ?? () => okReport)()),
     householdProvider.overrideWith(
       () => _FakeHouseholdNotifier(household, rename, completeOnboarding),
@@ -335,7 +514,7 @@ void main() {
 
     await tester.tap(tab('Settings'));
     await tester.pumpAndSettle();
-    expect(find.textContaining('schema v4 at /x/kimatta.db'), findsOneWidget);
+    expect(find.textContaining('schema v5 at /x/kimatta.db'), findsOneWidget);
   });
 
   testWidgets('Settings reports a storage failure instead of the report', (
@@ -412,7 +591,7 @@ void main() {
 
     pending.complete(okReport);
     await tester.pumpAndSettle();
-    expect(find.textContaining('schema v4 at /x/kimatta.db'), findsOneWidget);
+    expect(find.textContaining('schema v5 at /x/kimatta.db'), findsOneWidget);
   });
 
   // AC-3's bounded UI/state inspection: the default arrives with no setup step.
@@ -1094,6 +1273,9 @@ void main() {
     '/welcome',
     '/settings/cycle',
     '/settings/restrictions',
+    '/recipes',
+    '/recipes/new',
+    '/recipes/r-1',
   ]) {
     testWidgets('$location survives text scale 2.0', (tester) async {
       usePixel5(tester);
@@ -1506,6 +1688,1093 @@ void main() {
       expect(title('Plan'), findsOneWidget);
     },
   );
+
+  // --- MVP-008 -------------------------------------------------------------
+
+  // Pins `describeFailure`'s Recipe arm, added as the Planning and Restriction arms were.
+  // Routed through the Restrictions tile: the test needs no recipe screen to be falsifiable.
+  testWidgets('Settings reports a recipe-domain failure in prose', (
+    tester,
+  ) async {
+    usePixel5(tester);
+    await tester.pumpWidget(
+      harness(
+        initial: '/settings',
+        restrictions: () =>
+            throw const KimattaError.recipe(message: 'bad line'),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Restrictions unavailable: bad line'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('the recipe library shows an honest empty state', (tester) async {
+    usePixel5(tester);
+    await tester.pumpWidget(harness(initial: '/recipes'));
+    await tester.pumpAndSettle();
+    expect(title('Recipes'), findsOneWidget);
+    expect(find.text('No recipes yet.'), findsOneWidget);
+    expect(find.text('New recipe'), findsOneWidget);
+  });
+
+  testWidgets('the recipe library shows progress while loading', (
+    tester,
+  ) async {
+    usePixel5(tester);
+    final pending = Completer<List<RecipeSummaryDto>>();
+    await tester.pumpWidget(
+      harness(initial: '/recipes', recipes: () => pending.future),
+    );
+    await tester.pump();
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    expect(find.byType(ListTile), findsNothing);
+    pending.complete(const [okSummary]);
+    await tester.pumpAndSettle();
+    expect(find.widgetWithText(ListTile, 'Pancakes'), findsOneWidget);
+  });
+
+  testWidgets('the recipe library lists summaries and opens the detail', (
+    tester,
+  ) async {
+    usePixel5(tester);
+    await tester.pumpWidget(
+      harness(initial: '/recipes', recipes: () => const [okSummary]),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(ListTile, 'Pancakes'));
+    await tester.pumpAndSettle();
+    expect(title('Pancakes'), findsOneWidget);
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+    expect(title('Recipes'), findsOneWidget);
+  });
+
+  testWidgets('the recipe library renders a load failure and no list', (
+    tester,
+  ) async {
+    usePixel5(tester);
+    await tester.pumpWidget(
+      harness(
+        initial: '/recipes',
+        recipes: () => throw const KimattaError.recipe(message: 'bad row'),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Recipes unavailable: bad row'), findsOneWidget);
+    expect(find.byType(ListTile), findsNothing);
+  });
+
+  testWidgets('the archived list shows an honest empty state', (tester) async {
+    usePixel5(tester);
+    await tester.pumpWidget(harness(initial: '/recipes/archived'));
+    await tester.pumpAndSettle();
+    expect(title('Archived recipes'), findsOneWidget);
+    expect(find.text('Nothing archived.'), findsOneWidget);
+  });
+
+  testWidgets('the archived list renders a load failure', (tester) async {
+    usePixel5(tester);
+    await tester.pumpWidget(
+      harness(
+        initial: '/recipes/archived',
+        archived: () => throw const KimattaError.storage(message: 'locked'),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Recipes unavailable: locked'), findsOneWidget);
+    expect(find.byType(ListTile), findsNothing);
+  });
+
+  testWidgets('the archived list restores a recipe', (tester) async {
+    usePixel5(tester);
+    final shelf = [okSummary];
+    final restored = <String>[];
+    await tester.pumpWidget(
+      harness(
+        initial: '/recipes/archived',
+        archived: () => List.of(shelf),
+        restoreRecipe: (household, id) async {
+          restored.add('$household/$id');
+          shelf.removeWhere((s) => s.id == id);
+          return okRecipe;
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(TextButton, 'Restore'));
+    await tester.pumpAndSettle();
+    expect(restored, ['h-1/r-1']);
+    expect(find.widgetWithText(ListTile, 'Pancakes'), findsNothing);
+    expect(find.text('Nothing archived.'), findsOneWidget);
+  });
+
+  testWidgets('the recipe detail shows lines verbatim and the instructions', (
+    tester,
+  ) async {
+    usePixel5(tester);
+    await tester.pumpWidget(harness(initial: '/recipes/r-1'));
+    await tester.pumpAndSettle();
+    expect(title('Pancakes'), findsOneWidget);
+    expect(find.text('Serves 4'), findsOneWidget);
+    expect(find.text('  1/2 cup Flour, sifted '), findsOneWidget);
+    expect(find.text('a splash of something'), findsOneWidget);
+    expect(find.text('Mix. Fry.'), findsOneWidget);
+    expect(find.byTooltip('Edit'), findsOneWidget);
+    expect(find.widgetWithText(OutlinedButton, 'Delete'), findsOneWidget);
+  });
+
+  // AC-3: "delete" is archive, behind a confirmation that says what archiving means.
+  testWidgets('Delete asks for confirmation and archives on confirm', (
+    tester,
+  ) async {
+    usePixel5(tester);
+    final archived = <String>[];
+    await tester.pumpWidget(
+      harness(
+        initial: '/recipes/r-1',
+        recipes: () => archived.isEmpty ? const [okSummary] : const [],
+        archiveRecipe: (household, id) async {
+          archived.add('$household/$id');
+          return okRecipe;
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(OutlinedButton, 'Delete'));
+    await tester.pumpAndSettle();
+    expect(find.text('Archive this recipe?'), findsOneWidget);
+    expect(find.textContaining('can be restored'), findsOneWidget);
+    await tester.tap(find.widgetWithText(TextButton, 'Cancel'));
+    await tester.pumpAndSettle();
+    expect(archived, isEmpty);
+    expect(find.text('Archive this recipe?'), findsNothing);
+    expect(title('Pancakes'), findsOneWidget);
+
+    await tester.tap(find.widgetWithText(OutlinedButton, 'Delete'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, 'Archive'));
+    await tester.pumpAndSettle();
+    expect(archived, ['h-1/r-1']);
+    expect(title('Recipes'), findsOneWidget);
+    expect(find.text('No recipes yet.'), findsOneWidget);
+  });
+
+  testWidgets('an archived recipe shows the archived marker and Restore', (
+    tester,
+  ) async {
+    usePixel5(tester);
+    final restored = <String>[];
+    await tester.pumpWidget(
+      harness(
+        initial: '/recipes/r-1',
+        recipe: (_) => const RecipeDto(
+          id: 'r-1',
+          householdId: 'h-1',
+          title: 'Pancakes',
+          instructions: '',
+          lines: [],
+          provenance: RecipeProvenanceDto(kind: 'authored'),
+          archivedAt: '2026-08-29',
+        ),
+        restoreRecipe: (household, id) async {
+          restored.add('$household/$id');
+          return okRecipe;
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Archived on 2026-08-29'), findsOneWidget);
+    expect(find.widgetWithText(OutlinedButton, 'Delete'), findsNothing);
+    await tester.tap(find.widgetWithText(FilledButton, 'Restore'));
+    await tester.pumpAndSettle();
+    expect(restored, ['h-1/r-1']);
+    expect(title('Recipes'), findsOneWidget);
+  });
+
+  testWidgets('a failed archive reports the reason in a snackbar', (
+    tester,
+  ) async {
+    usePixel5(tester);
+    await tester.pumpWidget(
+      harness(
+        initial: '/recipes/r-1',
+        archiveRecipe: (_, _) async =>
+            throw const KimattaError.storage(message: 'locked'),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(OutlinedButton, 'Delete'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, 'Archive'));
+    await tester.pumpAndSettle();
+    expect(find.text('Recipes unavailable: locked'), findsOneWidget);
+    expect(title('Pancakes'), findsOneWidget);
+    expect(
+      tester
+          .widget<OutlinedButton>(find.widgetWithText(OutlinedButton, 'Delete'))
+          .onPressed,
+      isNotNull,
+    );
+  });
+
+  testWidgets('the detail renders a load failure', (tester) async {
+    usePixel5(tester);
+    await tester.pumpWidget(
+      harness(
+        initial: '/recipes/r-1',
+        recipe: (_) => throw const KimattaError.storage(message: 'locked'),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Recipes unavailable: locked'), findsOneWidget);
+    expect(find.byTooltip('Edit'), findsNothing);
+  });
+
+  testWidgets('an unknown recipe id is reported, not crashed on', (
+    tester,
+  ) async {
+    usePixel5(tester);
+    await tester.pumpWidget(harness(initial: '/recipes/ghost'));
+    await tester.pumpAndSettle();
+    expect(find.text('Recipe not found.'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  Finder field(String label, [int index = 0]) =>
+      find.widgetWithText(TextField, label).at(index);
+
+  // The form is a scrolled `Column`, so off-screen controls exist but cannot be tapped
+  // until scrolled into view.
+  Future<void> tapVisible(WidgetTester tester, Finder finder) async {
+    // A focused text field scrolls itself back on screen after layout, undoing the
+    // `ensureVisible` below; drop focus first (a real user's keyboard dismissal does the same).
+    FocusManager.instance.primaryFocus?.unfocus();
+    await tester.pump();
+    await tester.ensureVisible(finder);
+    await tester.pumpAndSettle();
+    await tester.tap(finder);
+  }
+
+  Future<void> pickUnit(WidgetTester tester, int row, String label) async {
+    await tapVisible(
+      tester,
+      find.byType(DropdownButtonFormField<String>).at(row),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(label).last);
+    await tester.pumpAndSettle();
+  }
+
+  // AC-1/AC-2: the exact DTO, with every string sent verbatim — no `.trim()` on the form,
+  // because silent normalisation is this card's stop condition. Rust validates.
+  testWidgets('a new recipe with two ingredient rows is saved as entered', (
+    tester,
+  ) async {
+    useTallView(tester);
+    RecipeDto? sent;
+    await tester.pumpWidget(
+      harness(
+        initial: '/recipes/new',
+        saveRecipe: (r) async {
+          sent = r;
+          return okRecipe;
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.enterText(field('Title'), '  Pancakes ');
+    await tester.enterText(field('Servings'), '4');
+    await tester.enterText(field('Instructions'), 'Mix. Fry.');
+    await tester.enterText(field('As written'), '  1/2 cup Flour, sifted ');
+    await tester.enterText(field('Name'), 'Flour');
+    await tester.enterText(field('Amount'), '1/2');
+    await pickUnit(tester, 0, 'cup');
+    await tester.enterText(field('Preparation'), 'sifted');
+    await tapVisible(
+      tester,
+      find.widgetWithText(OutlinedButton, 'Add ingredient'),
+    );
+    await tester.pumpAndSettle();
+    await tester.enterText(field('As written', 1), "2-3 handfuls nana's mix");
+    await tester.enterText(field('Name', 1), "nana's mix");
+    await tester.enterText(field('Amount', 1), '2-3');
+    await pickUnit(tester, 1, 'Other…');
+    await tester.enterText(field('Unit name'), 'handful');
+    await tapVisible(
+      tester,
+      find.widgetWithText(SwitchListTile, 'Optional').at(1),
+    );
+    await tester.pump();
+    await tapVisible(tester, find.widgetWithText(FilledButton, 'Save recipe'));
+    await tester.pumpAndSettle();
+    // Field by field first, so a mismatch names the field (the DTO has no `toString`).
+    expect(sent?.title, '  Pancakes ');
+    expect(sent?.servings, 4);
+    expect(sent?.instructions, 'Mix. Fry.');
+    expect(sent?.lines.length, 2);
+    expect(sent?.lines[0].originalText, '  1/2 cup Flour, sifted ');
+    expect(
+      sent?.lines[0].quantity,
+      const QuantityDto.exact(numer: 1, denom: 2),
+    );
+    expect(sent?.lines[0].unit, const UnitDto.known(unit: 'cup'));
+    expect(sent?.lines[0].preparation, 'sifted');
+    expect(sent?.lines[1].originalText, "2-3 handfuls nana's mix");
+    expect(sent?.lines[1].unit, const UnitDto.other(text: 'handful'));
+    expect(sent?.lines[1].optional, isTrue);
+    expect(sent?.lines[1].preparation, isNull);
+    // Not a whole-DTO `==`: the generated `RecipeDto.==` compares `lines` by List identity,
+    // so the list goes through the deep matcher and the scalars are asserted above/below.
+    expect(sent?.id, '');
+    expect(sent?.householdId, 'h-1');
+    expect(sent?.provenance, const RecipeProvenanceDto(kind: 'authored'));
+    expect(sent?.archivedAt, isNull);
+    expect(sent?.lines, const [
+      IngredientLineDto(
+        originalText: '  1/2 cup Flour, sifted ',
+        name: 'Flour',
+        quantity: QuantityDto.exact(numer: 1, denom: 2),
+        unit: UnitDto.known(unit: 'cup'),
+        preparation: 'sifted',
+        optional: false,
+      ),
+      IngredientLineDto(
+        originalText: "2-3 handfuls nana's mix",
+        name: "nana's mix",
+        quantity: QuantityDto.range(
+          minNumer: 2,
+          minDenom: 1,
+          maxNumer: 3,
+          maxDenom: 1,
+        ),
+        unit: UnitDto.other(text: 'handful'),
+        optional: true,
+      ),
+    ]);
+    expect(title('Recipes'), findsOneWidget);
+  });
+
+  testWidgets('a blank title blocks save with an inline error', (tester) async {
+    useTallView(tester);
+    var saves = 0;
+    await tester.pumpWidget(
+      harness(
+        initial: '/recipes/new',
+        saveRecipe: (_) async {
+          saves++;
+          return okRecipe;
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.enterText(field('Title'), '   ');
+    await tapVisible(tester, find.widgetWithText(FilledButton, 'Save recipe'));
+    await tester.pumpAndSettle();
+    expect(find.text('Give the recipe a title.'), findsOneWidget);
+    expect(saves, 0);
+  });
+
+  testWidgets('an unreadable quantity blocks save and names the row', (
+    tester,
+  ) async {
+    useTallView(tester);
+    var saves = 0;
+    await tester.pumpWidget(
+      harness(
+        initial: '/recipes/new',
+        saveRecipe: (_) async {
+          saves++;
+          return okRecipe;
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.enterText(field('Title'), 'Toast');
+    await tester.enterText(field('As written'), 'abc bread');
+    await tester.enterText(field('Name'), 'bread');
+    await tester.enterText(field('Amount'), 'abc');
+    await tapVisible(tester, find.widgetWithText(FilledButton, 'Save recipe'));
+    await tester.pumpAndSettle();
+    expect(
+      find.textContaining('Ingredient 1: cannot read "abc"'),
+      findsOneWidget,
+    );
+    expect(saves, 0);
+  });
+
+  // The `u32` the bridge carries is the accepted range. Before the bound, `int.parse` threw
+  // out of `_validate` — which `_save` called outside its `try` — so the tap did nothing at
+  // all: no inline error, no snackbar, no write.
+  testWidgets('an over-long amount blocks save and names the row', (
+    tester,
+  ) async {
+    useTallView(tester);
+    var saves = 0;
+    await tester.pumpWidget(
+      harness(
+        initial: '/recipes/new',
+        saveRecipe: (_) async {
+          saves++;
+          return okRecipe;
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.enterText(field('Title'), 'Toast');
+    await tester.enterText(field('As written'), 'lots of bread');
+    await tester.enterText(field('Name'), 'bread');
+    await tester.enterText(field('Amount'), '99999999999999999999');
+    await tapVisible(tester, find.widgetWithText(FilledButton, 'Save recipe'));
+    await tester.pumpAndSettle();
+    expect(
+      find.textContaining('Ingredient 1: cannot read "99999999999999999999"'),
+      findsOneWidget,
+    );
+    expect(saves, 0);
+  });
+
+  // Above `u32` the FRB encoder masks rather than range-checks, so `4294967297` would be
+  // stored as `1` and read back as `Serves 1`.
+  testWidgets('a servings count above the bridge range blocks save', (
+    tester,
+  ) async {
+    useTallView(tester);
+    var saves = 0;
+    await tester.pumpWidget(
+      harness(
+        initial: '/recipes/new',
+        saveRecipe: (_) async {
+          saves++;
+          return okRecipe;
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.enterText(field('Title'), 'Toast');
+    await tester.enterText(field('Servings'), '4294967297');
+    await tapVisible(tester, find.widgetWithText(FilledButton, 'Save recipe'));
+    await tester.pumpAndSettle();
+    expect(
+      find.text('Servings must be a whole number from 1 to 4294967295.'),
+      findsOneWidget,
+    );
+    expect(saves, 0);
+  });
+
+  // The reject path's only signal is an inline error, and by the time the user reaches Save
+  // they have scrolled past the offending field — so on phone geometry the error is painted
+  // above the fold, clipped, and the tap looks inert. These three run at [usePixel5], not
+  // [useTallView]: the tall viewport fits the whole form, which is the one geometry in which
+  // the error is always visible and the defect therefore invisible.
+  //
+  // The bounds come from the scroll viewport, never from the view height: every recipe route
+  // is inside the shell's `StatefulShellRoute`, so the bottom 80 logical px are its
+  // `NavigationBar` and an error painted there is behind it, not on screen.
+  Rect scrollViewport(WidgetTester tester) =>
+      tester.getRect(find.byType(SingleChildScrollView));
+
+  void expectVisible(WidgetTester tester, Finder error) {
+    final viewport = scrollViewport(tester);
+    final rect = tester.getRect(error);
+    expect(
+      rect.top,
+      greaterThanOrEqualTo(viewport.top),
+      reason: 'error is clipped above the scroll viewport',
+    );
+    expect(
+      rect.bottom,
+      lessThanOrEqualTo(viewport.bottom),
+      reason: 'error is below the fold or behind the navigation bar',
+    );
+  }
+
+  testWidgets('a blank title scrolls the error into view on a phone screen', (
+    tester,
+  ) async {
+    usePixel5(tester);
+    var saves = 0;
+    await tester.pumpWidget(
+      harness(
+        initial: '/recipes/new',
+        saveRecipe: (_) async {
+          saves++;
+          return okRecipe;
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tapVisible(tester, find.widgetWithText(FilledButton, 'Save recipe'));
+    await tester.pumpAndSettle();
+    expectVisible(tester, find.text('Give the recipe a title.'));
+    expect(saves, 0);
+  });
+
+  // The row branch, and the case the two-row form cannot show: `tapVisible` scrolls Save —
+  // the last widget — into view, which necessarily reveals the row just above it. Only an
+  // error near the top of a long form is clipped, so the offending row is the *first* of
+  // three.
+  testWidgets(
+    'the first of three ingredient rows scrolls its error into view',
+    (tester) async {
+      usePixel5(tester);
+      var saves = 0;
+      await tester.pumpWidget(
+        harness(
+          initial: '/recipes/new',
+          saveRecipe: (_) async {
+            saves++;
+            return okRecipe;
+          },
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.enterText(field('Title'), 'Toast');
+      await tester.enterText(field('As written'), 'abc bread');
+      await tester.enterText(field('Name'), 'bread');
+      await tester.enterText(field('Amount'), 'abc');
+      for (var i = 0; i < 2; i++) {
+        await tapVisible(
+          tester,
+          find.widgetWithText(OutlinedButton, 'Add ingredient'),
+        );
+        await tester.pumpAndSettle();
+      }
+      await tapVisible(
+        tester,
+        find.widgetWithText(FilledButton, 'Save recipe'),
+      );
+      await tester.pumpAndSettle();
+      expectVisible(
+        tester,
+        find.textContaining('Ingredient 1: cannot read "abc"'),
+      );
+      expect(saves, 0);
+    },
+  );
+
+  // The anchor has to be the error text itself, not the row `Card`: at this scale the card is
+  // taller than the viewport, so aligning its *leading* edge leaves the error — the card's
+  // last child — below the fold, reproducing the defect on the accessibility path where the
+  // form is hardest to read.
+  testWidgets('a row error is scrolled into view at text scale 2.0', (
+    tester,
+  ) async {
+    usePixel5(tester);
+    tester.platformDispatcher.textScaleFactorTestValue = 2.0;
+    await tester.pumpWidget(harness(initial: '/recipes/new'));
+    await tester.pumpAndSettle();
+    await tester.enterText(field('Title'), 'Toast');
+    await tester.enterText(field('As written'), 'abc bread');
+    await tester.enterText(field('Name'), 'bread');
+    await tester.enterText(field('Amount'), 'abc');
+    for (var i = 0; i < 2; i++) {
+      await tapVisible(
+        tester,
+        find.widgetWithText(OutlinedButton, 'Add ingredient'),
+      );
+      await tester.pumpAndSettle();
+    }
+    await tapVisible(tester, find.widgetWithText(FilledButton, 'Save recipe'));
+    await tester.pumpAndSettle();
+    expectVisible(
+      tester,
+      find.textContaining('Ingredient 1: cannot read "abc"'),
+    );
+  });
+
+  // The Servings arm of `_firstErrorKey`, which the three above never reach: they leave Servings
+  // empty, so the title and row arms answer first.
+  //
+  // Expected-to-pass — the fix is already in — but not vacuous, and the two extra rows are what
+  // make it so. On the default one-row form a servings error renders inside the fold whether or
+  // not the scroll runs, so the obvious version of this test passes with `key: _servingsKey`
+  // deleted. Three rows make the form long enough that `tapVisible`'s scroll to Save leaves
+  // Servings well above the viewport, so the assertion holds only if the arm returns a key whose
+  // `currentContext` resolves: drop the key from the field, or reorder the arm behind the row
+  // scan, and this goes red while the other 152 stay green.
+  //
+  // The rows are left empty on purpose. An untouched row is skipped by `_validate`, so they add
+  // height without adding a competing row error — the rejection is servings-only.
+  testWidgets('a rejected servings count scrolls its error into view', (
+    tester,
+  ) async {
+    usePixel5(tester);
+    var saves = 0;
+    await tester.pumpWidget(
+      harness(
+        initial: '/recipes/new',
+        saveRecipe: (_) async {
+          saves++;
+          return okRecipe;
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.enterText(field('Title'), 'Toast');
+    await tester.enterText(field('Servings'), '0');
+    for (var i = 0; i < 2; i++) {
+      await tapVisible(
+        tester,
+        find.widgetWithText(OutlinedButton, 'Add ingredient'),
+      );
+      await tester.pumpAndSettle();
+    }
+    await tapVisible(tester, find.widgetWithText(FilledButton, 'Save recipe'));
+    await tester.pumpAndSettle();
+    expectVisible(
+      tester,
+      find.text('Servings must be a whole number from 1 to 4294967295.'),
+    );
+    expect(saves, 0);
+  });
+
+  // `preparation` was the one field whose emptiness test (`.isEmpty`) disagreed with the
+  // domain's (`trim().is_empty()`), so a lone space passed the form and failed the whole save
+  // in Rust — one snackbar, no row named, nothing highlighted.
+  testWidgets('a whitespace-only preparation blocks save and names the row', (
+    tester,
+  ) async {
+    useTallView(tester);
+    var saves = 0;
+    await tester.pumpWidget(
+      harness(
+        initial: '/recipes/new',
+        saveRecipe: (_) async {
+          saves++;
+          return okRecipe;
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.enterText(field('Title'), 'Toast');
+    await tester.enterText(field('As written'), 'sifted flour');
+    await tester.enterText(field('Name'), 'flour');
+    await tester.enterText(field('Preparation'), ' ');
+    await tapVisible(tester, find.widgetWithText(FilledButton, 'Save recipe'));
+    await tester.pumpAndSettle();
+    expect(
+      find.text('Ingredient 1: write a preparation or leave it blank.'),
+      findsOneWidget,
+    );
+    expect(saves, 0);
+  });
+
+  // Expected-to-pass: the guard above rejects *only* whitespace-only text. Padding around
+  // real words is content, and the domain keeps it (`preparation() == Some(' sifted ')`), so
+  // it must still reach Rust with both spaces on.
+  testWidgets('a padded preparation is still saved verbatim', (tester) async {
+    useTallView(tester);
+    RecipeDto? sent;
+    await tester.pumpWidget(
+      harness(
+        initial: '/recipes/new',
+        saveRecipe: (r) async {
+          sent = r;
+          return okRecipe;
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.enterText(field('Title'), 'Toast');
+    await tester.enterText(field('As written'), 'sifted flour');
+    await tester.enterText(field('Name'), 'flour');
+    await tester.enterText(field('Preparation'), ' sifted ');
+    await tapVisible(tester, find.widgetWithText(FilledButton, 'Save recipe'));
+    await tester.pumpAndSettle();
+    expect(sent?.lines.single.preparation, ' sifted ');
+  });
+
+  testWidgets('Remove ingredient drops the row and saves without it', (
+    tester,
+  ) async {
+    useTallView(tester);
+    RecipeDto? sent;
+    await tester.pumpWidget(
+      harness(
+        initial: '/recipes/new',
+        saveRecipe: (r) async {
+          sent = r;
+          return okRecipe;
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.enterText(field('Title'), 'Toast');
+    await tester.enterText(field('As written'), 'bread');
+    await tester.enterText(field('Name'), 'bread');
+    await tapVisible(
+      tester,
+      find.widgetWithText(OutlinedButton, 'Add ingredient'),
+    );
+    await tester.pumpAndSettle();
+    await tester.enterText(field('As written', 1), 'butter');
+    await tester.enterText(field('Name', 1), 'butter');
+    await tapVisible(tester, find.byTooltip('Remove ingredient 2'));
+    await tester.pumpAndSettle();
+    expect(find.widgetWithText(TextField, 'As written'), findsOneWidget);
+    await tapVisible(tester, find.widgetWithText(FilledButton, 'Save recipe'));
+    await tester.pumpAndSettle();
+    expect(sent?.lines.length, 1);
+    expect(sent?.lines.first.name, 'bread');
+  });
+
+  // Tapping the ✕ does not unfocus the row's own field, and disposing inside `setState` tore
+  // the controller down before the frame that unmounts its `TextField`. Deliberately a bare
+  // `tap`, not `tapVisible`: that helper unfocuses first, which is the condition under test.
+  testWidgets('Remove ingredient works while the row holds focus', (
+    tester,
+  ) async {
+    useTallView(tester);
+    await tester.pumpWidget(harness(initial: '/recipes/new'));
+    await tester.pumpAndSettle();
+    await tapVisible(
+      tester,
+      find.widgetWithText(OutlinedButton, 'Add ingredient'),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(field('Name', 1));
+    await tester.pumpAndSettle();
+    await tester.enterText(field('Name', 1), 'butter');
+    await tester.pumpAndSettle();
+    expect(FocusManager.instance.primaryFocus, isNotNull);
+    await tester.tap(find.byTooltip('Remove ingredient 2'));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    expect(find.widgetWithText(TextField, 'As written'), findsOneWidget);
+  });
+
+  // A removal renumbers every row below it, so an error written before the removal must not
+  // keep the number it was written with. The two removal tests above both delete from a form
+  // that has never been rejected, so neither of them has an error to renumber.
+  testWidgets('Remove ingredient renumbers the errors of the rows below it', (
+    tester,
+  ) async {
+    useTallView(tester);
+    await tester.pumpWidget(harness(initial: '/recipes/new'));
+    await tester.pumpAndSettle();
+    await tester.enterText(field('Title'), 'Toast');
+    await tester.enterText(field('Name'), 'bread');
+    for (var row = 1; row < 3; row++) {
+      await tapVisible(
+        tester,
+        find.widgetWithText(OutlinedButton, 'Add ingredient'),
+      );
+      await tester.pumpAndSettle();
+      await tester.enterText(field('Name', row), 'filling $row');
+    }
+    // Every row carries a name and no "As written", so `_validate` rejects all three rather
+    // than skipping any of them as untouched.
+    await tapVisible(tester, find.widgetWithText(FilledButton, 'Save recipe'));
+    await tester.pumpAndSettle();
+    for (final n in [1, 2, 3]) {
+      expect(
+        find.text('Ingredient $n: write it as you would say it.'),
+        findsOneWidget,
+      );
+    }
+    await tapVisible(tester, find.byTooltip('Remove ingredient 2'));
+    await tester.pumpAndSettle();
+    // Row 1 sits above the removal and keeps both its number and its message — clearing every
+    // surviving row's error would drop a rejection signal that is still true, which is the
+    // silent-rejection shape this card already fixed once. The row that was 3 is now 2.
+    expect(
+      find.text('Ingredient 1: write it as you would say it.'),
+      findsOneWidget,
+    );
+    expect(
+      find.text('Ingredient 2: write it as you would say it.'),
+      findsOneWidget,
+    );
+    expect(find.textContaining('Ingredient 3:'), findsNothing);
+  });
+
+  // A re-list that fails after the write committed must not be reported as a save failure:
+  // `_save`'s catch would say "Recipes unavailable: …" for a recipe that *was* stored, and
+  // the natural retry sends `id: ''` again, minting a second copy.
+  group('a re-list failure after a write', () {
+    ProviderContainer containerWith(_SeamedRecipeLibraryNotifier notifier) {
+      final container = ProviderContainer(
+        overrides: [
+          // `HouseholdNotifier.build` awaits the health report before bootstrapping, so both
+          // are overridden or the notifier reaches the real bridge.
+          healthReportProvider.overrideWith((_) => okReport),
+          householdProvider.overrideWith(
+            () => _FakeHouseholdNotifier(() => okHousehold, null, null),
+          ),
+          recipeLibraryProvider.overrideWith(() => notifier),
+        ],
+      );
+      addTearDown(container.dispose);
+      return container;
+    }
+
+    Future<_SeamedRecipeLibraryNotifier> failingOnRepublish() async {
+      final notifier = _SeamedRecipeLibraryNotifier(
+        (call) async => call == 1
+            ? const [okSummary]
+            : throw const KimattaError.recipe(message: 'bad row'),
+      );
+      final container = containerWith(notifier);
+      await container.read(recipeLibraryProvider.future);
+      return notifier;
+    }
+
+    test('does not escape save as a write failure', () async {
+      final notifier = await failingOnRepublish();
+      final stored = await notifier.save(okRecipe);
+      expect(stored.id, okRecipe.id);
+      expect(notifier.fetches, 2);
+    });
+
+    test('degrades the list state instead of leaving it stale', () async {
+      final notifier = await failingOnRepublish();
+      await notifier.save(okRecipe);
+      expect(notifier.state, isA<AsyncError<List<RecipeSummaryDto>>>());
+      final error = (notifier.state as AsyncError).error;
+      expect(error, isA<KimattaError_Recipe>());
+      expect((error as KimattaError_Recipe).message, 'bad row');
+    });
+  });
+
+  // The widget harness overrides `archive` and `restore` *wholesale* and re-lists with
+  // `ref.invalidateSelf()`, so no test reached the real bodies — both could be gutted with the
+  // suite still green. These run the real notifier with only its bridge seams replaced.
+  //
+  // Expected-to-pass: the production bodies are already correct. What the group buys is that
+  // dropping `_republish` or `ref.invalidate(archivedRecipesProvider)` now fails. `fetches`
+  // read straight after the await is the discriminator — `_republish` fetches eagerly, whereas
+  // `invalidateSelf` would leave it at 1 until something read the provider.
+  group('archive and restore refresh both lists', () {
+    late int archivedBuilds;
+
+    ProviderContainer containerWith(_SeamedRecipeLibraryNotifier notifier) {
+      archivedBuilds = 0;
+      final container = ProviderContainer(
+        overrides: [
+          healthReportProvider.overrideWith((_) => okReport),
+          householdProvider.overrideWith(
+            () => _FakeHouseholdNotifier(() => okHousehold, null, null),
+          ),
+          recipeLibraryProvider.overrideWith(() => notifier),
+          archivedRecipesProvider.overrideWith(
+            () => _FakeArchivedRecipesNotifier(() {
+              archivedBuilds++;
+              return const <RecipeSummaryDto>[];
+            }),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+      return container;
+    }
+
+    // Both providers are read *before* the write: invalidating one that was never built
+    // cannot show a second build, so the counter would not discriminate.
+    Future<(_SeamedRecipeLibraryNotifier, ProviderContainer)> ready([
+      Future<List<RecipeSummaryDto>> Function(int call)? onFetch,
+    ]) async {
+      final notifier = _SeamedRecipeLibraryNotifier(
+        onFetch ?? (_) async => const [okSummary],
+      );
+      final container = containerWith(notifier);
+      await container.read(recipeLibraryProvider.future);
+      await container.read(archivedRecipesProvider.future);
+      expect(archivedBuilds, 1);
+      return (notifier, container);
+    }
+
+    test('archive re-lists the library and drops the archived list', () async {
+      final (notifier, container) = await ready();
+      final stored = await notifier.archive('h-1', 'r-1');
+      expect(stored.id, okRecipe.id);
+      expect(notifier.archives, 1);
+      expect(notifier.archivedOn, todayCivilDate());
+      expect(notifier.fetches, 2);
+      expect(notifier.state, isA<AsyncData<List<RecipeSummaryDto>>>());
+      expect(notifier.state.value, const [okSummary]);
+      await container.read(archivedRecipesProvider.future);
+      expect(archivedBuilds, 2);
+    });
+
+    test('restore re-lists the library and drops the archived list', () async {
+      final (notifier, container) = await ready();
+      final stored = await notifier.restore('h-1', 'r-1');
+      expect(stored.id, okRecipe.id);
+      expect(notifier.restores, 1);
+      expect(notifier.fetches, 2);
+      expect(notifier.state, isA<AsyncData<List<RecipeSummaryDto>>>());
+      expect(notifier.state.value, const [okSummary]);
+      await container.read(archivedRecipesProvider.future);
+      expect(archivedBuilds, 2);
+    });
+
+    // The same contract `save` has: the archive committed, so a failed re-list is the list's
+    // problem and must not escape as though the write failed.
+    test('a re-list failure after an archive degrades the list instead of throwing', () async {
+      final (notifier, _) = await ready(
+        (call) async => call == 1
+            ? const [okSummary]
+            : throw const KimattaError.recipe(message: 'bad row'),
+      );
+      await notifier.archive('h-1', 'r-1');
+      expect(notifier.archives, 1);
+      expect(notifier.state, isA<AsyncError<List<RecipeSummaryDto>>>());
+      final error = (notifier.state as AsyncError).error;
+      expect(error, isA<KimattaError_Recipe>());
+      expect((error as KimattaError_Recipe).message, 'bad row');
+    });
+  });
+
+  testWidgets(
+    'editing seeds the form from the loaded recipe and saves with the same id',
+    (tester) async {
+      useTallView(tester);
+      RecipeDto? sent;
+      await tester.pumpWidget(
+        harness(
+          initial: '/recipes/r-1/edit',
+          saveRecipe: (r) async {
+            sent = r;
+            return r;
+          },
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        tester.widget<TextField>(field('Title')).controller?.text,
+        'Pancakes',
+      );
+      expect(
+        tester.widget<TextField>(field('As written')).controller?.text,
+        '  1/2 cup Flour, sifted ',
+      );
+      expect(tester.widget<TextField>(field('Amount')).controller?.text, '1/2');
+      expect(tester.widget<TextField>(field('Amount', 1)).controller?.text, '');
+      await tester.enterText(field('Title'), 'Pancakes v2');
+      await tapVisible(
+        tester,
+        find.widgetWithText(FilledButton, 'Save recipe'),
+      );
+      await tester.pumpAndSettle();
+      expect(sent?.id, 'r-1');
+      expect(sent?.householdId, 'h-1');
+      expect(sent?.title, 'Pancakes v2');
+      expect(sent?.servings, 4);
+      expect(sent?.lines, okRecipe.lines);
+      expect(sent?.provenance, okRecipe.provenance);
+      expect(title('Pancakes'), findsOneWidget);
+    },
+  );
+
+  testWidgets('a failed save reports the reason and re-enables Save', (
+    tester,
+  ) async {
+    useTallView(tester);
+    await tester.pumpWidget(
+      harness(
+        initial: '/recipes/new',
+        saveRecipe: (_) async =>
+            throw const KimattaError.recipe(message: 'bad line'),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.enterText(field('Title'), 'Toast');
+    await tapVisible(tester, find.widgetWithText(FilledButton, 'Save recipe'));
+    await tester.pumpAndSettle();
+    expect(find.text('Recipes unavailable: bad line'), findsOneWidget);
+    expect(
+      tester
+          .widget<FilledButton>(
+            find.widgetWithText(FilledButton, 'Save recipe'),
+          )
+          .onPressed,
+      isNotNull,
+    );
+  });
+
+  testWidgets(
+    'the form shows progress and no Save while the unit vocabulary loads',
+    (tester) async {
+      useTallView(tester);
+      final pending = Completer<List<String>>();
+      await tester.pumpWidget(
+        harness(initial: '/recipes/new', unitKinds: () => pending.future),
+      );
+      await tester.pump();
+      expect(find.byType(CircularProgressIndicator), findsOneWidget);
+      expect(find.byType(TextField), findsNothing);
+      pending.complete(unitKindTokens);
+      await tester.pumpAndSettle();
+      expect(find.widgetWithText(FilledButton, 'Save recipe'), findsOneWidget);
+    },
+  );
+
+  testWidgets('the edit form renders a load failure and no form', (
+    tester,
+  ) async {
+    usePixel5(tester);
+    await tester.pumpWidget(
+      harness(
+        initial: '/recipes/r-1/edit',
+        recipe: (_) => throw const KimattaError.storage(message: 'locked'),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Recipes unavailable: locked'), findsOneWidget);
+    expect(find.byType(TextField), findsNothing);
+  });
+
+  for (final location in const [
+    '/recipes',
+    '/recipes/new',
+    '/recipes/r-1',
+    '/recipes/archived',
+  ]) {
+    testWidgets('$location meets the accessibility guidelines', (tester) async {
+      usePixel5(tester);
+      for (final brightness in Brightness.values) {
+        tester.platformDispatcher.platformBrightnessTestValue = brightness;
+        await tester.pumpWidget(
+          harness(initial: location, recipes: () => const [okSummary]),
+        );
+        await tester.pumpAndSettle();
+        await expectLater(tester, meetsGuideline(androidTapTargetGuideline));
+        await expectLater(tester, meetsGuideline(labeledTapTargetGuideline));
+        await expectLater(tester, meetsGuideline(textContrastGuideline));
+      }
+    });
+  }
+
+  // AC-4, keyboard: bounded traversal as the navigation-bar test, asserting both of the
+  // form's action buttons take focus.
+  testWidgets('tab traversal reaches Add ingredient and Save on the form', (
+    tester,
+  ) async {
+    useTallView(tester);
+    await tester.pumpWidget(harness(initial: '/recipes/new'));
+    await tester.pumpAndSettle();
+    final targets = {
+      'Add ingredient': find.widgetWithText(OutlinedButton, 'Add ingredient'),
+      'Save recipe': find.widgetWithText(FilledButton, 'Save recipe'),
+    };
+    final reached = <String>{};
+    for (var i = 0; i < 40 && reached.length < targets.length; i++) {
+      await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+      await tester.pump();
+      final context = FocusManager.instance.primaryFocus?.context;
+      if (context == null) continue;
+      for (final entry in targets.entries) {
+        if (find
+            .ancestor(of: find.byWidget(context.widget), matching: entry.value)
+            .evaluate()
+            .isNotEmpty) {
+          reached.add(entry.key);
+        }
+      }
+    }
+    expect(reached, targets.keys.toSet());
+  });
 
   // Keep this test last: the assertion it provokes leaves the element tree
   // half-updated, and every test pumped after it in the same file fails on a

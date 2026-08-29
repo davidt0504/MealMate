@@ -1,7 +1,7 @@
 use kimatta_storage::{
-    Connection, CustomIngredient, CustomIngredientId, HouseholdId, IngredientId, IngredientLine,
-    IngredientRef, ProvenanceKind, Quantity, QuantityRange, Rational, Recipe, RecipeId,
-    RecipeProvenance, Unit, UnitKind,
+    format_civil_date, Connection, CustomIngredient, CustomIngredientId, HouseholdId, IngredientId,
+    IngredientLine, IngredientRef, ProvenanceKind, Quantity, QuantityRange, Rational, Recipe,
+    RecipeId, RecipeListing, RecipeProvenance, RecipeRecord, StorageError, Unit, UnitKind,
 };
 use uuid::Uuid;
 
@@ -70,6 +70,9 @@ pub struct RecipeDto {
     pub instructions: String,
     pub lines: Vec<IngredientLineDto>,
     pub provenance: RecipeProvenanceDto,
+    /// Output only: `save_recipe` ignores it and never changes archive state; use
+    /// `archive_recipe`/`restore_recipe`. ISO civil date, `None` while in the library.
+    pub archived_at: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -100,8 +103,39 @@ pub fn load_recipe(
     crate::db::with(|conn| load_recipe_in(conn, &household_id, &recipe_id))
 }
 
+/// The household's library: active recipes only.
 pub fn list_recipes(household_id: String) -> Result<Vec<RecipeSummaryDto>, KimattaError> {
     crate::db::with(|conn| list_recipes_in(conn, &household_id))
+}
+
+/// Recipes the household has archived, so they can be restored.
+pub fn list_archived_recipes(household_id: String) -> Result<Vec<RecipeSummaryDto>, KimattaError> {
+    crate::db::with(|conn| list_archived_recipes_in(conn, &household_id))
+}
+
+/// "Delete" (owner decision 2026-08-28: archive, never hard-delete). `archived_on` is the
+/// local civil date, supplied by Dart because Rust never reads the clock (invariant 20).
+/// Idempotent; returns the recipe as stored, with `archived_at` set.
+pub fn archive_recipe(
+    household_id: String,
+    recipe_id: String,
+    archived_on: String,
+) -> Result<RecipeDto, KimattaError> {
+    crate::db::with(|conn| archive_recipe_in(conn, &household_id, &recipe_id, &archived_on))
+}
+
+/// Undoes `archive_recipe`. Idempotent; returns the recipe as stored.
+pub fn restore_recipe(household_id: String, recipe_id: String) -> Result<RecipeDto, KimattaError> {
+    crate::db::with(|conn| restore_recipe_in(conn, &household_id, &recipe_id))
+}
+
+/// The known unit vocabulary, so the editor's dropdown has one source and cannot drift from
+/// the domain (as `known_restriction_kinds` does for restrictions).
+pub fn known_unit_kinds() -> Vec<String> {
+    UnitKind::ALL
+        .iter()
+        .map(|kind| kind.as_str().to_owned())
+        .collect()
 }
 
 /// Empty `id` mints a UUID. Returns the stored item.
@@ -249,7 +283,8 @@ fn recipe_to_domain(dto: RecipeDto) -> Result<Recipe, KimattaError> {
     )?)
 }
 
-fn recipe_from_domain(r: &Recipe) -> RecipeDto {
+fn recipe_from_domain(record: &RecipeRecord) -> RecipeDto {
+    let r = &record.recipe;
     RecipeDto {
         id: r.id().as_str().to_owned(),
         household_id: r.household_id().as_str().to_owned(),
@@ -263,6 +298,24 @@ fn recipe_from_domain(r: &Recipe) -> RecipeDto {
             source_name: r.provenance().source_name().map(str::to_owned),
             source_author: r.provenance().source_author().map(str::to_owned),
         },
+        archived_at: record.archived_at.map(format_civil_date),
+    }
+}
+
+/// The recipe as stored, for the commands that have just written it and promise to return
+/// what was stored — including the archive marker, which no write here can set.
+fn stored_recipe(
+    conn: &Connection,
+    household: &HouseholdId,
+    id: &RecipeId,
+) -> Result<RecipeDto, KimattaError> {
+    match kimatta_storage::load_recipe(conn, household, id)? {
+        Some(record) => Ok(recipe_from_domain(&record)),
+        None => Err(StorageError::NoSuchRecipe {
+            recipe: id.as_str().to_owned(),
+            household: household.as_str().to_owned(),
+        }
+        .into()),
     }
 }
 
@@ -280,7 +333,9 @@ fn custom_from_domain(c: &CustomIngredient) -> CustomIngredientDto {
 fn save_recipe_in(conn: &mut Connection, dto: RecipeDto) -> Result<RecipeDto, KimattaError> {
     let recipe = recipe_to_domain(dto)?;
     kimatta_storage::save_recipe(conn, &recipe)?;
-    Ok(recipe_from_domain(&recipe))
+    // Read back rather than echo the input: `archived_at` is not in the request, and an edit
+    // of an archived recipe must keep reporting it archived.
+    stored_recipe(conn, recipe.household_id(), recipe.id())
 }
 
 fn load_recipe_in(
@@ -295,18 +350,59 @@ fn load_recipe_in(
         .map(recipe_from_domain))
 }
 
-fn list_recipes_in(
+fn summaries(
     conn: &Connection,
     household_id: &str,
+    listing: RecipeListing,
 ) -> Result<Vec<RecipeSummaryDto>, KimattaError> {
     let household = HouseholdId::new(household_id)?;
-    Ok(kimatta_storage::list_recipes(conn, &household)?
+    Ok(kimatta_storage::list_recipes(conn, &household, listing)?
         .into_iter()
         .map(|s| RecipeSummaryDto {
             id: s.id.as_str().to_owned(),
             title: s.title,
         })
         .collect())
+}
+
+fn list_recipes_in(
+    conn: &Connection,
+    household_id: &str,
+) -> Result<Vec<RecipeSummaryDto>, KimattaError> {
+    summaries(conn, household_id, RecipeListing::Active)
+}
+
+fn list_archived_recipes_in(
+    conn: &Connection,
+    household_id: &str,
+) -> Result<Vec<RecipeSummaryDto>, KimattaError> {
+    summaries(conn, household_id, RecipeListing::Archived)
+}
+
+/// The date is parsed before storage is touched, as `ensure_in` parses the anchor, so a
+/// malformed one is a typed `Planning` error and writes nothing.
+fn archive_recipe_in(
+    conn: &mut Connection,
+    household_id: &str,
+    recipe_id: &str,
+    archived_on: &str,
+) -> Result<RecipeDto, KimattaError> {
+    let household = HouseholdId::new(household_id)?;
+    let id = RecipeId::new(recipe_id)?;
+    let at = kimatta_storage::parse_civil_date(archived_on)?;
+    kimatta_storage::archive_recipe(conn, &household, &id, at)?;
+    stored_recipe(conn, &household, &id)
+}
+
+fn restore_recipe_in(
+    conn: &mut Connection,
+    household_id: &str,
+    recipe_id: &str,
+) -> Result<RecipeDto, KimattaError> {
+    let household = HouseholdId::new(household_id)?;
+    let id = RecipeId::new(recipe_id)?;
+    kimatta_storage::restore_recipe(conn, &household, &id)?;
+    stored_recipe(conn, &household, &id)
 }
 
 fn add_custom_ingredient_in(
@@ -390,7 +486,145 @@ mod tests {
             instructions: "Cook.".to_owned(),
             lines,
             provenance: authored(),
+            archived_at: None,
         }
+    }
+
+    fn ids(list: Vec<RecipeSummaryDto>) -> Vec<String> {
+        list.into_iter().map(|s| s.id).collect()
+    }
+
+    fn titles(list: Vec<RecipeSummaryDto>) -> Vec<String> {
+        list.into_iter().map(|s| s.title).collect()
+    }
+
+    /// The fixture's `Recipe {id}` titles sort the way their ids do, so the id assertions
+    /// elsewhere cannot tell `ORDER BY title` from insertion order, nor prove `title` is
+    /// populated at all. These two sort opposite to their ids.
+    #[test]
+    fn list_recipes_reports_titles_ordered_by_title_not_id() {
+        let mut conn = open_seeded(&["h"]);
+        let mut first = recipe("h", "r1", vec![]);
+        first.title = "Zucchini".to_owned();
+        let mut second = recipe("h", "r2", vec![]);
+        second.title = "Apple".to_owned();
+        save_recipe_in(&mut conn, first).unwrap();
+        save_recipe_in(&mut conn, second).unwrap();
+        assert_eq!(
+            titles(list_recipes_in(&conn, "h").unwrap()),
+            vec!["Apple", "Zucchini"]
+        );
+        assert_eq!(ids(list_recipes_in(&conn, "h").unwrap()), vec!["r2", "r1"]);
+    }
+
+    // --- MVP-008: archive commands ---------------------------------------------------------
+
+    #[test]
+    fn archive_then_restore_round_trips_through_the_bridge() {
+        let mut conn = open_seeded(&["h"]);
+        let saved = save_recipe_in(&mut conn, recipe("h", "r", vec![])).unwrap();
+        assert_eq!(saved.archived_at, None);
+        let archived = archive_recipe_in(&mut conn, "h", "r", "2026-08-29").unwrap();
+        assert_eq!(archived.archived_at, Some("2026-08-29".to_owned()));
+        assert_eq!(archived.title, "Recipe r");
+        // `load_recipe` still resolves the id and reports the marker.
+        let loaded = load_recipe_in(&conn, "h", "r").unwrap().unwrap();
+        assert_eq!(loaded.archived_at, Some("2026-08-29".to_owned()));
+        // Idempotent, first date kept.
+        let again = archive_recipe_in(&mut conn, "h", "r", "2026-09-01").unwrap();
+        assert_eq!(again.archived_at, Some("2026-08-29".to_owned()));
+        let restored = restore_recipe_in(&mut conn, "h", "r").unwrap();
+        assert_eq!(restored.archived_at, None);
+        assert_eq!(load_recipe_in(&conn, "h", "r").unwrap().unwrap(), restored);
+    }
+
+    #[test]
+    fn archived_recipes_leave_list_recipes_and_appear_in_list_archived_recipes() {
+        let mut conn = open_seeded(&["h"]);
+        save_recipe_in(&mut conn, recipe("h", "r1", vec![])).unwrap();
+        save_recipe_in(&mut conn, recipe("h", "r2", vec![])).unwrap();
+        assert!(list_archived_recipes_in(&conn, "h").unwrap().is_empty());
+        archive_recipe_in(&mut conn, "h", "r1", "2026-08-29").unwrap();
+        assert_eq!(ids(list_recipes_in(&conn, "h").unwrap()), vec!["r2"]);
+        assert_eq!(
+            ids(list_archived_recipes_in(&conn, "h").unwrap()),
+            vec!["r1"]
+        );
+        restore_recipe_in(&mut conn, "h", "r1").unwrap();
+        assert_eq!(ids(list_recipes_in(&conn, "h").unwrap()), vec!["r1", "r2"]);
+        assert!(list_archived_recipes_in(&conn, "h").unwrap().is_empty());
+    }
+
+    /// The date is parsed before storage is touched, with the same shape rule as the planning
+    /// anchor, so an instant or a bare number is a typed `Planning` error and writes nothing.
+    #[test]
+    fn archive_rejects_a_non_civil_date_as_planning_error() {
+        let mut conn = open_seeded(&["h"]);
+        save_recipe_in(&mut conn, recipe("h", "r", vec![])).unwrap();
+        for bad in ["2026-08-29T23:00:00Z", "20260829", ""] {
+            let err = archive_recipe_in(&mut conn, "h", "r", bad).unwrap_err();
+            assert!(
+                matches!(err, KimattaError::Planning { .. }),
+                "{bad:?} gave {err:?}"
+            );
+        }
+        assert_eq!(
+            load_recipe_in(&conn, "h", "r")
+                .unwrap()
+                .unwrap()
+                .archived_at,
+            None
+        );
+    }
+
+    #[test]
+    fn archive_of_another_households_recipe_is_storage_error() {
+        let mut conn = open_seeded(&["h1", "h2"]);
+        save_recipe_in(&mut conn, recipe("h1", "r", vec![])).unwrap();
+        let err = archive_recipe_in(&mut conn, "h2", "r", "2026-08-29").unwrap_err();
+        assert!(matches!(err, KimattaError::Storage { .. }), "got {err:?}");
+        let err = restore_recipe_in(&mut conn, "h2", "r").unwrap_err();
+        assert!(matches!(err, KimattaError::Storage { .. }), "got {err:?}");
+        let err = archive_recipe_in(&mut conn, "h1", "ghost", "2026-08-29").unwrap_err();
+        assert!(matches!(err, KimattaError::Storage { .. }), "got {err:?}");
+        assert_eq!(
+            load_recipe_in(&conn, "h1", "r")
+                .unwrap()
+                .unwrap()
+                .archived_at,
+            None
+        );
+        assert!(list_archived_recipes_in(&conn, "h2").unwrap().is_empty());
+    }
+
+    /// `archived_at` on the DTO is output only: an edit of an archived recipe sent with
+    /// `archived_at: None` neither restores it nor reports it restored.
+    #[test]
+    fn saving_an_archived_recipe_keeps_reporting_it_archived() {
+        let mut conn = open_seeded(&["h"]);
+        save_recipe_in(&mut conn, recipe("h", "r", vec![])).unwrap();
+        archive_recipe_in(&mut conn, "h", "r", "2026-08-29").unwrap();
+        let mut edited = recipe("h", "r", vec![]);
+        edited.title = "Renamed".to_owned();
+        let stored = save_recipe_in(&mut conn, edited).unwrap();
+        assert_eq!(stored.title, "Renamed");
+        assert_eq!(stored.archived_at, Some("2026-08-29".to_owned()));
+        assert!(list_recipes_in(&conn, "h").unwrap().is_empty());
+        assert_eq!(
+            ids(list_archived_recipes_in(&conn, "h").unwrap()),
+            vec!["r"]
+        );
+    }
+
+    /// Hard-coded rather than mapped from `UnitKind::ALL`, for the reason
+    /// `known_restriction_kinds_are_the_eleven_domain_tokens` records: a test mirroring the
+    /// constant cannot catch an addition to it, and this list is what the unit dropdown shows.
+    #[test]
+    fn known_unit_kinds_matches_the_domain_vocabulary() {
+        assert_eq!(
+            known_unit_kinds(),
+            vec!["tsp", "tbsp", "cup", "fl_oz", "ml", "l", "g", "kg", "oz", "lb", "piece"]
+        );
     }
 
     #[test]

@@ -9,6 +9,7 @@ import 'package:meal_mate/src/rust/api/planning.dart';
 import 'package:meal_mate/src/rust/api/recipe.dart';
 import 'package:meal_mate/src/rust/api/restrictions.dart';
 import 'package:meal_mate/src/rust/frb_generated.dart';
+import 'package:meal_mate/features/recipes/recipe_fields.dart';
 import 'package:meal_mate/features/restrictions/restrictions_screen.dart';
 
 void main() {
@@ -37,9 +38,9 @@ void main() {
     );
   });
 
-  test('open_database migrates a real database to schema v4', () async {
+  test('open_database migrates a real database to schema v5', () async {
     final report = await openDatabase(dbPath: await tempDb());
-    expect(report.schemaVersion, 4);
+    expect(report.schemaVersion, 5);
   });
 
   test('storage failure surfaces as KimattaError_Storage', () async {
@@ -371,6 +372,106 @@ void main() {
     );
     expect(await listRecipes(householdId: 'not-${h.id}'), isEmpty);
     expect(await loadRecipe(householdId: h.id, recipeId: saved.id), isNotNull);
+  });
+
+  test('archiving hides a recipe and restoring brings it back', () async {
+    await openDatabase(dbPath: await tempDb());
+    final h = await bootstrapHousehold();
+    final saved = await saveRecipe(recipe: recipeFor(h.id, const []));
+    expect(saved.archivedAt, isNull);
+    final archived = await archiveRecipe(
+      householdId: h.id,
+      recipeId: saved.id,
+      archivedOn: '2026-08-29',
+    );
+    expect(archived.archivedAt, '2026-08-29');
+    expect(await listRecipes(householdId: h.id), isEmpty);
+    final gone = await listArchivedRecipes(householdId: h.id);
+    expect(gone.single.id, saved.id);
+    // Still resolvable by id: the reference-stability half of the archive policy.
+    final loaded = await loadRecipe(householdId: h.id, recipeId: saved.id);
+    expect(loaded?.archivedAt, '2026-08-29');
+    final restored = await restoreRecipe(householdId: h.id, recipeId: saved.id);
+    expect(restored.archivedAt, isNull);
+    expect((await listRecipes(householdId: h.id)).single.id, saved.id);
+    expect(await listArchivedRecipes(householdId: h.id), isEmpty);
+  });
+
+  test('an archived recipe survives reopening the same file', () async {
+    final path = await tempDb();
+    await openDatabase(dbPath: path);
+    final h = await bootstrapHousehold();
+    final saved = await saveRecipe(recipe: recipeFor(h.id, const []));
+    await archiveRecipe(
+      householdId: h.id,
+      recipeId: saved.id,
+      archivedOn: '2026-08-29',
+    );
+    await openDatabase(dbPath: path);
+    expect(await listRecipes(householdId: h.id), isEmpty);
+    expect((await listArchivedRecipes(householdId: h.id)).single.id, saved.id);
+    final again = await loadRecipe(householdId: h.id, recipeId: saved.id);
+    expect(again?.archivedAt, '2026-08-29');
+  });
+
+  test('a non-civil archive date is a typed Planning error', () async {
+    await openDatabase(dbPath: await tempDb());
+    final h = await bootstrapHousehold();
+    final saved = await saveRecipe(recipe: recipeFor(h.id, const []));
+    await expectLater(
+      () => archiveRecipe(
+        householdId: h.id,
+        recipeId: saved.id,
+        archivedOn: '2026-08-29T23:00:00Z',
+      ),
+      throwsA(isA<KimattaError_Planning>()),
+    );
+    expect((await listRecipes(householdId: h.id)).single.id, saved.id);
+  });
+
+  // The `1.5` the Dart parser sends as 15/10 is stored canonically as 3/2.
+  test('a decimal quantity is stored as its lowest-terms rational', () async {
+    await openDatabase(dbPath: await tempDb());
+    final h = await bootstrapHousehold();
+    final saved = await saveRecipe(
+      recipe: recipeFor(h.id, const [
+        IngredientLineDto(
+          originalText: '1.5 cups milk',
+          name: 'milk',
+          quantity: QuantityDto.exact(numer: 15, denom: 10),
+          unit: UnitDto.known(unit: 'cup'),
+          optional: false,
+        ),
+      ]),
+    );
+    expect(
+      saved.lines.single.quantity,
+      const QuantityDto.exact(numer: 3, denom: 2),
+    );
+  });
+
+  // The unit counterpart of the restriction cross-check above. Labels may equal their token
+  // (`cup`), so the assertion is on the hard-coded vocabulary and on no raw underscore
+  // reaching a user, not on label ≠ token.
+  test('every known unit kind has a Dart label', () async {
+    final kinds = await knownUnitKinds();
+    expect(kinds, [
+      'tsp',
+      'tbsp',
+      'cup',
+      'fl_oz',
+      'ml',
+      'l',
+      'g',
+      'kg',
+      'oz',
+      'lb',
+      'piece',
+    ]);
+    for (final kind in kinds) {
+      expect(unitLabel(kind), isNotEmpty, reason: '$kind has no label');
+      expect(unitLabel(kind), isNot(contains('_')), reason: '$kind is raw');
+    }
   });
 
   test('custom ingredients list only for their household', () async {

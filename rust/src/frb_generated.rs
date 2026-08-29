@@ -39,7 +39,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.13.0";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = 1348893926;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -878769591;
 
 // Section: executor
 
@@ -74,6 +74,45 @@ fn wire__crate__api__recipe__add_custom_ingredient_impl(
             move |context| {
                 transform_result_sse::<_, crate::api::error::KimattaError>((move || {
                     let output_ok = crate::api::recipe::add_custom_ingredient(api_item)?;
+                    std::result::Result::Ok(output_ok)
+                })())
+            }
+        },
+    )
+}
+fn wire__crate__api__recipe__archive_recipe_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "archive_recipe",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_household_id = <String>::sse_decode(&mut deserializer);
+            let api_recipe_id = <String>::sse_decode(&mut deserializer);
+            let api_archived_on = <String>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, crate::api::error::KimattaError>((move || {
+                    let output_ok = crate::api::recipe::archive_recipe(
+                        api_household_id,
+                        api_recipe_id,
+                        api_archived_on,
+                    )?;
                     std::result::Result::Ok(output_ok)
                 })())
             }
@@ -278,6 +317,71 @@ fn wire__crate__api__restrictions__known_restriction_kinds_impl(
         },
     )
 }
+fn wire__crate__api__recipe__known_unit_kinds_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "known_unit_kinds",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, ()>((move || {
+                    let output_ok = Ok::<_, ()>(crate::api::recipe::known_unit_kinds())?;
+                    std::result::Result::Ok(output_ok)
+                })())
+            }
+        },
+    )
+}
+fn wire__crate__api__recipe__list_archived_recipes_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "list_archived_recipes",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_household_id = <String>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, crate::api::error::KimattaError>((move || {
+                    let output_ok = crate::api::recipe::list_archived_recipes(api_household_id)?;
+                    std::result::Result::Ok(output_ok)
+                })())
+            }
+        },
+    )
+}
 fn wire__crate__api__recipe__list_custom_ingredients_impl(
     port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
@@ -474,6 +578,41 @@ fn wire__crate__api__household__rename_household_impl(
                 transform_result_sse::<_, crate::api::error::KimattaError>((move || {
                     let output_ok =
                         crate::api::household::rename_household(api_household_id, api_name)?;
+                    std::result::Result::Ok(output_ok)
+                })())
+            }
+        },
+    )
+}
+fn wire__crate__api__recipe__restore_recipe_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "restore_recipe",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_household_id = <String>::sse_decode(&mut deserializer);
+            let api_recipe_id = <String>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, crate::api::error::KimattaError>((move || {
+                    let output_ok =
+                        crate::api::recipe::restore_recipe(api_household_id, api_recipe_id)?;
                     std::result::Result::Ok(output_ok)
                 })())
             }
@@ -988,6 +1127,7 @@ impl SseDecode for crate::api::recipe::RecipeDto {
         let mut var_lines = <Vec<crate::api::recipe::IngredientLineDto>>::sse_decode(deserializer);
         let mut var_provenance =
             <crate::api::recipe::RecipeProvenanceDto>::sse_decode(deserializer);
+        let mut var_archivedAt = <Option<String>>::sse_decode(deserializer);
         return crate::api::recipe::RecipeDto {
             id: var_id,
             household_id: var_householdId,
@@ -996,6 +1136,7 @@ impl SseDecode for crate::api::recipe::RecipeDto {
             instructions: var_instructions,
             lines: var_lines,
             provenance: var_provenance,
+            archived_at: var_archivedAt,
         };
     }
 }
@@ -1102,46 +1243,52 @@ fn pde_ffi_dispatcher_primary_impl(
         1 => {
             wire__crate__api__recipe__add_custom_ingredient_impl(port, ptr, rust_vec_len, data_len)
         }
-        2 => {
+        2 => wire__crate__api__recipe__archive_recipe_impl(port, ptr, rust_vec_len, data_len),
+        3 => {
             wire__crate__api__household__bootstrap_household_impl(port, ptr, rust_vec_len, data_len)
         }
-        3 => {
+        4 => {
             wire__crate__api__household__complete_onboarding_impl(port, ptr, rust_vec_len, data_len)
         }
-        5 => wire__crate__api__planning__ensure_planning_cycle_impl(
+        6 => wire__crate__api__planning__ensure_planning_cycle_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        6 => wire__crate__api__health__init_app_impl(port, ptr, rust_vec_len, data_len),
-        7 => wire__crate__api__restrictions__known_restriction_kinds_impl(
+        7 => wire__crate__api__health__init_app_impl(port, ptr, rust_vec_len, data_len),
+        8 => wire__crate__api__restrictions__known_restriction_kinds_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        8 => wire__crate__api__recipe__list_custom_ingredients_impl(
+        9 => wire__crate__api__recipe__known_unit_kinds_impl(port, ptr, rust_vec_len, data_len),
+        10 => {
+            wire__crate__api__recipe__list_archived_recipes_impl(port, ptr, rust_vec_len, data_len)
+        }
+        11 => wire__crate__api__recipe__list_custom_ingredients_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        9 => wire__crate__api__recipe__list_recipes_impl(port, ptr, rust_vec_len, data_len),
-        10 => wire__crate__api__recipe__load_recipe_impl(port, ptr, rust_vec_len, data_len),
-        11 => wire__crate__api__restrictions__load_restrictions_impl(
+        12 => wire__crate__api__recipe__list_recipes_impl(port, ptr, rust_vec_len, data_len),
+        13 => wire__crate__api__recipe__load_recipe_impl(port, ptr, rust_vec_len, data_len),
+        14 => wire__crate__api__restrictions__load_restrictions_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        12 => wire__crate__api__health__open_database_impl(port, ptr, rust_vec_len, data_len),
-        13 => wire__crate__api__household__rename_household_impl(port, ptr, rust_vec_len, data_len),
-        14 => {
+        15 => wire__crate__api__health__open_database_impl(port, ptr, rust_vec_len, data_len),
+        16 => wire__crate__api__household__rename_household_impl(port, ptr, rust_vec_len, data_len),
+        17 => wire__crate__api__recipe__restore_recipe_impl(port, ptr, rust_vec_len, data_len),
+        18 => {
             wire__crate__api__planning__save_planning_cycle_impl(port, ptr, rust_vec_len, data_len)
         }
-        15 => wire__crate__api__recipe__save_recipe_impl(port, ptr, rust_vec_len, data_len),
-        16 => wire__crate__api__restrictions__save_restrictions_impl(
+        19 => wire__crate__api__recipe__save_recipe_impl(port, ptr, rust_vec_len, data_len),
+        20 => wire__crate__api__restrictions__save_restrictions_impl(
             port,
             ptr,
             rust_vec_len,
@@ -1159,7 +1306,7 @@ fn pde_ffi_dispatcher_sync_impl(
 ) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
     // Codec=Pde (Serialization + dispatch), see doc to use other codecs
     match func_id {
-        4 => wire__crate__api__health__core_version_impl(ptr, rust_vec_len, data_len),
+        5 => wire__crate__api__health__core_version_impl(ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
@@ -1440,6 +1587,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::recipe::RecipeDto {
             self.instructions.into_into_dart().into_dart(),
             self.lines.into_into_dart().into_dart(),
             self.provenance.into_into_dart().into_dart(),
+            self.archived_at.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -1860,6 +2008,7 @@ impl SseEncode for crate::api::recipe::RecipeDto {
         <String>::sse_encode(self.instructions, serializer);
         <Vec<crate::api::recipe::IngredientLineDto>>::sse_encode(self.lines, serializer);
         <crate::api::recipe::RecipeProvenanceDto>::sse_encode(self.provenance, serializer);
+        <Option<String>>::sse_encode(self.archived_at, serializer);
     }
 }
 
