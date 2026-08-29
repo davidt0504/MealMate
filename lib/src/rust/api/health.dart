@@ -4,19 +4,17 @@
 // ignore_for_file: invalid_use_of_internal_member, unused_import, unnecessary_import
 
 import '../frb_generated.dart';
+import 'error.dart';
 
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
-import 'package:freezed_annotation/freezed_annotation.dart' hide protected;
-part 'health.freezed.dart';
-
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `fmt`, `fmt`, `from`
 
 String coreVersion() => RustLib.instance.api.crateApiHealthCoreVersion();
 
-/// Opens the SQLite database at `db_path` (creating it), applies migrations, and reports the
-/// resulting schema version. Empty/whitespace paths are rejected before touching storage.
-Future<HealthReport> healthCheck({required String dbPath}) =>
-    RustLib.instance.api.crateApiHealthHealthCheck(dbPath: dbPath);
+/// Opens the SQLite database at `db_path` (creating it), applies migrations, installs it as
+/// the process-wide connection, and reports the schema version. Empty/whitespace paths are
+/// rejected before touching storage. Calling again replaces the connection.
+Future<HealthReport> openDatabase({required String dbPath}) =>
+    RustLib.instance.api.crateApiHealthOpenDatabase(dbPath: dbPath);
 
 class HealthReport {
   final String dbPath;
@@ -34,13 +32,4 @@ class HealthReport {
           runtimeType == other.runtimeType &&
           dbPath == other.dbPath &&
           schemaVersion == other.schemaVersion;
-}
-
-@freezed
-sealed class KimattaError with _$KimattaError implements FrbException {
-  const KimattaError._();
-
-  const factory KimattaError.invalidPath() = KimattaError_InvalidPath;
-  const factory KimattaError.storage({required String message}) =
-      KimattaError_Storage;
 }

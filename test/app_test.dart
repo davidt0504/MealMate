@@ -6,19 +6,73 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:meal_mate/app/app.dart';
+import 'package:meal_mate/features/household/household_provider.dart';
 import 'package:meal_mate/features/settings/health_provider.dart';
+import 'package:meal_mate/src/rust/api/error.dart';
 import 'package:meal_mate/src/rust/api/health.dart';
+import 'package:meal_mate/src/rust/api/household.dart';
 
 const okReport = HealthReport(dbPath: '/x/kimatta.db', schemaVersion: 1);
+const okHousehold = HouseholdDto(
+  id: 'h-1',
+  name: null,
+  members: [MemberDto(id: 'm-1', displayName: 'Me')],
+);
+const twoMemberHousehold = HouseholdDto(
+  id: 'h-2',
+  name: 'Casa',
+  members: [
+    MemberDto(id: 'm-1', displayName: 'Me'),
+    MemberDto(id: 'm-2', displayName: 'Ada'),
+  ],
+);
 
-/// The provider is always overridden, which is why `flutter test` never loads
-/// the native library: no test reaches `healthCheck`.
+/// Both providers are always overridden, which is why `flutter test` never
+/// loads the native library: no test reaches `openDatabase` or
+/// `bootstrapHousehold`. The save path goes through `HouseholdNotifier.rename`,
+/// so `rename:` fakes it at the same seam; a test that taps **Save name**
+/// without supplying one fails loudly rather than reaching the real bridge.
+/// `bridge_native_test.dart` is what proves the rename write itself.
+class _FakeHouseholdNotifier extends HouseholdNotifier {
+  _FakeHouseholdNotifier(this._build, this._rename);
+
+  final FutureOr<HouseholdDto> Function()? _build;
+  final Future<HouseholdDto> Function(String, String?)? _rename;
+
+  @override
+  Future<HouseholdDto> build() async {
+    // Keep the real provider's dependency edge: App now holds only
+    // householdProvider, so a stub that skipped this await would leave
+    // healthReportProvider uncreated and test 13 would read 0.
+    await ref.watch(healthReportProvider.future);
+    return (_build ?? () => okHousehold)();
+  }
+
+  @override
+  Future<HouseholdDto> rename(String householdId, String? name) async {
+    final fake = _rename;
+    if (fake == null) {
+      throw StateError(
+        'this test taps Save name without a harness `rename:` hook',
+      );
+    }
+    final updated = await fake(householdId, name);
+    state = AsyncData(updated);
+    return updated;
+  }
+}
+
 Widget harness({
   String initial = '/plan',
   FutureOr<HealthReport> Function()? health,
+  FutureOr<HouseholdDto> Function()? household,
+  Future<HouseholdDto> Function(String, String?)? rename,
 }) => ProviderScope(
   overrides: [
     healthReportProvider.overrideWith((_) => (health ?? () => okReport)()),
+    householdProvider.overrideWith(
+      () => _FakeHouseholdNotifier(household, rename),
+    ),
   ],
   child: App(initialLocation: initial),
 );
@@ -287,6 +341,282 @@ void main() {
     expect(creations, 1);
   });
 
+  testWidgets('the household is bootstrapped once at launch', (tester) async {
+    usePixel5(tester);
+    var bootstraps = 0;
+    await tester.pumpWidget(
+      harness(
+        household: () {
+          bootstraps++;
+          return okHousehold;
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(bootstraps, 1);
+    await tester.tap(tab('Settings'));
+    await tester.pumpAndSettle();
+    expect(bootstraps, 1);
+  });
+
+  testWidgets('Settings summarises an unnamed solo household honestly', (
+    tester,
+  ) async {
+    usePixel5(tester);
+    await tester.pumpWidget(harness(initial: '/settings'));
+    await tester.pumpAndSettle();
+    expect(
+      find.text('Unnamed household · Just you for now — a household of one.'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('the Settings tile opens the Household screen', (tester) async {
+    usePixel5(tester);
+    await tester.pumpWidget(harness(initial: '/settings'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(ListTile, 'Household'));
+    await tester.pumpAndSettle();
+    expect(title('Household'), findsOneWidget);
+    // Back returns to Settings: nested under the settings branch, not a new tab.
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+    expect(title('Settings'), findsOneWidget);
+  });
+
+  testWidgets('Household screen shows the identity and the rename controls', (
+    tester,
+  ) async {
+    usePixel5(tester);
+    await tester.pumpWidget(harness(initial: '/settings/household'));
+    await tester.pumpAndSettle();
+    expect(title('Household'), findsOneWidget);
+    expect(find.text('Unnamed household'), findsOneWidget);
+    expect(find.text('Me'), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, 'Save name'), findsOneWidget);
+    expect(find.widgetWithText(TextField, 'Household name'), findsOneWidget);
+  });
+
+  testWidgets('Household screen reports a storage failure in prose', (
+    tester,
+  ) async {
+    usePixel5(tester);
+    await tester.pumpWidget(
+      harness(
+        initial: '/settings/household',
+        household: () => throw const KimattaError.storage(message: 'locked'),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Household unavailable: locked'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Household screen meets the accessibility guidelines', (
+    tester,
+  ) async {
+    usePixel5(tester);
+    for (final brightness in Brightness.values) {
+      tester.platformDispatcher.platformBrightnessTestValue = brightness;
+      await tester.pumpWidget(harness(initial: '/settings/household'));
+      await tester.pumpAndSettle();
+      await expectLater(tester, meetsGuideline(androidTapTargetGuideline));
+      await expectLater(tester, meetsGuideline(labeledTapTargetGuideline));
+      await expectLater(tester, meetsGuideline(textContrastGuideline));
+    }
+  });
+
+  // Pins `describeFailure`'s NotOpen arm — the one variant the process-wide
+  // connection makes genuinely reachable in production, since every bridge call
+  // returns it when `open_database` has not run.
+  testWidgets('Household screen reports a closed database in prose', (
+    tester,
+  ) async {
+    usePixel5(tester);
+    await tester.pumpWidget(
+      harness(
+        initial: '/settings/household',
+        household: () => throw const KimattaError.notOpen(),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.text('Household unavailable: the database is not open'),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  // Pins `describeFailure`'s InvalidPath arm.
+  testWidgets('Household screen reports an invalid database path in prose', (
+    tester,
+  ) async {
+    usePixel5(tester);
+    await tester.pumpWidget(
+      harness(
+        initial: '/settings/household',
+        household: () => throw const KimattaError.invalidPath(),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.text('Household unavailable: the database path is invalid'),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  // Pins `describeFailure`'s `_` arm, which the two typed arms above narrow to
+  // genuinely foreign errors. As in the Settings fallback test, the raw
+  // `toString()` is what is deliberately pinned.
+  testWidgets('Household screen falls back for a non-KimattaError failure', (
+    tester,
+  ) async {
+    usePixel5(tester);
+    await tester.pumpWidget(
+      harness(
+        initial: '/settings/household',
+        household: () => throw StateError('platform channel returned null'),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.textContaining('Household unavailable: Bad state:'),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  // Pins the Settings health switch's NotOpen arm, added by this card alongside
+  // the Household screen's.
+  testWidgets('Settings reports a closed database in prose', (tester) async {
+    usePixel5(tester);
+    await tester.pumpWidget(
+      harness(
+        initial: '/settings',
+        health: () => throw const KimattaError.notOpen(),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.text('Local database unavailable: the database is not open'),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  // Pins `describeHousehold`'s plural arm; `okHousehold` has exactly one member,
+  // so no other test reaches it.
+  testWidgets('Settings summarises a household with several members', (
+    tester,
+  ) async {
+    usePixel5(tester);
+    await tester.pumpWidget(
+      harness(initial: '/settings', household: () => twoMemberHousehold),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Casa · 2 members.'), findsOneWidget);
+  });
+
+  // The finding this pins: a save that outlives the screen. `renameHousehold`
+  // commits, then the route is popped before the future returns. Through the
+  // notifier the new name still reaches every listener; through the old
+  // `ref.invalidate` it raised a swallowed StateError and the UI kept the stale
+  // name for the rest of the session.
+  testWidgets('a save that outlives the screen still refreshes the UI', (
+    tester,
+  ) async {
+    usePixel5(tester);
+    final pending = Completer<HouseholdDto>();
+    await tester.pumpWidget(
+      harness(initial: '/settings/household', rename: (_, _) => pending.future),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byType(TextField), 'Casa');
+    await tester.tap(find.widgetWithText(FilledButton, 'Save name'));
+    await tester.pump();
+
+    // Leave the Household screen while the write is still in flight.
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+    expect(title('Settings'), findsOneWidget);
+
+    pending.complete(
+      const HouseholdDto(
+        id: 'h-1',
+        name: 'Casa',
+        members: [MemberDto(id: 'm-1', displayName: 'Me')],
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    expect(
+      find.text('Casa · Just you for now — a household of one.'),
+      findsOneWidget,
+    );
+  });
+
+  // The broad `catch` in `_save` still renders every save failure as prose.
+  testWidgets('a failed save reports the reason in a snackbar', (tester) async {
+    usePixel5(tester);
+    await tester.pumpWidget(
+      harness(
+        initial: '/settings/household',
+        rename: (_, _) async =>
+            throw const KimattaError.storage(message: 'database is locked'),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byType(TextField), 'Casa');
+    await tester.tap(find.widgetWithText(FilledButton, 'Save name'));
+    await tester.pumpAndSettle();
+    expect(
+      find.text('Household unavailable: database is locked'),
+      findsOneWidget,
+    );
+    // The button is re-enabled: the `finally` ran.
+    expect(
+      tester
+          .widget<FilledButton>(find.widgetWithText(FilledButton, 'Save name'))
+          .onPressed,
+      isNotNull,
+    );
+  });
+
+  // Storage trims the name, so the field has to agree with what was persisted —
+  // otherwise the field reads `  Casa  ` while the header reads `Casa`, and
+  // re-tapping Save is a no-op the user cannot tell apart from a failure.
+  testWidgets('the name field resyncs to the trimmed, stored value', (
+    tester,
+  ) async {
+    usePixel5(tester);
+    await tester.pumpWidget(
+      harness(
+        initial: '/settings/household',
+        rename: (id, name) async => HouseholdDto(
+          id: id,
+          name: name?.trim().isEmpty ?? true ? null : name!.trim(),
+          members: const [MemberDto(id: 'm-1', displayName: 'Me')],
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byType(TextField), '  Casa  ');
+    await tester.tap(find.widgetWithText(FilledButton, 'Save name'));
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<TextField>(find.byType(TextField)).controller?.text,
+      'Casa',
+    );
+    expect(find.text('Casa'), findsWidgets);
+  });
+
+  // Keep this test last: the assertion it provokes leaves the element tree
+  // half-updated, and every test pumped after it in the same file fails on a
+  // framework "dependent is not our descendant" assertion (measured).
   testWidgets('changing initialLocation on a live App element is rejected', (
     tester,
   ) async {

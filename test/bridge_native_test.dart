@@ -2,11 +2,25 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:meal_mate/src/rust/api/error.dart';
 import 'package:meal_mate/src/rust/api/health.dart';
+import 'package:meal_mate/src/rust/api/household.dart';
 import 'package:meal_mate/src/rust/frb_generated.dart';
 
 void main() {
   setUpAll(() async => RustLib.init());
+
+  Future<String> tempDb() async {
+    final dir = await Directory.systemTemp.createTemp('kimatta-test');
+    addTearDown(() => dir.delete(recursive: true));
+    return '${dir.path}${Platform.pathSeparator}k.db';
+  }
+
+  // Declared first on purpose: the connection is process-wide, so this must run
+  // before any openDatabase call in this file.
+  test('bootstrap_household before open_database is NotOpen', () async {
+    await expectLater(bootstrapHousehold, throwsA(isA<KimattaError_NotOpen>()));
+  });
 
   test('core_version crosses the bridge', () {
     expect(coreVersion(), '0.1.0');
@@ -14,17 +28,13 @@ void main() {
 
   test('typed Rust error is matchable in Dart', () async {
     await expectLater(
-      () => healthCheck(dbPath: '   '),
+      () => openDatabase(dbPath: '   '),
       throwsA(isA<KimattaError_InvalidPath>()),
     );
   });
 
-  test('health_check migrates a real database to schema v1', () async {
-    final dir = await Directory.systemTemp.createTemp('kimatta-test');
-    addTearDown(() => dir.delete(recursive: true));
-    final report = await healthCheck(
-      dbPath: '${dir.path}${Platform.pathSeparator}k.db',
-    );
+  test('open_database migrates a real database to schema v1', () async {
+    final report = await openDatabase(dbPath: await tempDb());
     expect(report.schemaVersion, 1);
   });
 
@@ -34,8 +44,57 @@ void main() {
         'kimatta-absent-${DateTime.now().microsecondsSinceEpoch}'
         '${Platform.pathSeparator}k.db';
     await expectLater(
-      () => healthCheck(dbPath: missing),
+      () => openDatabase(dbPath: missing),
       throwsA(isA<KimattaError_Storage>()),
     );
+  });
+
+  test('bootstrap creates one household once and reuses it', () async {
+    await openDatabase(dbPath: await tempDb());
+    final first = await bootstrapHousehold();
+    final second = await bootstrapHousehold();
+    expect(first.id, isNotEmpty);
+    expect(first.name, isNull);
+    expect(first.members.single.displayName, 'Me');
+    expect(second.id, first.id);
+    expect(second.members.single.id, first.members.single.id);
+  });
+
+  test('reopening the same file keeps the household (restart)', () async {
+    final path = await tempDb();
+    await openDatabase(dbPath: path);
+    final first = await bootstrapHousehold();
+    await openDatabase(dbPath: path);
+    final again = await bootstrapHousehold();
+    expect(again.id, first.id);
+    expect(again.members.length, 1);
+  });
+
+  test('rename persists and blank clears', () async {
+    await openDatabase(dbPath: await tempDb());
+    final h = await bootstrapHousehold();
+    final named = await renameHousehold(householdId: h.id, name: ' Casa ');
+    expect(named.name, 'Casa');
+    expect((await bootstrapHousehold()).name, 'Casa');
+    final cleared = await renameHousehold(householdId: h.id, name: '  ');
+    expect(cleared.name, isNull);
+  });
+
+  test('rename of a foreign id is rejected and changes nothing', () async {
+    await openDatabase(dbPath: await tempDb());
+    final h = await bootstrapHousehold();
+    await expectLater(
+      () => renameHousehold(householdId: 'not-${h.id}', name: 'x'),
+      throwsA(isA<KimattaError_Storage>()),
+    );
+    expect((await bootstrapHousehold()).name, isNull);
+  });
+
+  test('a different file is a different household', () async {
+    await openDatabase(dbPath: await tempDb());
+    final a = await bootstrapHousehold();
+    await openDatabase(dbPath: await tempDb());
+    final b = await bootstrapHousehold();
+    expect(b.id, isNot(a.id));
   });
 }

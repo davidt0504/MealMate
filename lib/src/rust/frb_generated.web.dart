@@ -6,7 +6,9 @@
 // Static analysis wrongly picks the IO variant, thus ignore this
 // ignore_for_file: argument_type_not_assignable
 
+import 'api/error.dart';
 import 'api/health.dart';
+import 'api/household.dart';
 
 import 'dart:async';
 import 'dart:convert';
@@ -30,10 +32,22 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   HealthReport dco_decode_health_report(dynamic raw);
 
   @protected
+  HouseholdDto dco_decode_household_dto(dynamic raw);
+
+  @protected
   KimattaError dco_decode_kimatta_error(dynamic raw);
 
   @protected
+  List<MemberDto> dco_decode_list_member_dto(dynamic raw);
+
+  @protected
   Uint8List dco_decode_list_prim_u_8_strict(dynamic raw);
+
+  @protected
+  MemberDto dco_decode_member_dto(dynamic raw);
+
+  @protected
+  String? dco_decode_opt_String(dynamic raw);
 
   @protected
   int dco_decode_u_32(dynamic raw);
@@ -51,10 +65,22 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   HealthReport sse_decode_health_report(SseDeserializer deserializer);
 
   @protected
+  HouseholdDto sse_decode_household_dto(SseDeserializer deserializer);
+
+  @protected
   KimattaError sse_decode_kimatta_error(SseDeserializer deserializer);
 
   @protected
+  List<MemberDto> sse_decode_list_member_dto(SseDeserializer deserializer);
+
+  @protected
   Uint8List sse_decode_list_prim_u_8_strict(SseDeserializer deserializer);
+
+  @protected
+  MemberDto sse_decode_member_dto(SseDeserializer deserializer);
+
+  @protected
+  String? sse_decode_opt_String(SseDeserializer deserializer);
 
   @protected
   int sse_decode_u_32(SseDeserializer deserializer);
@@ -78,13 +104,28 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_health_report(HealthReport self, SseSerializer serializer);
 
   @protected
+  void sse_encode_household_dto(HouseholdDto self, SseSerializer serializer);
+
+  @protected
   void sse_encode_kimatta_error(KimattaError self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_member_dto(
+    List<MemberDto> self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_list_prim_u_8_strict(
     Uint8List self,
     SseSerializer serializer,
   );
+
+  @protected
+  void sse_encode_member_dto(MemberDto self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_opt_String(String? self, SseSerializer serializer);
 
   @protected
   void sse_encode_u_32(int self, SseSerializer serializer);

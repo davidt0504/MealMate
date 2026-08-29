@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 
 import 'package:meal_mate/app/placeholder_screen.dart';
 import 'package:meal_mate/app/shell.dart';
+import 'package:meal_mate/features/household/household_screen.dart';
 import 'package:meal_mate/features/settings/settings_screen.dart';
 
 /// Plan is home: the product's default state is "this week is covered" (PRD v3 §15).
@@ -87,6 +88,12 @@ GoRouter buildRouter({String initialLocation = homeLocation}) => GoRouter(
             GoRoute(
               path: '/settings',
               builder: (_, _) => const SettingsScreen(),
+              routes: [
+                GoRoute(
+                  path: 'household',
+                  builder: (_, _) => const HouseholdScreen(),
+                ),
+              ],
             ),
           ],
         ),

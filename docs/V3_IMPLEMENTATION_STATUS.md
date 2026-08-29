@@ -1,6 +1,6 @@
 # V3 Pivot Checklist
 
-**Updated:** 2026-08-28 (MVP-003 card re-derivation, completing D-034). Update this file only when a pivot deliverable or deferral below changes; it is not a live task-status ledger.
+**Updated:** 2026-08-28 (MVP-004 at Verify). Update this file only when a pivot deliverable or deferral below changes; it is not a live task-status ledger.
 **Authoritative inputs:** `docs/PRD_v3.md`, `docs/HOUSEHOLD_CONTROL_PRINCIPLES.md`, `docs/CODEX_CLAUDE_PIVOT_PROMPT.md`.
 
 Live task status, current work, and next work are authoritative only in `docs/ROADMAP.md`.
@@ -21,6 +21,7 @@ Live task status, current work, and next work are authoritative only in `docs/RO
 - README architecture section carries the real build commands (deliverable 7).
 - DEC-005 Done (2026-08-24, D-030): Rust core committed on the native-assets backend; MVP-002 promoted to Ready.
 - Rust workspace, SQLite migration foundation, and household-identity tests (prompt deliverables 4–6) — `MVP-002` Done 2026-08-27: `rust/` workspace with `crates/household-core` and `crates/kimatta-storage` (`rusqlite` 0.40.2 bundled, `rusqlite_migration` 2.6.0, migration v1, transactional insert, 9 Rust tests); bridge `health_check` opens the real database and reports schema version 1; Rust gate in the command contract. AC-3 verified on-device 2026-08-25 (`emulator-5554`, schema v1 at `/data/user/0/dev.mealmate.temp/files/kimatta.db`); the D-027 block is discharged, all four ACs PASS, and the owner approved closeout on 2026-08-27.
+- Anonymous household bootstrap over one Rust-owned connection — `MVP-004` at `Verify` 2026-08-28: `ensure_household`/`rename_household` in `kimatta-storage`, process-wide connection in the bridge (`db.rs`), `open_database`/`bootstrap_household`/`rename_household` DTO commands, `HouseholdScreen` at `/settings/household`; first on-device first-create of `kimatta.db` observed in airplane mode.
 
 ## Deferred (with the card that discharges each)
 
