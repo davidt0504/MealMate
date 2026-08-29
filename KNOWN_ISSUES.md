@@ -2,6 +2,17 @@
 
 Additional LOW findings are tracked in `KNOWN_ISSUES-low.md`.
 
+## integration -- 2026-08-29
+
+Full review: /home/davidlinux/.claude/reviews/redteam-mvp003-integration-verify-2026-08-28T1904-03fd.md
+
+### MEDIUM
+
+- **MVP-011 AC-3 (human cook log) is discharged only as cook reviews are recorded** (`rust/crates/food-domain/content/starter_recipes.json`, `docs/ROADMAP.md` MVP-011 Done row) -- approved Done 2026-08-29 under D-027 with 0/10 recipes reviewed, so no starter recipe installs yet. Fix: cook each recipe and add `"cook_review": {"cooked_on": "YYYY-MM-DD", "by": "...", "corrections": null}`; tests validate the shape and the installer ships reviewed entries. Must be revisited before `MVP-022` beta readiness; a beta with 0/10 is the accepted residual risk.
+  **Status:** OPEN
+
+---
+
 ## orch/4 -- 2026-08-28
 
 Full review: /home/davidlinux/.claude/reviews/redteam-mvp003-android-shell-2026-08-28T1805-b91e.md
