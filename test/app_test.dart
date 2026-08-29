@@ -14,8 +14,9 @@ import 'package:meal_mate/src/rust/api/household.dart';
 import 'package:meal_mate/features/planning/planning_cycle.dart';
 import 'package:meal_mate/features/planning/planning_provider.dart';
 import 'package:meal_mate/features/recipes/recipes_provider.dart';
+import 'package:meal_mate/features/recipes/restriction_warnings.dart';
 import 'package:meal_mate/features/restrictions/restrictions_provider.dart';
-import 'package:meal_mate/features/restrictions/restrictions_screen.dart';
+import 'package:meal_mate/features/restrictions/restriction_copy.dart';
 import 'package:meal_mate/src/rust/api/planning.dart';
 import 'package:meal_mate/src/rust/api/recipe.dart';
 import 'package:meal_mate/src/rust/api/restrictions.dart';
@@ -48,8 +49,100 @@ const okRecipe = RecipeDto(
     ),
   ],
   provenance: RecipeProvenanceDto(kind: 'authored'),
+  assessment: emptyAssessment,
 );
-const okSummary = RecipeSummaryDto(id: 'r-1', title: 'Pancakes');
+
+/// What a read-back reports with no restrictions stored: checked nothing, found nothing.
+const emptyAssessment = RestrictionAssessmentDto(
+  ruleVersion: 1,
+  restrictionsChecked: 0,
+  linesChecked: 2,
+  conflicts: [],
+  wordingOnly: [],
+);
+const dairyConflict = ConflictDto(
+  restriction: RestrictionDto.known(kind: 'dairy'),
+  linePosition: 0,
+  lineName: 'butter',
+  term: 'butter',
+);
+const dairyAssessment = RestrictionAssessmentDto(
+  ruleVersion: 1,
+  restrictionsChecked: 1,
+  linesChecked: 1,
+  conflicts: [dairyConflict],
+  wordingOnly: [],
+);
+const checkedCleanAssessment = RestrictionAssessmentDto(
+  ruleVersion: 1,
+  restrictionsChecked: 1,
+  linesChecked: 1,
+  conflicts: [],
+  wordingOnly: [],
+);
+const okSummary = RecipeSummaryDto(
+  id: 'r-1',
+  title: 'Pancakes',
+  assessment: emptyAssessment,
+);
+const conflictSummary = RecipeSummaryDto(
+  id: 'r-2',
+  title: 'Butter toast',
+  assessment: dairyAssessment,
+);
+const checkedCleanSummary = RecipeSummaryDto(
+  id: 'r-3',
+  title: 'Rice',
+  assessment: checkedCleanAssessment,
+);
+
+/// `okRecipe` with two conflicts — one known kind, one wording-only `Other` — and the
+/// wording-only note, for the detail tests.
+const okRecipeWithConflicts = RecipeDto(
+  id: 'r-1',
+  householdId: 'h-1',
+  title: 'Pancakes',
+  servings: 4,
+  instructions: 'Mix. Fry.',
+  lines: [
+    IngredientLineDto(
+      originalText: '  1/2 cup Flour, sifted ',
+      name: 'Flour',
+      quantity: QuantityDto.exact(numer: 1, denom: 2),
+      unit: UnitDto.known(unit: 'cup'),
+      preparation: 'sifted',
+      optional: false,
+    ),
+    IngredientLineDto(
+      originalText: 'a splash of something (optional)',
+      name: 'something',
+      quantity: QuantityDto.unknown(),
+      unit: UnitDto.none(),
+      optional: true,
+    ),
+  ],
+  provenance: RecipeProvenanceDto(kind: 'authored'),
+  assessment: RestrictionAssessmentDto(
+    ruleVersion: 1,
+    restrictionsChecked: 2,
+    linesChecked: 2,
+    conflicts: [
+      ConflictDto(
+        restriction: RestrictionDto.known(kind: 'gluten'),
+        linePosition: 0,
+        lineName: 'Flour',
+        term: 'flour',
+      ),
+      ConflictDto(
+        restriction: RestrictionDto.other(text: 'something'),
+        linePosition: 1,
+        lineName: 'something',
+        term: 'something',
+      ),
+    ],
+    wordingOnly: ['something'],
+  ),
+);
 const okCycle = PlanningCycleDto(
   householdId: 'h-1',
   anchorDate: '2026-08-29',
@@ -306,6 +399,19 @@ class _FakeArchivedRecipesNotifier extends ArchivedRecipesNotifier {
   Future<List<RecipeSummaryDto>> build() async {
     await ref.watch(householdProvider.selectAsync((h) => h.id));
     return (_build ?? () => const <RecipeSummaryDto>[])();
+  }
+}
+
+/// The *real* `ArchivedRecipesNotifier` with only its bridge seam replaced, as
+/// `_SeamedRecipeLibraryNotifier` is for the library, so its own `build` — and therefore its
+/// restriction watch — runs. The fake above overrides `build` wholesale and cannot reach it.
+class _SeamedArchivedRecipesNotifier extends ArchivedRecipesNotifier {
+  int fetches = 0;
+
+  @override
+  Future<List<RecipeSummaryDto>> fetchArchived(String householdId) async {
+    fetches++;
+    return const [okSummary];
   }
 }
 
@@ -1765,6 +1871,251 @@ void main() {
     expect(find.byType(ListTile), findsNothing);
   });
 
+  // --- MVP-009: warnings and the hard filter on the library -----------------------------
+
+  testWidgets('the library shows a conflict subtitle per recipe', (
+    tester,
+  ) async {
+    usePixel5(tester);
+    await tester.pumpWidget(
+      harness(
+        initial: '/recipes',
+        recipes: () => const [okSummary, conflictSummary],
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('May conflict: Dairy'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.widgetWithText(ListTile, 'Butter toast'),
+        matching: find.text('May conflict: Dairy'),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.widgetWithText(ListTile, 'Pancakes'),
+        matching: find.textContaining('May conflict'),
+      ),
+      findsNothing,
+    );
+  });
+
+  testWidgets(
+    'Hide known conflicts hides only conflicting recipes and says how many',
+    (tester) async {
+      usePixel5(tester);
+      await tester.pumpWidget(
+        harness(
+          initial: '/recipes',
+          recipes: () => const [okSummary, conflictSummary],
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byType(FilterChip), findsOneWidget);
+      expect(find.text(hiddenCountCopy(1)), findsNothing);
+      await tester.tap(find.widgetWithText(FilterChip, hideConflictsLabel));
+      await tester.pumpAndSettle();
+      expect(find.widgetWithText(ListTile, 'Butter toast'), findsNothing);
+      expect(find.widgetWithText(ListTile, 'Pancakes'), findsOneWidget);
+      expect(find.text(hiddenCountCopy(1)), findsOneWidget);
+      await tester.tap(find.widgetWithText(FilterChip, hideConflictsLabel));
+      await tester.pumpAndSettle();
+      expect(find.widgetWithText(ListTile, 'Butter toast'), findsOneWidget);
+      expect(find.text(hiddenCountCopy(1)), findsNothing);
+    },
+  );
+
+  // AC-4: an engaged filter over a full list is the state that reads most like "checked and
+  // cleared", so it carries the disclaimer rather than no line at all.
+  testWidgets('hiding nothing says nothing was hidden', (tester) async {
+    usePixel5(tester);
+    await tester.pumpWidget(
+      harness(initial: '/recipes', recipes: () => const [checkedCleanSummary]),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilterChip, hideConflictsLabel));
+    await tester.pumpAndSettle();
+    expect(find.widgetWithText(ListTile, 'Rice'), findsOneWidget);
+    expect(find.textContaining('hidden for known conflicts'), findsNothing);
+    expect(find.text(nothingHiddenCopy), findsOneWidget);
+  });
+
+  // PRD §10 / invariant 19: the line above must not outlive the check that justifies it. The
+  // filter is engaged while a checked recipe is listed, then the library re-lists with nothing
+  // checked — `_hideConflicts` survives (the State is not disposed), `anyChecked` does not.
+  testWidgets('the hidden-count line goes with the last checked recipe', (
+    tester,
+  ) async {
+    usePixel5(tester);
+    var checked = true;
+    await tester.pumpWidget(
+      harness(
+        initial: '/recipes',
+        recipes: () =>
+            checked ? const [checkedCleanSummary] : const [okSummary],
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilterChip, hideConflictsLabel));
+    await tester.pumpAndSettle();
+    expect(find.text(nothingHiddenCopy), findsOneWidget);
+    checked = false;
+    ProviderScope.containerOf(tester.element(find.byType(FilterChip)))
+        .invalidate(recipeLibraryProvider);
+    await tester.pumpAndSettle();
+    expect(find.byType(FilterChip), findsNothing);
+    expect(find.text(nothingHiddenCopy), findsNothing);
+    expect(find.textContaining('hidden for known conflicts'), findsNothing);
+  });
+
+  // PRD §10 / invariant 19: with nothing checked, no control may imply a check exists.
+  testWidgets('no restrictions set shows no filter chip', (tester) async {
+    usePixel5(tester);
+    await tester.pumpWidget(
+      harness(initial: '/recipes', recipes: () => const [okSummary]),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byType(FilterChip), findsNothing);
+    expect(find.textContaining('May conflict'), findsNothing);
+  });
+
+  testWidgets('the archived list shows the conflict subtitle', (tester) async {
+    usePixel5(tester);
+    await tester.pumpWidget(
+      harness(
+        initial: '/recipes/archived',
+        archived: () => const [conflictSummary],
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('May conflict: Dairy'), findsOneWidget);
+    expect(find.byType(FilterChip), findsNothing);
+  });
+
+  testWidgets('the library with the chip survives text scale 2.0', (
+    tester,
+  ) async {
+    usePixel5(tester);
+    tester.platformDispatcher.textScaleFactorTestValue = 2.0;
+    await tester.pumpWidget(
+      harness(
+        initial: '/recipes',
+        recipes: () => const [okSummary, conflictSummary],
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    expect(find.byType(FilterChip), findsOneWidget);
+  });
+
+  testWidgets('the library with the chip meets the accessibility guidelines', (
+    tester,
+  ) async {
+    usePixel5(tester);
+    for (final brightness in Brightness.values) {
+      tester.platformDispatcher.platformBrightnessTestValue = brightness;
+      await tester.pumpWidget(
+        harness(
+          initial: '/recipes',
+          recipes: () => const [okSummary, conflictSummary],
+        ),
+      );
+      await tester.pumpAndSettle();
+      await expectLater(tester, meetsGuideline(androidTapTargetGuideline));
+      await expectLater(tester, meetsGuideline(labeledTapTargetGuideline));
+      await expectLater(tester, meetsGuideline(textContrastGuideline));
+    }
+  });
+
+  // --- MVP-009: the detail's warnings and uncertainty copy -----------------------------
+
+  testWidgets('the detail lists each conflict with its line and term', (
+    tester,
+  ) async {
+    usePixel5(tester);
+    await tester.pumpWidget(
+      harness(initial: '/recipes/r-1', recipe: (_) => okRecipeWithConflicts),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text(warningsHeading), findsOneWidget);
+    for (final c in okRecipeWithConflicts.assessment!.conflicts) {
+      expect(find.text(describeConflict(c)), findsOneWidget);
+    }
+    expect(find.text('Gluten — "Flour" matched "flour"'), findsOneWidget);
+    expect(find.text(noRestrictionsCopy), findsNothing);
+    expect(find.text(noKnownConflictCopy), findsNothing);
+  });
+
+  testWidgets('no restrictions set reads as unchecked, not clear', (
+    tester,
+  ) async {
+    usePixel5(tester);
+    await tester.pumpWidget(harness(initial: '/recipes/r-1'));
+    await tester.pumpAndSettle();
+    expect(find.text(noRestrictionsCopy), findsOneWidget);
+    expect(find.text(noKnownConflictCopy), findsNothing);
+    expect(find.text(warningsHeading), findsNothing);
+  });
+
+  testWidgets('a checked recipe with nothing found is not called safe', (
+    tester,
+  ) async {
+    usePixel5(tester);
+    await tester.pumpWidget(
+      harness(
+        initial: '/recipes/r-1',
+        recipe: (_) => const RecipeDto(
+          id: 'r-1',
+          householdId: 'h-1',
+          title: 'Rice',
+          instructions: '',
+          lines: [],
+          provenance: RecipeProvenanceDto(kind: 'authored'),
+          assessment: checkedCleanAssessment,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text(noKnownConflictCopy), findsOneWidget);
+    expect(find.text(noRestrictionsCopy), findsNothing);
+  });
+
+  testWidgets('wording-only restrictions are named', (tester) async {
+    usePixel5(tester);
+    await tester.pumpWidget(
+      harness(initial: '/recipes/r-1', recipe: (_) => okRecipeWithConflicts),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text(wordingOnlyCopy(const ['something'])), findsOneWidget);
+  });
+
+  // Adversarial: an optional line is still a line the household would cook with.
+  testWidgets('a conflict on an optional line is still shown', (tester) async {
+    usePixel5(tester);
+    await tester.pumpWidget(
+      harness(initial: '/recipes/r-1', recipe: (_) => okRecipeWithConflicts),
+    );
+    await tester.pumpAndSettle();
+    expect(okRecipeWithConflicts.lines[1].optional, isTrue);
+    expect(
+      find.text('something — "something" matched "something"'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('the detail with two conflicts survives text scale 2.0', (
+    tester,
+  ) async {
+    usePixel5(tester);
+    tester.platformDispatcher.textScaleFactorTestValue = 2.0;
+    await tester.pumpWidget(
+      harness(initial: '/recipes/r-1', recipe: (_) => okRecipeWithConflicts),
+    );
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('the archived list shows an honest empty state', (tester) async {
     usePixel5(tester);
     await tester.pumpWidget(harness(initial: '/recipes/archived'));
@@ -2502,6 +2853,11 @@ void main() {
           householdProvider.overrideWith(
             () => _FakeHouseholdNotifier(() => okHousehold, null, null),
           ),
+          // The real `build` watches the restriction set (MVP-009), so this is overridden
+          // too or the seamed notifier reaches the native `loadRestrictions`.
+          restrictionsProvider.overrideWith(
+            () => _FakeRestrictionsNotifier(null, null),
+          ),
           recipeLibraryProvider.overrideWith(() => notifier),
         ],
       );
@@ -2555,6 +2911,9 @@ void main() {
           healthReportProvider.overrideWith((_) => okReport),
           householdProvider.overrideWith(
             () => _FakeHouseholdNotifier(() => okHousehold, null, null),
+          ),
+          restrictionsProvider.overrideWith(
+            () => _FakeRestrictionsNotifier(null, null),
           ),
           recipeLibraryProvider.overrideWith(() => notifier),
           archivedRecipesProvider.overrideWith(
@@ -2625,6 +2984,102 @@ void main() {
       expect((error as KimattaError_Recipe).message, 'bad row');
     });
   });
+
+  // AC-3, Dart half. The widget-harness fake overrides `build` wholesale, so only the real
+  // notifier can show that a restriction save re-runs the listing.
+  test('a restriction save re-lists the library', () async {
+    final notifier = _SeamedRecipeLibraryNotifier(
+      (_) async => const [okSummary],
+    );
+    final container = ProviderContainer(
+      overrides: [
+        healthReportProvider.overrideWith((_) => okReport),
+        householdProvider.overrideWith(
+          () => _FakeHouseholdNotifier(() => okHousehold, null, null),
+        ),
+        restrictionsProvider.overrideWith(
+          () => _FakeRestrictionsNotifier(null, (_, r) async => r),
+        ),
+        recipeLibraryProvider.overrideWith(() => notifier),
+      ],
+    );
+    addTearDown(container.dispose);
+    await container.read(recipeLibraryProvider.future);
+    expect(notifier.fetches, 1);
+    await container.read(restrictionsProvider.notifier).save('h-1', const [
+      RestrictionDto.known(kind: 'dairy'),
+    ]);
+    await container.pump();
+    await container.read(recipeLibraryProvider.future);
+    expect(notifier.fetches, 2);
+  });
+
+  // AC-3, archived half. Without this the archived notifier's restriction watch is free to be
+  // deleted and nothing fails — the library half is pinned above, the archived half was not.
+  test('a restriction save re-lists the archived recipes', () async {
+    final notifier = _SeamedArchivedRecipesNotifier();
+    final container = ProviderContainer(
+      overrides: [
+        healthReportProvider.overrideWith((_) => okReport),
+        householdProvider.overrideWith(
+          () => _FakeHouseholdNotifier(() => okHousehold, null, null),
+        ),
+        restrictionsProvider.overrideWith(
+          () => _FakeRestrictionsNotifier(null, (_, r) async => r),
+        ),
+        archivedRecipesProvider.overrideWith(() => notifier),
+      ],
+    );
+    addTearDown(container.dispose);
+    await container.read(archivedRecipesProvider.future);
+    expect(notifier.fetches, 1);
+    await container.read(restrictionsProvider.notifier).save('h-1', const [
+      RestrictionDto.known(kind: 'dairy'),
+    ]);
+    await container.pump();
+    await container.read(archivedRecipesProvider.future);
+    expect(notifier.fetches, 2);
+  });
+
+  // Both dependencies moving in the same turn is the case that put the restriction watch on
+  // the far side of the household await: a `ref` call after that gap can land on an element
+  // the household emission has already outdated. Expected-to-pass — a container cannot force
+  // the microtask interleaving that trips Riverpod's own assert, so this pins the outcome
+  // (AC-3 still fires, no error state) rather than the mechanism.
+  test(
+    'a household and restriction change in one turn still re-lists',
+    () async {
+      final notifier = _SeamedRecipeLibraryNotifier(
+        (_) async => const [okSummary],
+      );
+      final container = ProviderContainer(
+        overrides: [
+          healthReportProvider.overrideWith((_) => okReport),
+          householdProvider.overrideWith(
+            () => _FakeHouseholdNotifier(() => okHousehold, null, null),
+          ),
+          restrictionsProvider.overrideWith(
+            () => _FakeRestrictionsNotifier(null, (_, r) async => r),
+          ),
+          recipeLibraryProvider.overrideWith(() => notifier),
+        ],
+      );
+      addTearDown(container.dispose);
+      await container.read(recipeLibraryProvider.future);
+      expect(notifier.fetches, 1);
+      container.invalidate(householdProvider);
+      await container.read(restrictionsProvider.notifier).save('h-1', const [
+        RestrictionDto.known(kind: 'dairy'),
+      ]);
+      await container.pump();
+      await container.read(recipeLibraryProvider.future);
+      expect(notifier.fetches, greaterThan(1));
+      expect(
+        container.read(recipeLibraryProvider),
+        isA<AsyncData<List<RecipeSummaryDto>>>(),
+      );
+    },
+  );
 
   testWidgets(
     'editing seeds the form from the loaded recipe and saves with the same id',

@@ -1,11 +1,13 @@
 use kimatta_storage::{
-    format_civil_date, Connection, CustomIngredient, CustomIngredientId, HouseholdId, IngredientId,
-    IngredientLine, IngredientRef, ProvenanceKind, Quantity, QuantityRange, Rational, Recipe,
-    RecipeId, RecipeListing, RecipeProvenance, RecipeRecord, StorageError, Unit, UnitKind,
+    format_civil_date, Connection, CustomIngredient, CustomIngredientId, HouseholdId,
+    HouseholdRestrictions, IngredientId, IngredientLine, IngredientRef, ProvenanceKind, Quantity,
+    QuantityRange, Rational, Recipe, RecipeId, RecipeListing, RecipeProvenance, RecipeRecord,
+    RestrictionAssessment, StorageError, Unit, UnitKind,
 };
 use uuid::Uuid;
 
 use crate::api::error::KimattaError;
+use crate::api::restrictions::{from_domain as restriction_from_domain, RestrictionDto};
 
 /// Exact rationals cross as integer pairs; `Unknown` is the honest absent amount.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -61,6 +63,28 @@ pub struct RecipeProvenanceDto {
     pub source_author: Option<String>,
 }
 
+/// One line matched against one restriction: the restriction, the line and the literal term
+/// that matched, so every warning is explainable as "restriction ← line ← term".
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ConflictDto {
+    pub restriction: RestrictionDto,
+    pub line_position: u32,
+    pub line_name: String,
+    pub term: String,
+}
+
+/// Output only, derived at read time from the household's stored restriction set; never
+/// part of a save request. Counts and lists only — no field reads as "safe".
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RestrictionAssessmentDto {
+    pub rule_version: u32,
+    pub restrictions_checked: u32,
+    pub lines_checked: u32,
+    pub conflicts: Vec<ConflictDto>,
+    /// `Other` restrictions, matched by their own wording only.
+    pub wording_only: Vec<String>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RecipeDto {
     pub id: String,
@@ -73,12 +97,16 @@ pub struct RecipeDto {
     /// Output only: `save_recipe` ignores it and never changes archive state; use
     /// `archive_recipe`/`restore_recipe`. ISO civil date, `None` while in the library.
     pub archived_at: Option<String>,
+    /// Output only, like `archived_at`: `None` on a request, `Some` on every read-back.
+    /// `save_recipe` ignores it, so no verdict can be fabricated on the write path.
+    pub assessment: Option<RestrictionAssessmentDto>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RecipeSummaryDto {
     pub id: String,
     pub title: String,
+    pub assessment: RestrictionAssessmentDto,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -283,7 +311,35 @@ fn recipe_to_domain(dto: RecipeDto) -> Result<Recipe, KimattaError> {
     )?)
 }
 
-fn recipe_from_domain(record: &RecipeRecord) -> RecipeDto {
+fn assessment_from_domain(a: RestrictionAssessment) -> RestrictionAssessmentDto {
+    RestrictionAssessmentDto {
+        rule_version: a.rule_version,
+        restrictions_checked: a.restrictions_checked as u32,
+        lines_checked: a.lines_checked as u32,
+        conflicts: a
+            .conflicts
+            .iter()
+            .map(|c| ConflictDto {
+                restriction: restriction_from_domain(&c.restriction),
+                line_position: c.line_position as u32,
+                line_name: c.line_name.clone(),
+                term: c.term.clone(),
+            })
+            .collect(),
+        wording_only: a.wording_only,
+    }
+}
+
+/// Every read path assesses against the household's stored set, so a read-back never
+/// carries a verdict the request supplied.
+fn assess_names<'a>(
+    names: impl IntoIterator<Item = &'a str>,
+    restrictions: &HouseholdRestrictions,
+) -> RestrictionAssessmentDto {
+    assessment_from_domain(kimatta_storage::assess(names, restrictions))
+}
+
+fn recipe_from_domain(record: &RecipeRecord, restrictions: &HouseholdRestrictions) -> RecipeDto {
     let r = &record.recipe;
     RecipeDto {
         id: r.id().as_str().to_owned(),
@@ -299,18 +355,31 @@ fn recipe_from_domain(record: &RecipeRecord) -> RecipeDto {
             source_author: r.provenance().source_author().map(str::to_owned),
         },
         archived_at: record.archived_at.map(format_civil_date),
+        assessment: Some(assess_names(
+            r.lines().iter().map(IngredientLine::name),
+            restrictions,
+        )),
     }
 }
 
 /// The recipe as stored, for the commands that have just written it and promise to return
-/// what was stored — including the archive marker, which no write here can set.
+/// what was stored — including the archive marker, which no write here can set, and the
+/// assessment against the stored restriction set, which no write here can supply.
+///
+/// `restrictions` is a parameter rather than a load here because every caller has already
+/// committed by the time it calls: `db::with` hands out the connection without a transaction,
+/// so any fallible work on this side of the write would report failure on a recipe that *is*
+/// stored — and since a create sends an empty id minted fresh in Rust, the user's retry would
+/// store a second copy. Callers load the set before their write instead, so an unreadable one
+/// fails the command with nothing written.
 fn stored_recipe(
     conn: &Connection,
     household: &HouseholdId,
     id: &RecipeId,
+    restrictions: &HouseholdRestrictions,
 ) -> Result<RecipeDto, KimattaError> {
     match kimatta_storage::load_recipe(conn, household, id)? {
-        Some(record) => Ok(recipe_from_domain(&record)),
+        Some(record) => Ok(recipe_from_domain(&record, restrictions)),
         None => Err(StorageError::NoSuchRecipe {
             recipe: id.as_str().to_owned(),
             household: household.as_str().to_owned(),
@@ -331,11 +400,16 @@ fn custom_from_domain(c: &CustomIngredient) -> CustomIngredientDto {
 /// Split out from the commands, as `rename_in` and `save_in` are, so they can be tested with
 /// more than one household present without installing the process-wide connection.
 fn save_recipe_in(conn: &mut Connection, dto: RecipeDto) -> Result<RecipeDto, KimattaError> {
+    // `dto.assessment` is dropped here with the rest of the request shell: `recipe_to_domain`
+    // never reads it, so a fabricated verdict cannot reach storage or the read-back.
     let recipe = recipe_to_domain(dto)?;
+    // Before the write, so an unreadable restriction set fails with nothing stored — see
+    // `stored_recipe`.
+    let restrictions = kimatta_storage::load_restrictions(conn, recipe.household_id())?;
     kimatta_storage::save_recipe(conn, &recipe)?;
-    // Read back rather than echo the input: `archived_at` is not in the request, and an edit
-    // of an archived recipe must keep reporting it archived.
-    stored_recipe(conn, recipe.household_id(), recipe.id())
+    // Read back rather than echo the input: `archived_at` and `assessment` are not in the
+    // request, and an edit of an archived recipe must keep reporting it archived.
+    stored_recipe(conn, recipe.household_id(), recipe.id(), &restrictions)
 }
 
 fn load_recipe_in(
@@ -345,22 +419,26 @@ fn load_recipe_in(
 ) -> Result<Option<RecipeDto>, KimattaError> {
     let household = HouseholdId::new(household_id)?;
     let id = RecipeId::new(recipe_id)?;
+    let restrictions = kimatta_storage::load_restrictions(conn, &household)?;
     Ok(kimatta_storage::load_recipe(conn, &household, &id)?
         .as_ref()
-        .map(recipe_from_domain))
+        .map(|record| recipe_from_domain(record, &restrictions)))
 }
 
+/// One restriction read per listing, not per recipe.
 fn summaries(
     conn: &Connection,
     household_id: &str,
     listing: RecipeListing,
 ) -> Result<Vec<RecipeSummaryDto>, KimattaError> {
     let household = HouseholdId::new(household_id)?;
+    let restrictions = kimatta_storage::load_restrictions(conn, &household)?;
     Ok(kimatta_storage::list_recipes(conn, &household, listing)?
         .into_iter()
         .map(|s| RecipeSummaryDto {
             id: s.id.as_str().to_owned(),
             title: s.title,
+            assessment: assess_names(s.line_names.iter().map(String::as_str), &restrictions),
         })
         .collect())
 }
@@ -390,8 +468,11 @@ fn archive_recipe_in(
     let household = HouseholdId::new(household_id)?;
     let id = RecipeId::new(recipe_id)?;
     let at = kimatta_storage::parse_civil_date(archived_on)?;
+    // After the date parse, so a malformed date still wins the error, and before the write,
+    // so an unreadable restriction set fails with nothing archived — see `stored_recipe`.
+    let restrictions = kimatta_storage::load_restrictions(conn, &household)?;
     kimatta_storage::archive_recipe(conn, &household, &id, at)?;
-    stored_recipe(conn, &household, &id)
+    stored_recipe(conn, &household, &id, &restrictions)
 }
 
 fn restore_recipe_in(
@@ -401,8 +482,10 @@ fn restore_recipe_in(
 ) -> Result<RecipeDto, KimattaError> {
     let household = HouseholdId::new(household_id)?;
     let id = RecipeId::new(recipe_id)?;
+    // Before the write, for the reason `save_recipe_in` and `archive_recipe_in` record.
+    let restrictions = kimatta_storage::load_restrictions(conn, &household)?;
     kimatta_storage::restore_recipe(conn, &household, &id)?;
-    stored_recipe(conn, &household, &id)
+    stored_recipe(conn, &household, &id, &restrictions)
 }
 
 fn add_custom_ingredient_in(
@@ -487,7 +570,115 @@ mod tests {
             lines,
             provenance: authored(),
             archived_at: None,
+            assessment: None,
         }
+    }
+
+    /// A restriction row this version cannot parse — the downgrade case: a later version adds
+    /// a `RestrictionKind` and writes a token `RestrictionKind::parse` rejects. Written by SQL
+    /// because every in-app write goes through the domain constructors and cannot produce one.
+    fn seed_corrupt_restriction(conn: &Connection, household: &str) {
+        conn.execute(
+            "INSERT INTO household_restriction (household_id, position, kind, text)
+             VALUES (?1, 0, 'sulphites', NULL)",
+            [household],
+        )
+        .unwrap();
+    }
+
+    /// The whole point of loading restrictions before the write: the command fails, and it
+    /// fails having stored nothing. Reporting failure on a recipe that *is* stored would make
+    /// the user's retry — a create sends an empty id, minted fresh in Rust — store a second
+    /// copy, and this failure is deterministic, so every retry would duplicate.
+    #[test]
+    fn a_corrupt_restriction_row_fails_the_save_without_storing_it() {
+        let mut conn = open_seeded(&["h-1"]);
+        seed_corrupt_restriction(&conn, "h-1");
+        let err = save_recipe_in(&mut conn, recipe("h-1", "", vec![])).unwrap_err();
+        assert_corrupt_restriction(&err);
+        assert!(
+            listing_ignoring_restrictions(&conn, "h-1", RecipeListing::Active).is_empty(),
+            "the write must not have committed"
+        );
+    }
+
+    /// The message names the unreadable row, so the failure is diagnosable rather than a bare
+    /// "storage error" — the same contract `restriction_from_row` documents.
+    fn assert_corrupt_restriction(err: &KimattaError) {
+        match err {
+            KimattaError::Storage { message } => assert!(
+                message.contains("sulphites"),
+                "expected the unreadable row in the message, got {message:?}"
+            ),
+            other => panic!("expected a storage error, got {other:?}"),
+        }
+    }
+
+    /// The same guarantee on the other two write paths — `stored_recipe` is shared, so all
+    /// three read back after a commit and all three had the same post-commit hazard.
+    #[test]
+    fn a_corrupt_restriction_row_fails_archive_and_restore_without_writing() {
+        let mut conn = open_seeded(&["h-1"]);
+        let stored = save_recipe_in(&mut conn, recipe("h-1", "", vec![])).unwrap();
+        seed_corrupt_restriction(&conn, "h-1");
+
+        let err = archive_recipe_in(&mut conn, "h-1", &stored.id, "2026-08-29").unwrap_err();
+        assert_corrupt_restriction(&err);
+        assert!(
+            listing_ignoring_restrictions(&conn, "h-1", RecipeListing::Archived).is_empty(),
+            "the archive marker must not have been set"
+        );
+
+        // Still active, so restore is a real no-op write rather than a rejected one.
+        let err = restore_recipe_in(&mut conn, "h-1", &stored.id).unwrap_err();
+        assert_corrupt_restriction(&err);
+        assert_eq!(
+            listing_ignoring_restrictions(&conn, "h-1", RecipeListing::Active),
+            vec![stored.id],
+            "restore must leave the archive marker as it found it"
+        );
+    }
+
+    /// The stored ids, read without the restriction load the tests above are about.
+    fn listing_ignoring_restrictions(
+        conn: &Connection,
+        household: &str,
+        listing: RecipeListing,
+    ) -> Vec<String> {
+        kimatta_storage::list_recipes(conn, &HouseholdId::new(household).unwrap(), listing)
+            .unwrap()
+            .into_iter()
+            .map(|s| s.id.as_str().to_owned())
+            .collect()
+    }
+
+    /// What a read-back reports with no restrictions stored: `lines` checked, nothing found.
+    fn unchecked(lines: u32) -> RestrictionAssessmentDto {
+        RestrictionAssessmentDto {
+            rule_version: kimatta_storage::RULE_VERSION,
+            restrictions_checked: 0,
+            lines_checked: lines,
+            conflicts: vec![],
+            wording_only: vec![],
+        }
+    }
+
+    fn set_restrictions(conn: &mut Connection, household: &str, kinds: &[&str]) {
+        let dtos: Vec<RestrictionDto> = kinds
+            .iter()
+            .map(|k| RestrictionDto::Known {
+                kind: (*k).to_owned(),
+            })
+            .collect();
+        crate::api::restrictions::save_in(conn, household, &dtos).unwrap();
+    }
+
+    fn butter_recipe(household: &str, id: &str) -> RecipeDto {
+        recipe(
+            household,
+            id,
+            vec![line("butter", QuantityDto::Unknown, UnitDto::None)],
+        )
     }
 
     fn ids(list: Vec<RecipeSummaryDto>) -> Vec<String> {
@@ -695,7 +886,145 @@ mod tests {
             vec![RecipeSummaryDto {
                 id: "r".to_owned(),
                 title: "Recipe r".to_owned(),
+                assessment: unchecked(3),
             }]
+        );
+    }
+
+    // --- MVP-009: assessment on every read-back ------------------------------------------
+
+    #[test]
+    fn list_and_load_carry_the_same_assessment() {
+        let mut conn = open_seeded(&["h"]);
+        set_restrictions(&mut conn, "h", &["dairy"]);
+        save_recipe_in(&mut conn, butter_recipe("h", "r")).unwrap();
+        let listed = list_recipes_in(&conn, "h").unwrap().remove(0).assessment;
+        let loaded = load_recipe_in(&conn, "h", "r").unwrap().unwrap().assessment;
+        assert_eq!(Some(listed.clone()), loaded);
+        assert_eq!(listed.restrictions_checked, 1);
+        assert_eq!(listed.lines_checked, 1);
+        assert_eq!(listed.rule_version, kimatta_storage::RULE_VERSION);
+        assert_eq!(
+            listed.conflicts,
+            vec![ConflictDto {
+                restriction: RestrictionDto::Known {
+                    kind: "dairy".to_owned()
+                },
+                line_position: 0,
+                line_name: "butter".to_owned(),
+                term: "butter".to_owned(),
+            }]
+        );
+        assert!(listed.wording_only.is_empty());
+    }
+
+    /// AC-3, Rust half: the assessment follows the stored set, and returns to its first
+    /// value when the set does.
+    #[test]
+    fn changing_the_restriction_set_changes_the_assessment_deterministically() {
+        let mut conn = open_seeded(&["h"]);
+        save_recipe_in(&mut conn, butter_recipe("h", "r")).unwrap();
+        let read = |conn: &Connection| {
+            load_recipe_in(conn, "h", "r")
+                .unwrap()
+                .unwrap()
+                .assessment
+                .unwrap()
+        };
+        set_restrictions(&mut conn, "h", &["dairy"]);
+        let first = read(&conn);
+        assert_eq!(first.conflicts.len(), 1);
+        set_restrictions(&mut conn, "h", &[]);
+        let cleared = read(&conn);
+        assert_eq!(cleared, unchecked(1));
+        set_restrictions(&mut conn, "h", &["dairy"]);
+        assert_eq!(read(&conn), first);
+        assert_eq!(list_recipes_in(&conn, "h").unwrap()[0].assessment, first);
+    }
+
+    /// Adversarial: a request carrying a clean assessment for a conflicting line is stored
+    /// and read back with the conflict — the write path never trusts the field.
+    #[test]
+    fn a_sent_assessment_is_ignored_on_save() {
+        let mut conn = open_seeded(&["h"]);
+        set_restrictions(&mut conn, "h", &["dairy"]);
+        let mut dto = butter_recipe("h", "r");
+        dto.assessment = Some(RestrictionAssessmentDto {
+            rule_version: 99,
+            restrictions_checked: 0,
+            lines_checked: 0,
+            conflicts: vec![],
+            wording_only: vec![],
+        });
+        let stored = save_recipe_in(&mut conn, dto).unwrap();
+        let a = stored.assessment.unwrap();
+        assert_eq!(a.rule_version, kimatta_storage::RULE_VERSION);
+        assert_eq!(a.restrictions_checked, 1);
+        assert_eq!(a.conflicts.len(), 1);
+        assert_eq!(a.conflicts[0].term, "butter");
+    }
+
+    #[test]
+    fn every_read_back_is_some() {
+        let mut conn = open_seeded(&["h"]);
+        let saved = save_recipe_in(&mut conn, butter_recipe("h", "r")).unwrap();
+        assert_eq!(saved.assessment, Some(unchecked(1)));
+        let loaded = load_recipe_in(&conn, "h", "r").unwrap().unwrap();
+        assert_eq!(loaded.assessment, Some(unchecked(1)));
+        let archived = archive_recipe_in(&mut conn, "h", "r", "2026-08-29").unwrap();
+        assert_eq!(archived.assessment, Some(unchecked(1)));
+        assert_eq!(
+            list_archived_recipes_in(&conn, "h").unwrap()[0].assessment,
+            unchecked(1)
+        );
+        let restored = restore_recipe_in(&mut conn, "h", "r").unwrap();
+        assert_eq!(restored.assessment, Some(unchecked(1)));
+    }
+
+    #[test]
+    fn assessment_is_household_scoped() {
+        let mut conn = open_seeded(&["h1", "h2"]);
+        set_restrictions(&mut conn, "h1", &["dairy"]);
+        save_recipe_in(&mut conn, butter_recipe("h1", "r1")).unwrap();
+        save_recipe_in(&mut conn, butter_recipe("h2", "r2")).unwrap();
+        let a1 = list_recipes_in(&conn, "h1").unwrap().remove(0).assessment;
+        let a2 = list_recipes_in(&conn, "h2").unwrap().remove(0).assessment;
+        assert_eq!(a1.conflicts.len(), 1);
+        assert_eq!(a1.restrictions_checked, 1);
+        assert_eq!(a2, unchecked(1));
+    }
+
+    /// `Other` restrictions reach the DTO as wording-only and their conflicts name the
+    /// wording as the term.
+    #[test]
+    fn other_restrictions_cross_as_wording_only() {
+        let mut conn = open_seeded(&["h"]);
+        crate::api::restrictions::save_in(
+            &mut conn,
+            "h",
+            &[RestrictionDto::Other {
+                text: "nightshades".to_owned(),
+            }],
+        )
+        .unwrap();
+        let dto = recipe(
+            "h",
+            "r",
+            vec![
+                line("tomato", QuantityDto::Unknown, UnitDto::None),
+                line("nightshades mix", QuantityDto::Unknown, UnitDto::None),
+            ],
+        );
+        let a = save_recipe_in(&mut conn, dto).unwrap().assessment.unwrap();
+        assert_eq!(a.wording_only, vec!["nightshades"]);
+        assert_eq!(a.conflicts.len(), 1);
+        assert_eq!(a.conflicts[0].line_position, 1);
+        assert_eq!(a.conflicts[0].term, "nightshades");
+        assert_eq!(
+            a.conflicts[0].restriction,
+            RestrictionDto::Other {
+                text: "nightshades".to_owned()
+            }
         );
     }
 

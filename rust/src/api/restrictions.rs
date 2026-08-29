@@ -45,7 +45,8 @@ fn to_domain(dto: &RestrictionDto) -> Result<Restriction, KimattaError> {
     }
 }
 
-fn from_domain(restriction: &Restriction) -> RestrictionDto {
+/// Shared with `recipe.rs`, where a conflict names the restriction it was matched against.
+pub(crate) fn from_domain(restriction: &Restriction) -> RestrictionDto {
     match restriction {
         Restriction::Known(kind) => RestrictionDto::Known {
             kind: kind.as_str().to_owned(),
@@ -65,7 +66,7 @@ fn load_in(conn: &Connection, household_id: &str) -> Result<Vec<RestrictionDto>,
     Ok(to_dtos(&kimatta_storage::load_restrictions(conn, &id)?))
 }
 
-fn save_in(
+pub(crate) fn save_in(
     conn: &mut Connection,
     household_id: &str,
     restrictions: &[RestrictionDto],

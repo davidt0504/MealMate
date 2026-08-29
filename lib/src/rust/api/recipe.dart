@@ -8,10 +8,12 @@ import 'error.dart';
 
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:freezed_annotation/freezed_annotation.dart' hide protected;
+
+import 'restrictions.dart';
 part 'recipe.freezed.dart';
 
-// These functions are ignored because they are not marked as `pub`: `add_custom_ingredient_in`, `archive_recipe_in`, `custom_from_domain`, `id_or_minted`, `line_from_domain`, `line_to_domain`, `list_archived_recipes_in`, `list_custom_ingredients_in`, `list_recipes_in`, `load_recipe_in`, `quantity_from_domain`, `quantity_to_domain`, `rational`, `recipe_from_domain`, `recipe_to_domain`, `restore_recipe_in`, `save_recipe_in`, `stored_recipe`, `summaries`, `unit_from_domain`, `unit_to_domain`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
+// These functions are ignored because they are not marked as `pub`: `add_custom_ingredient_in`, `archive_recipe_in`, `assess_names`, `assessment_from_domain`, `custom_from_domain`, `id_or_minted`, `line_from_domain`, `line_to_domain`, `list_archived_recipes_in`, `list_custom_ingredients_in`, `list_recipes_in`, `load_recipe_in`, `quantity_from_domain`, `quantity_to_domain`, `rational`, `recipe_from_domain`, `recipe_to_domain`, `restore_recipe_in`, `save_recipe_in`, `stored_recipe`, `summaries`, `unit_from_domain`, `unit_to_domain`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 
 /// Saves the whole recipe; an empty `id` mints a v4 UUID (as `bootstrap_household` does).
 /// Returns what was stored.
@@ -75,6 +77,39 @@ Future<List<CustomIngredientDto>> listCustomIngredients({
 }) => RustLib.instance.api.crateApiRecipeListCustomIngredients(
   householdId: householdId,
 );
+
+/// One line matched against one restriction: the restriction, the line and the literal term
+/// that matched, so every warning is explainable as "restriction ← line ← term".
+class ConflictDto {
+  final RestrictionDto restriction;
+  final int linePosition;
+  final String lineName;
+  final String term;
+
+  const ConflictDto({
+    required this.restriction,
+    required this.linePosition,
+    required this.lineName,
+    required this.term,
+  });
+
+  @override
+  int get hashCode =>
+      restriction.hashCode ^
+      linePosition.hashCode ^
+      lineName.hashCode ^
+      term.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ConflictDto &&
+          runtimeType == other.runtimeType &&
+          restriction == other.restriction &&
+          linePosition == other.linePosition &&
+          lineName == other.lineName &&
+          term == other.term;
+}
 
 class CustomIngredientDto {
   final String id;
@@ -188,6 +223,10 @@ class RecipeDto {
   /// `archive_recipe`/`restore_recipe`. ISO civil date, `None` while in the library.
   final String? archivedAt;
 
+  /// Output only, like `archived_at`: `None` on a request, `Some` on every read-back.
+  /// `save_recipe` ignores it, so no verdict can be fabricated on the write path.
+  final RestrictionAssessmentDto? assessment;
+
   const RecipeDto({
     required this.id,
     required this.householdId,
@@ -197,6 +236,7 @@ class RecipeDto {
     required this.lines,
     required this.provenance,
     this.archivedAt,
+    this.assessment,
   });
 
   @override
@@ -208,7 +248,8 @@ class RecipeDto {
       instructions.hashCode ^
       lines.hashCode ^
       provenance.hashCode ^
-      archivedAt.hashCode;
+      archivedAt.hashCode ^
+      assessment.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -222,7 +263,8 @@ class RecipeDto {
           instructions == other.instructions &&
           lines == other.lines &&
           provenance == other.provenance &&
-          archivedAt == other.archivedAt;
+          archivedAt == other.archivedAt &&
+          assessment == other.assessment;
 }
 
 /// `kind` is a `ProvenanceKind` string: `authored`, `imported` or `starter`.
@@ -260,11 +302,16 @@ class RecipeProvenanceDto {
 class RecipeSummaryDto {
   final String id;
   final String title;
+  final RestrictionAssessmentDto assessment;
 
-  const RecipeSummaryDto({required this.id, required this.title});
+  const RecipeSummaryDto({
+    required this.id,
+    required this.title,
+    required this.assessment,
+  });
 
   @override
-  int get hashCode => id.hashCode ^ title.hashCode;
+  int get hashCode => id.hashCode ^ title.hashCode ^ assessment.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -272,7 +319,47 @@ class RecipeSummaryDto {
       other is RecipeSummaryDto &&
           runtimeType == other.runtimeType &&
           id == other.id &&
-          title == other.title;
+          title == other.title &&
+          assessment == other.assessment;
+}
+
+/// Output only, derived at read time from the household's stored restriction set; never
+/// part of a save request. Counts and lists only — no field reads as "safe".
+class RestrictionAssessmentDto {
+  final int ruleVersion;
+  final int restrictionsChecked;
+  final int linesChecked;
+  final List<ConflictDto> conflicts;
+
+  /// `Other` restrictions, matched by their own wording only.
+  final List<String> wordingOnly;
+
+  const RestrictionAssessmentDto({
+    required this.ruleVersion,
+    required this.restrictionsChecked,
+    required this.linesChecked,
+    required this.conflicts,
+    required this.wordingOnly,
+  });
+
+  @override
+  int get hashCode =>
+      ruleVersion.hashCode ^
+      restrictionsChecked.hashCode ^
+      linesChecked.hashCode ^
+      conflicts.hashCode ^
+      wordingOnly.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is RestrictionAssessmentDto &&
+          runtimeType == other.runtimeType &&
+          ruleVersion == other.ruleVersion &&
+          restrictionsChecked == other.restrictionsChecked &&
+          linesChecked == other.linesChecked &&
+          conflicts == other.conflicts &&
+          wordingOnly == other.wordingOnly;
 }
 
 @freezed

@@ -42,7 +42,15 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   RecipeDto dco_decode_box_autoadd_recipe_dto(dynamic raw);
 
   @protected
+  RestrictionAssessmentDto dco_decode_box_autoadd_restriction_assessment_dto(
+    dynamic raw,
+  );
+
+  @protected
   int dco_decode_box_autoadd_u_32(dynamic raw);
+
+  @protected
+  ConflictDto dco_decode_conflict_dto(dynamic raw);
 
   @protected
   CustomIngredientDto dco_decode_custom_ingredient_dto(dynamic raw);
@@ -67,6 +75,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   List<String> dco_decode_list_String(dynamic raw);
+
+  @protected
+  List<ConflictDto> dco_decode_list_conflict_dto(dynamic raw);
 
   @protected
   List<CustomIngredientDto> dco_decode_list_custom_ingredient_dto(dynamic raw);
@@ -105,6 +116,10 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   RecipeDto? dco_decode_opt_box_autoadd_recipe_dto(dynamic raw);
 
   @protected
+  RestrictionAssessmentDto?
+  dco_decode_opt_box_autoadd_restriction_assessment_dto(dynamic raw);
+
+  @protected
   int? dco_decode_opt_box_autoadd_u_32(dynamic raw);
 
   @protected
@@ -121,6 +136,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   RecipeSummaryDto dco_decode_recipe_summary_dto(dynamic raw);
+
+  @protected
+  RestrictionAssessmentDto dco_decode_restriction_assessment_dto(dynamic raw);
 
   @protected
   RestrictionDto dco_decode_restriction_dto(dynamic raw);
@@ -157,7 +175,15 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   RecipeDto sse_decode_box_autoadd_recipe_dto(SseDeserializer deserializer);
 
   @protected
+  RestrictionAssessmentDto sse_decode_box_autoadd_restriction_assessment_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   int sse_decode_box_autoadd_u_32(SseDeserializer deserializer);
+
+  @protected
+  ConflictDto sse_decode_conflict_dto(SseDeserializer deserializer);
 
   @protected
   CustomIngredientDto sse_decode_custom_ingredient_dto(
@@ -186,6 +212,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   List<String> sse_decode_list_String(SseDeserializer deserializer);
+
+  @protected
+  List<ConflictDto> sse_decode_list_conflict_dto(SseDeserializer deserializer);
 
   @protected
   List<CustomIngredientDto> sse_decode_list_custom_ingredient_dto(
@@ -236,6 +265,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  RestrictionAssessmentDto?
+  sse_decode_opt_box_autoadd_restriction_assessment_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   int? sse_decode_opt_box_autoadd_u_32(SseDeserializer deserializer);
 
   @protected
@@ -254,6 +289,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   RecipeSummaryDto sse_decode_recipe_summary_dto(SseDeserializer deserializer);
+
+  @protected
+  RestrictionAssessmentDto sse_decode_restriction_assessment_dto(
+    SseDeserializer deserializer,
+  );
 
   @protected
   RestrictionDto sse_decode_restriction_dto(SseDeserializer deserializer);
@@ -295,7 +335,16 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_box_autoadd_restriction_assessment_dto(
+    RestrictionAssessmentDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_box_autoadd_u_32(int self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_conflict_dto(ConflictDto self, SseSerializer serializer);
 
   @protected
   void sse_encode_custom_ingredient_dto(
@@ -329,6 +378,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_list_String(List<String> self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_conflict_dto(
+    List<ConflictDto> self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_list_custom_ingredient_dto(
@@ -394,6 +449,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_opt_box_autoadd_restriction_assessment_dto(
+    RestrictionAssessmentDto? self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_opt_box_autoadd_u_32(int? self, SseSerializer serializer);
 
   @protected
@@ -417,6 +478,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_recipe_summary_dto(
     RecipeSummaryDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_restriction_assessment_dto(
+    RestrictionAssessmentDto self,
     SseSerializer serializer,
   );
 
