@@ -5,9 +5,11 @@ use std::path::Path;
 
 pub use food_domain::{
     format_civil_date, parse_civil_date, CivilDate, CustomIngredient, CustomIngredientId,
-    Ingredient, IngredientId, IngredientLine, IngredientRef, MealScope, MealSlot, PlanningCycle,
-    PlanningError, ProvenanceKind, Quantity, QuantityRange, Rational, Recipe, RecipeError,
-    RecipeId, RecipeProvenance, Unit, UnitKind, DEFAULT_CYCLE_DAYS, MAX_CYCLE_DAYS, MIN_CYCLE_DAYS,
+    HouseholdRestrictions, Ingredient, IngredientId, IngredientLine, IngredientRef, MealScope,
+    MealSlot, MemberPreference, MemberPreferences, PlanningCycle, PlanningError, PreferenceError,
+    ProvenanceKind, Quantity, QuantityRange, Rational, Recipe, RecipeError, RecipeId,
+    RecipeProvenance, Restriction, RestrictionError, RestrictionKind, Sentiment, Unit, UnitKind,
+    DEFAULT_CYCLE_DAYS, MAX_CYCLE_DAYS, MIN_CYCLE_DAYS,
 };
 pub use household_core::{Household, HouseholdId, HouseholdMember, IdError, MemberId};
 pub use rusqlite::Connection;
@@ -75,6 +77,19 @@ pub enum StorageError {
     NoSuchCustomIngredient {
         ingredient: String,
         household: String,
+    },
+    #[error("no member with id {0}")]
+    NoSuchMember(String),
+    #[error(transparent)]
+    Preference(#[from] PreferenceError),
+    #[error(transparent)]
+    Restriction(#[from] RestrictionError),
+    #[error("household {household} restriction {position} has kind {kind:?} with text {text:?}")]
+    CorruptRestriction {
+        household: String,
+        position: usize,
+        kind: String,
+        text: Option<String>,
     },
 }
 
@@ -172,6 +187,31 @@ const MIGRATION_ARRAY: &[M] = &[
     CREATE INDEX recipe_ingredient_line_custom_ingredient
         ON recipe_ingredient_line(custom_ingredient_id);",
     ),
+    // `position` exists for the same reason it does on `recipe_ingredient_line`: both sets are
+    // replaced whole, so a key of `(parent_id, position)` is what makes a replacement
+    // order-preserving and what gives a corrupt row a stable coordinate to report. No CHECK on
+    // `kind` or `sentiment`: those vocabularies grow (MVP-009 may extend the restriction list),
+    // so they are validated by parse on read and write, as `unit_kind` is. That leaves
+    // `kind = 'other'` with a NULL `text` storable — hence the reject-on-read below rather than
+    // coercing such a row into something displayable.
+    M::up(
+        "ALTER TABLE household ADD COLUMN onboarded INTEGER NOT NULL DEFAULT 0
+        CHECK (onboarded IN (0, 1));
+    CREATE TABLE household_restriction (
+        household_id TEXT NOT NULL REFERENCES household(id) ON DELETE CASCADE,
+        position INTEGER NOT NULL,
+        kind TEXT NOT NULL,
+        text TEXT,
+        PRIMARY KEY (household_id, position)
+    ) STRICT;
+    CREATE TABLE member_food_preference (
+        member_id TEXT NOT NULL REFERENCES household_member(id) ON DELETE CASCADE,
+        position INTEGER NOT NULL,
+        sentiment TEXT NOT NULL,
+        subject TEXT NOT NULL,
+        PRIMARY KEY (member_id, position)
+    ) STRICT;",
+    ),
 ];
 pub const MIGRATIONS: Migrations<'static> = Migrations::from_slice(MIGRATION_ARRAY);
 
@@ -235,6 +275,9 @@ fn insert_rows(
 pub struct HouseholdRecord {
     pub household: Household,
     pub members: Vec<HouseholdMember>,
+    /// Whether first run has been completed. App/UX state, deliberately not part of
+    /// `household_core::Household`, which carries kernel identity only.
+    pub onboarded: bool,
 }
 
 /// The single local household, or `None` before bootstrap. Takes the oldest row so a
@@ -242,9 +285,15 @@ pub struct HouseholdRecord {
 pub fn load_household(conn: &Connection) -> Result<Option<HouseholdRecord>, StorageError> {
     let row = conn
         .query_row(
-            "SELECT id, name FROM household ORDER BY rowid LIMIT 1",
+            "SELECT id, name, onboarded FROM household ORDER BY rowid LIMIT 1",
             [],
-            |r| Ok((r.get::<_, String>(0)?, r.get::<_, Option<String>>(1)?)),
+            |r| {
+                Ok((
+                    r.get::<_, String>(0)?,
+                    r.get::<_, Option<String>>(1)?,
+                    r.get::<_, bool>(2)?,
+                ))
+            },
         )
         .optional()?;
     with_members(conn, row)
@@ -259,9 +308,15 @@ pub fn load_household_by_id(
 ) -> Result<Option<HouseholdRecord>, StorageError> {
     let row = conn
         .query_row(
-            "SELECT id, name FROM household WHERE id = ?1",
+            "SELECT id, name, onboarded FROM household WHERE id = ?1",
             params![id.as_str()],
-            |r| Ok((r.get::<_, String>(0)?, r.get::<_, Option<String>>(1)?)),
+            |r| {
+                Ok((
+                    r.get::<_, String>(0)?,
+                    r.get::<_, Option<String>>(1)?,
+                    r.get::<_, bool>(2)?,
+                ))
+            },
         )
         .optional()?;
     with_members(conn, row)
@@ -270,9 +325,9 @@ pub fn load_household_by_id(
 /// Attaches the member rows to a household row, so both loaders scope members identically.
 fn with_members(
     conn: &Connection,
-    row: Option<(String, Option<String>)>,
+    row: Option<(String, Option<String>, bool)>,
 ) -> Result<Option<HouseholdRecord>, StorageError> {
-    let Some((id, name)) = row else {
+    let Some((id, name, onboarded)) = row else {
         return Ok(None);
     };
     let household = Household {
@@ -295,7 +350,11 @@ fn with_members(
             })
         })
         .collect::<Result<Vec<_>, StorageError>>()?;
-    Ok(Some(HouseholdRecord { household, members }))
+    Ok(Some(HouseholdRecord {
+        household,
+        members,
+        onboarded,
+    }))
 }
 
 /// Returns the local household, creating `candidate` with `member` if none exists yet.
@@ -314,6 +373,9 @@ pub fn ensure_household(
             HouseholdRecord {
                 household: candidate.clone(),
                 members: vec![member.clone()],
+                // Matches the column default: a household that was just created has not
+                // been through first run.
+                onboarded: false,
             }
         }
     };
@@ -333,6 +395,20 @@ pub fn rename_household(
     let changed = conn.execute(
         "UPDATE household SET name = ?1 WHERE id = ?2",
         params![name, id.as_str()],
+    )?;
+    if changed == 0 {
+        return Err(StorageError::NoSuchHousehold(id.as_str().to_owned()));
+    }
+    Ok(())
+}
+
+/// Marks exactly this household onboarded. Idempotent: a second call is a no-op write, so a
+/// user who taps the button twice does not get an error. An absent id is an error, as in
+/// [`rename_household`].
+pub fn mark_onboarded(conn: &Connection, id: &HouseholdId) -> Result<(), StorageError> {
+    let changed = conn.execute(
+        "UPDATE household SET onboarded = 1 WHERE id = ?1",
+        params![id.as_str()],
     )?;
     if changed == 0 {
         return Err(StorageError::NoSuchHousehold(id.as_str().to_owned()));
@@ -454,6 +530,185 @@ pub fn load_planning_cycle(
         length_days,
         MealScope::new(slots)?,
     )?))
+}
+
+/// Replaces the household's whole restriction set in one IMMEDIATE transaction, so a partial
+/// set is never observable — the same shape as [`save_planning_cycle`]. IMMEDIATE because it
+/// reads (`require_household`) before it writes. An empty set is legal and clears the set.
+pub fn save_restrictions(
+    conn: &mut Connection,
+    id: &HouseholdId,
+    set: &HouseholdRestrictions,
+) -> Result<(), StorageError> {
+    let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    require_household(&tx, id)?;
+    tx.execute(
+        "DELETE FROM household_restriction WHERE household_id = ?1",
+        params![id.as_str()],
+    )?;
+    for (position, restriction) in set.restrictions().iter().enumerate() {
+        let (kind, text) = match restriction {
+            Restriction::Known(kind) => (kind.as_str(), None),
+            Restriction::Other(text) => ("other", Some(text.as_str())),
+        };
+        tx.execute(
+            "INSERT INTO household_restriction (household_id, position, kind, text)
+             VALUES (?1, ?2, ?3, ?4)",
+            // `u32`, as `length_days` is: rusqlite binds no `usize`, and the set is bounded
+            // by what a person will type into a checkbox list.
+            params![id.as_str(), position as u32, kind, text],
+        )?;
+    }
+    tx.commit()?;
+    Ok(())
+}
+
+/// The household's restrictions in stored order, or an empty set — including for a household
+/// that does not exist, which has no restrictions in exactly the same sense.
+pub fn load_restrictions(
+    conn: &Connection,
+    id: &HouseholdId,
+) -> Result<HouseholdRestrictions, StorageError> {
+    let mut stmt = conn.prepare(
+        "SELECT position, kind, text FROM household_restriction
+         WHERE household_id = ?1 ORDER BY position",
+    )?;
+    let rows = stmt
+        .query_map(params![id.as_str()], |r| {
+            Ok((
+                r.get::<_, u32>(0)?,
+                r.get::<_, String>(1)?,
+                r.get::<_, Option<String>>(2)?,
+            ))
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
+    let restrictions = rows
+        .into_iter()
+        .map(|(position, kind, text)| restriction_from_row(id, position as usize, kind, text))
+        .collect::<Result<Vec<_>, StorageError>>()?;
+    Ok(HouseholdRestrictions::new(restrictions))
+}
+
+/// One stored restriction row, back through the domain constructors. A row whose `kind`/`text`
+/// pair does not describe a restriction is reported with its columns and never coerced into
+/// something displayable (invariant 10): a warning surface that quietly drops what it could
+/// not read is under-warning, the one direction this feature must not fail in. Unlike
+/// `CorruptUnit`, the vocabulary failure lands here too — `kind` is both the discriminant and
+/// the token, so an unrecognised value is a fault in the same column either way. A blank
+/// `other` text stays the domain's own error: that row is shaped correctly and it is the value
+/// that cannot be a restriction.
+fn restriction_from_row(
+    household: &HouseholdId,
+    position: usize,
+    kind: String,
+    text: Option<String>,
+) -> Result<Restriction, StorageError> {
+    let parsed = match (kind.as_str(), text.as_deref()) {
+        ("other", Some(text)) => Some(Restriction::other(text)?),
+        (known, None) => RestrictionKind::parse(known).map(Restriction::Known).ok(),
+        _ => None,
+    };
+    parsed.ok_or(StorageError::CorruptRestriction {
+        household: household.as_str().to_owned(),
+        position,
+        kind,
+        text,
+    })
+}
+
+/// Errors when `member` names no member, or names one belonging to another household. Both
+/// loaders and the writer share it, so a caller holding a foreign member id is rejected the
+/// same way whichever way it arrives — and, in the writer, before any row is touched.
+fn require_member(
+    conn: &Connection,
+    household: &HouseholdId,
+    member: &MemberId,
+) -> Result<(), StorageError> {
+    let owner: Option<String> = conn
+        .query_row(
+            "SELECT household_id FROM household_member WHERE id = ?1",
+            params![member.as_str()],
+            |r| r.get(0),
+        )
+        .optional()?;
+    let Some(owner) = owner else {
+        return Err(StorageError::NoSuchMember(member.as_str().to_owned()));
+    };
+    if owner != household.as_str() {
+        return Err(StorageError::MemberHouseholdMismatch {
+            member: member.as_str().to_owned(),
+            expected: household.as_str().to_owned(),
+            actual: owner,
+        });
+    }
+    Ok(())
+}
+
+/// Replaces this member's whole preference set in one IMMEDIATE transaction, so a partial set
+/// is never observable — the same shape as [`save_planning_cycle`] and [`save_restrictions`].
+/// IMMEDIATE because it reads (`require_member`) before it writes: the write lock is taken at
+/// `BEGIN` rather than upgraded from a shared one part-way through. `household` is checked
+/// against the member's own household first, so a caller holding a foreign member id is
+/// rejected before any write with the same `MemberHouseholdMismatch` the insert path raises.
+///
+/// This card writes no preferences from the app: `MVP-009`/`MVP-023` add the consumer, and
+/// AC-4 asks only that the storage layer key them by member.
+pub fn save_member_preferences(
+    conn: &mut Connection,
+    household: &HouseholdId,
+    member: &MemberId,
+    set: &MemberPreferences,
+) -> Result<(), StorageError> {
+    let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    require_member(&tx, household, member)?;
+    tx.execute(
+        "DELETE FROM member_food_preference WHERE member_id = ?1",
+        params![member.as_str()],
+    )?;
+    for (position, preference) in set.preferences().iter().enumerate() {
+        tx.execute(
+            "INSERT INTO member_food_preference (member_id, position, sentiment, subject)
+             VALUES (?1, ?2, ?3, ?4)",
+            params![
+                member.as_str(),
+                position as u32,
+                preference.sentiment().as_str(),
+                preference.subject(),
+            ],
+        )?;
+    }
+    tx.commit()?;
+    Ok(())
+}
+
+/// This member's preferences in stored order, or an empty set. Every stored value goes back
+/// through the domain constructors, so a row that does not describe a preference is reported
+/// rather than coerced.
+pub fn load_member_preferences(
+    conn: &Connection,
+    household: &HouseholdId,
+    member: &MemberId,
+) -> Result<MemberPreferences, StorageError> {
+    require_member(conn, household, member)?;
+    let mut stmt = conn.prepare(
+        "SELECT sentiment, subject FROM member_food_preference
+         WHERE member_id = ?1 ORDER BY position",
+    )?;
+    let rows = stmt
+        .query_map(params![member.as_str()], |r| {
+            Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?))
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
+    let preferences = rows
+        .into_iter()
+        .map(|(sentiment, subject)| {
+            Ok(MemberPreference::new(
+                Sentiment::parse(&sentiment)?,
+                subject,
+            )?)
+        })
+        .collect::<Result<Vec<_>, StorageError>>()?;
+    Ok(MemberPreferences::new(preferences))
 }
 
 /// Inserts or replaces a catalog ingredient and its whole alias set (MVP-011 seeding path).
@@ -1112,9 +1367,9 @@ mod tests {
     /// `open()` always migrates to latest, so v1 is unreachable through the public API once v2
     /// exists — hence the raw connection and `to_version`. Test-level stand-in for the
     /// on-device v1→v2 migration (PRD §12: tested from representative prior versions); since
-    /// v3 it proves v1→v3 end to end.
+    /// v4 it proves v1→v4 end to end.
     #[test]
-    fn an_existing_v1_database_migrates_to_v3_without_losing_data() {
+    fn an_existing_v1_database_migrates_to_v4_without_losing_data() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("kimatta.db");
         {
@@ -1129,7 +1384,7 @@ mod tests {
             .unwrap();
         }
         let conn = open(&path).unwrap();
-        assert_eq!(schema_version(&conn).unwrap(), 3);
+        assert_eq!(schema_version(&conn).unwrap(), 4);
         assert_eq!(count(&conn, "household"), 1);
         assert_eq!(count(&conn, "household_member"), 2);
         assert_eq!(count(&conn, "planning_cycle"), 0);
@@ -1343,16 +1598,16 @@ mod tests {
     }
 
     #[test]
-    fn empty_db_migrates_to_v3() {
+    fn empty_db_migrates_to_v4() {
         let conn = open(":memory:").unwrap();
-        assert_eq!(schema_version(&conn).unwrap(), 3);
+        assert_eq!(schema_version(&conn).unwrap(), 4);
     }
 
     // --- Step 4: schema v3 -----------------------------------------------------------------
 
     /// Test-level stand-in for the on-device v2→v3 migration, as the v1 test is for v1→v2.
     #[test]
-    fn an_existing_v2_database_migrates_to_v3_without_losing_data() {
+    fn an_existing_v2_database_migrates_to_v4_without_losing_data() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("kimatta.db");
         {
@@ -1373,11 +1628,60 @@ mod tests {
             .unwrap();
         }
         let conn = open(&path).unwrap();
-        assert_eq!(schema_version(&conn).unwrap(), 3);
+        assert_eq!(schema_version(&conn).unwrap(), 4);
         assert_eq!(count(&conn, "household"), 1);
         assert_eq!(count(&conn, "planning_cycle"), 1);
         assert_eq!(count(&conn, "planning_meal_slot"), 2);
         assert_eq!(count(&conn, "recipe"), 0);
+    }
+
+    // --- schema v4 -------------------------------------------------------------------------
+
+    /// Test-level stand-in for the on-device v3→v4 migration, as the v1 and v2 tests are for
+    /// theirs. A recipe is saved at v3 so the migration is proved not to disturb the tables
+    /// migration 3 introduced, not merely the household one it alters.
+    #[test]
+    fn an_existing_v3_database_migrates_to_v4_without_losing_data() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("kimatta.db");
+        {
+            let mut raw = Connection::open(&path).unwrap();
+            MIGRATIONS.to_version(&mut raw, 3).unwrap();
+            assert_eq!(schema_version(&raw).unwrap(), 3);
+            raw.pragma_update(None, "foreign_keys", "ON").unwrap();
+            seed(&mut raw, "h");
+            save_recipe(&mut raw, &recipe("h", "r", vec![])).unwrap();
+        }
+        let conn = open(&path).unwrap();
+        assert_eq!(schema_version(&conn).unwrap(), 4);
+        assert_eq!(count(&conn, "household"), 1);
+        assert_eq!(count(&conn, "household_member"), 1);
+        assert_eq!(count(&conn, "recipe"), 1);
+        assert_eq!(count(&conn, "household_restriction"), 0);
+        assert_eq!(count(&conn, "member_food_preference"), 0);
+    }
+
+    /// The column default is what an already-shipped household reads after the upgrade: the
+    /// migration adds no backfill `UPDATE`, so a v3 install reads `onboarded = 0` and is
+    /// shown Welcome once — it has genuinely never been welcomed, and Welcome is skippable.
+    /// This pins that default, not an exemption from it.
+    #[test]
+    fn a_migrated_household_is_not_onboarded() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("kimatta.db");
+        {
+            let mut raw = Connection::open(&path).unwrap();
+            MIGRATIONS.to_version(&mut raw, 3).unwrap();
+            raw.pragma_update(None, "foreign_keys", "ON").unwrap();
+            seed(&mut raw, "h");
+        }
+        let conn = open(&path).unwrap();
+        let onboarded: bool = conn
+            .query_row("SELECT onboarded FROM household WHERE id = 'h'", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert!(!onboarded);
     }
 
     fn assert_constraint_violation(err: rusqlite::Error) {
@@ -1464,11 +1768,13 @@ mod tests {
         .unwrap();
         conn.execute(RAW_LINE, params!["r", 0, Option::<String>::None, "c"])
             .unwrap();
+        raw_restriction(&conn, "h", "peanuts", None);
         for table in [
             "recipe",
             "recipe_provenance",
             "recipe_ingredient_line",
             "custom_ingredient",
+            "household_restriction",
         ] {
             assert_eq!(count(&conn, table), 1, "{table} must be seeded");
         }
@@ -1480,6 +1786,7 @@ mod tests {
             "recipe_provenance",
             "recipe_ingredient_line",
             "custom_ingredient",
+            "household_restriction",
         ] {
             assert_eq!(count(&conn, table), 0, "{table} must be empty");
         }
@@ -2215,20 +2522,18 @@ mod tests {
 
     #[test]
     fn the_line_ingredient_foreign_keys_are_indexed() {
-        let conn = open(":memory:").unwrap();
-        // Pinned to v3: the indexes must ship inside migration 3, not a later one.
-        assert_eq!(schema_version(&conn).unwrap(), 3);
-        let mut stmt = conn
-            .prepare(
-                "SELECT name FROM sqlite_master
-                 WHERE type = 'index' AND tbl_name = 'recipe_ingredient_line'",
-            )
-            .unwrap();
-        let names: Vec<String> = stmt
-            .query_map([], |r| r.get::<_, String>(0))
-            .unwrap()
-            .collect::<Result<_, _>>()
-            .unwrap();
+        // Pinned to v3: the indexes must ship inside migration 3, not a later one. Expressed
+        // as absent-at-2 then present-at-3, because that is the claim — asserting
+        // `schema_version == 3` right after `to_version(.., 3)` would be a tautology, and
+        // bumping the number to the current latest would delete the claim entirely.
+        let mut conn = Connection::open_in_memory().unwrap();
+        MIGRATIONS.to_version(&mut conn, 2).unwrap();
+        assert!(
+            line_index_names(&conn).is_empty(),
+            "no recipe_ingredient_line index can exist before migration 3 creates the table"
+        );
+        MIGRATIONS.to_version(&mut conn, 3).unwrap();
+        let names = line_index_names(&conn);
         for expected in [
             "recipe_ingredient_line_ingredient",
             "recipe_ingredient_line_custom_ingredient",
@@ -2238,6 +2543,21 @@ mod tests {
                 "{expected} missing from {names:?}"
             );
         }
+    }
+
+    fn line_index_names(conn: &Connection) -> Vec<String> {
+        let mut stmt = conn
+            .prepare(
+                "SELECT name FROM sqlite_master
+                 WHERE type = 'index' AND tbl_name = 'recipe_ingredient_line'",
+            )
+            .unwrap();
+        let names = stmt
+            .query_map([], |r| r.get::<_, String>(0))
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap();
+        names
     }
 
     #[test]
@@ -2355,10 +2675,20 @@ mod tests {
         let mut conn = open(":memory:").unwrap();
         let members = [member("m1", "h"), member("m2", "h")];
         insert_household(&mut conn, &household("h"), &members).unwrap();
+        // Two levels: household → household_member → member_food_preference.
+        save_member_preferences(
+            &mut conn,
+            &HouseholdId::new("h").unwrap(),
+            &MemberId::new("m1").unwrap(),
+            &MemberPreferences::new([MemberPreference::new(Sentiment::Like, "tofu").unwrap()]),
+        )
+        .unwrap();
+        assert_eq!(count(&conn, "member_food_preference"), 1);
         conn.execute("DELETE FROM household WHERE id = ?1", params!["h"])
             .unwrap();
         assert_eq!(count(&conn, "household"), 0);
         assert_eq!(count(&conn, "household_member"), 0);
+        assert_eq!(count(&conn, "member_food_preference"), 0);
     }
 
     #[test]
@@ -2388,7 +2718,7 @@ mod tests {
             insert_household(&mut conn, &household("h"), &[member("m", "h")]).unwrap();
         }
         let conn = open(&path).unwrap();
-        assert_eq!(schema_version(&conn).unwrap(), 3);
+        assert_eq!(schema_version(&conn).unwrap(), 4);
         assert_eq!(count(&conn, "household"), 1);
         assert_eq!(count(&conn, "household_member"), 1);
         let on: i32 = conn
@@ -2506,5 +2836,389 @@ mod tests {
             rename_household(&conn, &HouseholdId::new("nope").unwrap(), Some("x")).unwrap_err();
         assert!(matches!(err, StorageError::NoSuchHousehold(_)));
         assert_eq!(name_of(&conn, "h1"), Some("Home".into()));
+    }
+
+    // --- MVP-006: the onboarding flag ------------------------------------------------------
+
+    fn onboarded_of(conn: &Connection, id: &str) -> bool {
+        conn.query_row("SELECT onboarded FROM household WHERE id = ?1", [id], |r| {
+            r.get(0)
+        })
+        .unwrap()
+    }
+
+    /// A household that has just been created has not been through first run, so the welcome
+    /// screen is what its next launch must show.
+    #[test]
+    fn a_new_household_is_not_onboarded() {
+        let mut conn = open(":memory:").unwrap();
+        let record = ensure_household(&mut conn, &household("h1"), &member("m1", "h1")).unwrap();
+        assert!(!record.onboarded);
+        assert!(!load_household(&conn).unwrap().unwrap().onboarded);
+    }
+
+    #[test]
+    fn marking_onboarded_is_visible_to_both_loaders() {
+        let mut conn = open(":memory:").unwrap();
+        insert_household(&mut conn, &household("h1"), &[member("m1", "h1")]).unwrap();
+        let id = HouseholdId::new("h1").unwrap();
+        mark_onboarded(&conn, &id).unwrap();
+        assert!(load_household(&conn).unwrap().unwrap().onboarded);
+        assert!(load_household_by_id(&conn, &id).unwrap().unwrap().onboarded);
+    }
+
+    /// Idempotent: the button can be tapped twice, and the second call must not be an error.
+    #[test]
+    fn marking_onboarded_twice_is_not_an_error() {
+        let mut conn = open(":memory:").unwrap();
+        insert_household(&mut conn, &household("h1"), &[]).unwrap();
+        let id = HouseholdId::new("h1").unwrap();
+        mark_onboarded(&conn, &id).unwrap();
+        mark_onboarded(&conn, &id).unwrap();
+        assert!(onboarded_of(&conn, "h1"));
+    }
+
+    /// The whole point of the flag: a second launch must not show first run again.
+    #[test]
+    fn the_onboarded_flag_survives_reopen() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("kimatta.db");
+        {
+            let mut conn = open(&path).unwrap();
+            ensure_household(&mut conn, &household("h1"), &member("m1", "h1")).unwrap();
+            mark_onboarded(&conn, &HouseholdId::new("h1").unwrap()).unwrap();
+        }
+        let conn = open(&path).unwrap();
+        assert!(load_household(&conn).unwrap().unwrap().onboarded);
+    }
+
+    #[test]
+    fn marking_an_absent_household_is_an_error_and_changes_nothing() {
+        let mut conn = open(":memory:").unwrap();
+        insert_household(&mut conn, &household("h1"), &[]).unwrap();
+        let err = mark_onboarded(&conn, &HouseholdId::new("nope").unwrap()).unwrap_err();
+        assert!(matches!(err, StorageError::NoSuchHousehold(_)));
+        assert!(!onboarded_of(&conn, "h1"));
+    }
+
+    #[test]
+    fn marking_onboarded_touches_only_the_named_household() {
+        let mut conn = open(":memory:").unwrap();
+        insert_household(&mut conn, &household("h1"), &[]).unwrap();
+        insert_household(&mut conn, &household("h2"), &[]).unwrap();
+        mark_onboarded(&conn, &HouseholdId::new("h2").unwrap()).unwrap();
+        assert!(onboarded_of(&conn, "h2"));
+        assert!(!onboarded_of(&conn, "h1"));
+    }
+
+    // --- MVP-006: household restrictions ---------------------------------------------------
+
+    fn hid(id: &str) -> HouseholdId {
+        HouseholdId::new(id).unwrap()
+    }
+
+    fn mixed_set() -> HouseholdRestrictions {
+        HouseholdRestrictions::new([
+            Restriction::Known(RestrictionKind::Peanuts),
+            Restriction::other("nightshades").unwrap(),
+            Restriction::Known(RestrictionKind::TreeNuts),
+        ])
+    }
+
+    /// Inserts a restriction row the domain could not have produced, so the read path's own
+    /// guards are what is under test.
+    fn raw_restriction(conn: &Connection, household: &str, kind: &str, text: Option<&str>) {
+        conn.execute(
+            "INSERT INTO household_restriction (household_id, position, kind, text)
+             VALUES (?1, 0, ?2, ?3)",
+            params![household, kind, text],
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn restrictions_round_trip_in_stored_order() {
+        let mut conn = open(":memory:").unwrap();
+        seed(&mut conn, "h");
+        let set = mixed_set();
+        save_restrictions(&mut conn, &hid("h"), &set).unwrap();
+        assert_eq!(load_restrictions(&conn, &hid("h")).unwrap(), set);
+    }
+
+    #[test]
+    fn saving_replaces_the_whole_restriction_set() {
+        let mut conn = open(":memory:").unwrap();
+        seed(&mut conn, "h");
+        save_restrictions(&mut conn, &hid("h"), &mixed_set()).unwrap();
+        assert_eq!(count(&conn, "household_restriction"), 3);
+        let shorter = HouseholdRestrictions::new([Restriction::Known(RestrictionKind::Vegan)]);
+        save_restrictions(&mut conn, &hid("h"), &shorter).unwrap();
+        assert_eq!(load_restrictions(&conn, &hid("h")).unwrap(), shorter);
+        // The rows of the longer set are gone, not merely unread.
+        assert_eq!(count(&conn, "household_restriction"), 1);
+    }
+
+    #[test]
+    fn saving_an_empty_set_clears_the_restrictions() {
+        let mut conn = open(":memory:").unwrap();
+        seed(&mut conn, "h");
+        save_restrictions(&mut conn, &hid("h"), &mixed_set()).unwrap();
+        save_restrictions(&mut conn, &hid("h"), &HouseholdRestrictions::default()).unwrap();
+        assert_eq!(
+            load_restrictions(&conn, &hid("h")).unwrap(),
+            HouseholdRestrictions::default()
+        );
+        assert_eq!(count(&conn, "household_restriction"), 0);
+    }
+
+    /// The owner's 2026-08-28 scope resolution, pinned: restrictions belong to a household,
+    /// and one household's set never leaks into another's.
+    #[test]
+    fn restrictions_are_household_scoped() {
+        let mut conn = open(":memory:").unwrap();
+        seed(&mut conn, "h1");
+        seed(&mut conn, "h2");
+        let a = mixed_set();
+        let b = HouseholdRestrictions::new([Restriction::Known(RestrictionKind::Gluten)]);
+        save_restrictions(&mut conn, &hid("h1"), &a).unwrap();
+        save_restrictions(&mut conn, &hid("h2"), &b).unwrap();
+        assert_eq!(load_restrictions(&conn, &hid("h1")).unwrap(), a);
+        assert_eq!(load_restrictions(&conn, &hid("h2")).unwrap(), b);
+        // A household with no set of its own reads empty, not someone else's.
+        assert_eq!(
+            load_restrictions(&conn, &hid("absent")).unwrap(),
+            HouseholdRestrictions::default()
+        );
+    }
+
+    #[test]
+    fn restrictions_for_an_absent_household_are_rejected() {
+        let mut conn = open(":memory:").unwrap();
+        seed(&mut conn, "h");
+        let err = save_restrictions(&mut conn, &hid("nope"), &mixed_set()).unwrap_err();
+        assert!(matches!(err, StorageError::NoSuchHousehold(_)), "{err:?}");
+        assert_eq!(count(&conn, "household_restriction"), 0);
+    }
+
+    /// Invariant 10: a row the vocabulary does not cover is reported with its columns, never
+    /// coerced into something displayable. Under-warning is the one direction this must not
+    /// fail in.
+    #[test]
+    fn a_row_with_an_unknown_kind_is_reported_as_corrupt() {
+        let mut conn = open(":memory:").unwrap();
+        seed(&mut conn, "h");
+        raw_restriction(&conn, "h", "nightshades", None);
+        let err = load_restrictions(&conn, &hid("h")).unwrap_err();
+        assert!(
+            matches!(&err, StorageError::CorruptRestriction { household, position, kind, text }
+                if household == "h" && *position == 0 && kind == "nightshades" && text.is_none()),
+            "got {err:?}"
+        );
+    }
+
+    /// SQLite will happily store `kind='other'` with a NULL `text`; the read path must not.
+    #[test]
+    fn an_other_row_with_no_text_is_reported_as_corrupt() {
+        let mut conn = open(":memory:").unwrap();
+        seed(&mut conn, "h");
+        raw_restriction(&conn, "h", "other", None);
+        let err = load_restrictions(&conn, &hid("h")).unwrap_err();
+        assert!(
+            matches!(&err, StorageError::CorruptRestriction { kind, text, .. }
+                if kind == "other" && text.is_none()),
+            "got {err:?}"
+        );
+    }
+
+    /// A known kind carrying text is a shape fault too: nothing writes it, so a row that has
+    /// it did not come from this code.
+    #[test]
+    fn a_known_kind_row_carrying_text_is_reported_as_corrupt() {
+        let mut conn = open(":memory:").unwrap();
+        seed(&mut conn, "h");
+        raw_restriction(&conn, "h", "peanuts", Some("peanuts"));
+        let err = load_restrictions(&conn, &hid("h")).unwrap_err();
+        assert!(
+            matches!(&err, StorageError::CorruptRestriction { kind, .. } if kind == "peanuts"),
+            "got {err:?}"
+        );
+    }
+
+    /// Blank text is the domain's own error rather than a shape fault: the row is shaped
+    /// correctly and it is the value that cannot be a restriction.
+    #[test]
+    fn an_other_row_with_blank_text_is_rejected() {
+        let mut conn = open(":memory:").unwrap();
+        seed(&mut conn, "h");
+        raw_restriction(&conn, "h", "other", Some("   "));
+        let err = load_restrictions(&conn, &hid("h")).unwrap_err();
+        assert!(
+            matches!(
+                &err,
+                StorageError::Restriction(RestrictionError::Empty { .. })
+            ),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn restrictions_persist_across_reopen() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("kimatta.db");
+        {
+            let mut conn = open(&path).unwrap();
+            seed(&mut conn, "h");
+            save_restrictions(&mut conn, &hid("h"), &mixed_set()).unwrap();
+        }
+        let conn = open(&path).unwrap();
+        assert_eq!(load_restrictions(&conn, &hid("h")).unwrap(), mixed_set());
+    }
+
+    // --- MVP-006: member-scoped preferences (AC-4) -----------------------------------------
+
+    fn mid(id: &str) -> MemberId {
+        MemberId::new(id).unwrap()
+    }
+
+    fn prefs(items: &[(Sentiment, &str)]) -> MemberPreferences {
+        MemberPreferences::new(
+            items
+                .iter()
+                .map(|(s, subject)| MemberPreference::new(*s, *subject).unwrap()),
+        )
+    }
+
+    /// Two members of the same household, so the household is held constant and only the
+    /// member varies.
+    fn seed_two_members(conn: &mut Connection) {
+        insert_household(
+            conn,
+            &household("h"),
+            &[member("m1", "h"), member("m2", "h")],
+        )
+        .unwrap();
+    }
+
+    /// **AC-4's named evidence.** Preferences are keyed by member, not by household: two
+    /// members of the *same* household hold different sets and read back distinctly. The
+    /// like/dislike round-trip and stored order are asserted here too — a separate test for
+    /// them would be strictly subsumed by this equality.
+    #[test]
+    fn preferences_are_keyed_by_member_not_household() {
+        let mut conn = open(":memory:").unwrap();
+        seed_two_members(&mut conn);
+        let a = prefs(&[(Sentiment::Like, "tofu"), (Sentiment::Dislike, "olives")]);
+        let b = prefs(&[(Sentiment::Dislike, "tofu")]);
+        save_member_preferences(&mut conn, &hid("h"), &mid("m1"), &a).unwrap();
+        save_member_preferences(&mut conn, &hid("h"), &mid("m2"), &b).unwrap();
+        assert_eq!(
+            load_member_preferences(&conn, &hid("h"), &mid("m1")).unwrap(),
+            a
+        );
+        assert_eq!(
+            load_member_preferences(&conn, &hid("h"), &mid("m2")).unwrap(),
+            b
+        );
+    }
+
+    #[test]
+    fn saving_replaces_the_whole_preference_set() {
+        let mut conn = open(":memory:").unwrap();
+        seed_two_members(&mut conn);
+        save_member_preferences(
+            &mut conn,
+            &hid("h"),
+            &mid("m1"),
+            &prefs(&[(Sentiment::Like, "tofu"), (Sentiment::Dislike, "olives")]),
+        )
+        .unwrap();
+        assert_eq!(count(&conn, "member_food_preference"), 2);
+        let shorter = prefs(&[(Sentiment::Like, "rice")]);
+        save_member_preferences(&mut conn, &hid("h"), &mid("m1"), &shorter).unwrap();
+        assert_eq!(
+            load_member_preferences(&conn, &hid("h"), &mid("m1")).unwrap(),
+            shorter
+        );
+        assert_eq!(count(&conn, "member_food_preference"), 1);
+        // The empty set is legal and clears the member's preferences.
+        save_member_preferences(
+            &mut conn,
+            &hid("h"),
+            &mid("m1"),
+            &MemberPreferences::default(),
+        )
+        .unwrap();
+        assert_eq!(count(&conn, "member_food_preference"), 0);
+    }
+
+    #[test]
+    fn preferences_for_a_member_of_another_household_are_rejected() {
+        let mut conn = open(":memory:").unwrap();
+        seed_two_members(&mut conn);
+        seed(&mut conn, "other");
+        let set = prefs(&[(Sentiment::Like, "tofu")]);
+        let err = save_member_preferences(&mut conn, &hid("other"), &mid("m1"), &set).unwrap_err();
+        assert!(
+            matches!(&err, StorageError::MemberHouseholdMismatch { member, expected, actual }
+                if member == "m1" && expected == "other" && actual == "h"),
+            "got {err:?}"
+        );
+        assert_eq!(count(&conn, "member_food_preference"), 0);
+        assert!(matches!(
+            load_member_preferences(&conn, &hid("other"), &mid("m1")).unwrap_err(),
+            StorageError::MemberHouseholdMismatch { .. }
+        ));
+    }
+
+    #[test]
+    fn preferences_for_an_absent_member_are_rejected() {
+        let mut conn = open(":memory:").unwrap();
+        seed_two_members(&mut conn);
+        let set = prefs(&[(Sentiment::Like, "tofu")]);
+        let err = save_member_preferences(&mut conn, &hid("h"), &mid("nope"), &set).unwrap_err();
+        assert!(
+            matches!(&err, StorageError::NoSuchMember(m) if m == "nope"),
+            "got {err:?}"
+        );
+        assert_eq!(count(&conn, "member_food_preference"), 0);
+        assert!(matches!(
+            load_member_preferences(&conn, &hid("h"), &mid("nope")).unwrap_err(),
+            StorageError::NoSuchMember(_)
+        ));
+    }
+
+    #[test]
+    fn a_row_with_an_unknown_sentiment_is_rejected_on_read() {
+        let mut conn = open(":memory:").unwrap();
+        seed_two_members(&mut conn);
+        conn.execute(
+            "INSERT INTO member_food_preference (member_id, position, sentiment, subject)
+             VALUES ('m1', 0, 'loathes', 'olives')",
+            [],
+        )
+        .unwrap();
+        let err = load_member_preferences(&conn, &hid("h"), &mid("m1")).unwrap_err();
+        assert!(
+            matches!(&err, StorageError::Preference(PreferenceError::UnknownSentiment(s))
+                if s == "loathes"),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn preferences_persist_across_reopen() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("kimatta.db");
+        let set = prefs(&[(Sentiment::Dislike, "olives")]);
+        {
+            let mut conn = open(&path).unwrap();
+            seed_two_members(&mut conn);
+            save_member_preferences(&mut conn, &hid("h"), &mid("m1"), &set).unwrap();
+        }
+        let conn = open(&path).unwrap();
+        assert_eq!(
+            load_member_preferences(&conn, &hid("h"), &mid("m1")).unwrap(),
+            set
+        );
     }
 }

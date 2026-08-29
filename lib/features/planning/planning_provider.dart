@@ -18,6 +18,26 @@ class PlanningCycleNotifier extends AsyncNotifier<PlanningCycleDto> {
       defaultAnchorDate: todayCivilDate(),
     );
   }
+
+  /// Replaces the cycle and publishes what was stored. The household id is an explicit
+  /// parameter, like `HouseholdNotifier.rename`'s: the bridge command requires it, and
+  /// reading it back out of this notifier's own async state would be a hidden dependency
+  /// its siblings do not have.
+  Future<PlanningCycleDto> save(
+    String householdId, {
+    required String anchorDate,
+    required int lengthDays,
+    required List<MealSlotDto> mealSlots,
+  }) async {
+    final stored = await savePlanningCycle(
+      householdId: householdId,
+      anchorDate: anchorDate,
+      lengthDays: lengthDays,
+      mealSlots: mealSlots,
+    );
+    state = AsyncData(stored);
+    return stored;
+  }
 }
 
 /// The household's planning rhythm, materialised dinner-only on first read (AC-3).

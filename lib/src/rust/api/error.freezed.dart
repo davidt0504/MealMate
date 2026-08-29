@@ -56,7 +56,7 @@ extension KimattaErrorPatterns on KimattaError {
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeMap<TResult extends Object?>({TResult Function( KimattaError_InvalidPath value)?  invalidPath,TResult Function( KimattaError_NotOpen value)?  notOpen,TResult Function( KimattaError_Storage value)?  storage,TResult Function( KimattaError_Planning value)?  planning,TResult Function( KimattaError_Recipe value)?  recipe,required TResult orElse(),}){
+@optionalTypeArgs TResult maybeMap<TResult extends Object?>({TResult Function( KimattaError_InvalidPath value)?  invalidPath,TResult Function( KimattaError_NotOpen value)?  notOpen,TResult Function( KimattaError_Storage value)?  storage,TResult Function( KimattaError_Planning value)?  planning,TResult Function( KimattaError_Recipe value)?  recipe,TResult Function( KimattaError_Restriction value)?  restriction,required TResult orElse(),}){
 final _that = this;
 switch (_that) {
 case KimattaError_InvalidPath() when invalidPath != null:
@@ -64,7 +64,8 @@ return invalidPath(_that);case KimattaError_NotOpen() when notOpen != null:
 return notOpen(_that);case KimattaError_Storage() when storage != null:
 return storage(_that);case KimattaError_Planning() when planning != null:
 return planning(_that);case KimattaError_Recipe() when recipe != null:
-return recipe(_that);case _:
+return recipe(_that);case KimattaError_Restriction() when restriction != null:
+return restriction(_that);case _:
   return orElse();
 
 }
@@ -82,7 +83,7 @@ return recipe(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult map<TResult extends Object?>({required TResult Function( KimattaError_InvalidPath value)  invalidPath,required TResult Function( KimattaError_NotOpen value)  notOpen,required TResult Function( KimattaError_Storage value)  storage,required TResult Function( KimattaError_Planning value)  planning,required TResult Function( KimattaError_Recipe value)  recipe,}){
+@optionalTypeArgs TResult map<TResult extends Object?>({required TResult Function( KimattaError_InvalidPath value)  invalidPath,required TResult Function( KimattaError_NotOpen value)  notOpen,required TResult Function( KimattaError_Storage value)  storage,required TResult Function( KimattaError_Planning value)  planning,required TResult Function( KimattaError_Recipe value)  recipe,required TResult Function( KimattaError_Restriction value)  restriction,}){
 final _that = this;
 switch (_that) {
 case KimattaError_InvalidPath():
@@ -90,7 +91,8 @@ return invalidPath(_that);case KimattaError_NotOpen():
 return notOpen(_that);case KimattaError_Storage():
 return storage(_that);case KimattaError_Planning():
 return planning(_that);case KimattaError_Recipe():
-return recipe(_that);}
+return recipe(_that);case KimattaError_Restriction():
+return restriction(_that);}
 }
 /// A variant of `map` that fallback to returning `null`.
 ///
@@ -104,7 +106,7 @@ return recipe(_that);}
 /// }
 /// ```
 
-@optionalTypeArgs TResult? mapOrNull<TResult extends Object?>({TResult? Function( KimattaError_InvalidPath value)?  invalidPath,TResult? Function( KimattaError_NotOpen value)?  notOpen,TResult? Function( KimattaError_Storage value)?  storage,TResult? Function( KimattaError_Planning value)?  planning,TResult? Function( KimattaError_Recipe value)?  recipe,}){
+@optionalTypeArgs TResult? mapOrNull<TResult extends Object?>({TResult? Function( KimattaError_InvalidPath value)?  invalidPath,TResult? Function( KimattaError_NotOpen value)?  notOpen,TResult? Function( KimattaError_Storage value)?  storage,TResult? Function( KimattaError_Planning value)?  planning,TResult? Function( KimattaError_Recipe value)?  recipe,TResult? Function( KimattaError_Restriction value)?  restriction,}){
 final _that = this;
 switch (_that) {
 case KimattaError_InvalidPath() when invalidPath != null:
@@ -112,7 +114,8 @@ return invalidPath(_that);case KimattaError_NotOpen() when notOpen != null:
 return notOpen(_that);case KimattaError_Storage() when storage != null:
 return storage(_that);case KimattaError_Planning() when planning != null:
 return planning(_that);case KimattaError_Recipe() when recipe != null:
-return recipe(_that);case _:
+return recipe(_that);case KimattaError_Restriction() when restriction != null:
+return restriction(_that);case _:
   return null;
 
 }
@@ -129,14 +132,15 @@ return recipe(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>({TResult Function()?  invalidPath,TResult Function()?  notOpen,TResult Function( String message)?  storage,TResult Function( String message)?  planning,TResult Function( String message)?  recipe,required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>({TResult Function()?  invalidPath,TResult Function()?  notOpen,TResult Function( String message)?  storage,TResult Function( String message)?  planning,TResult Function( String message)?  recipe,TResult Function( String message)?  restriction,required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case KimattaError_InvalidPath() when invalidPath != null:
 return invalidPath();case KimattaError_NotOpen() when notOpen != null:
 return notOpen();case KimattaError_Storage() when storage != null:
 return storage(_that.message);case KimattaError_Planning() when planning != null:
 return planning(_that.message);case KimattaError_Recipe() when recipe != null:
-return recipe(_that.message);case _:
+return recipe(_that.message);case KimattaError_Restriction() when restriction != null:
+return restriction(_that.message);case _:
   return orElse();
 
 }
@@ -154,14 +158,15 @@ return recipe(_that.message);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>({required TResult Function()  invalidPath,required TResult Function()  notOpen,required TResult Function( String message)  storage,required TResult Function( String message)  planning,required TResult Function( String message)  recipe,}) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>({required TResult Function()  invalidPath,required TResult Function()  notOpen,required TResult Function( String message)  storage,required TResult Function( String message)  planning,required TResult Function( String message)  recipe,required TResult Function( String message)  restriction,}) {final _that = this;
 switch (_that) {
 case KimattaError_InvalidPath():
 return invalidPath();case KimattaError_NotOpen():
 return notOpen();case KimattaError_Storage():
 return storage(_that.message);case KimattaError_Planning():
 return planning(_that.message);case KimattaError_Recipe():
-return recipe(_that.message);}
+return recipe(_that.message);case KimattaError_Restriction():
+return restriction(_that.message);}
 }
 /// A variant of `when` that fallback to returning `null`
 ///
@@ -175,14 +180,15 @@ return recipe(_that.message);}
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>({TResult? Function()?  invalidPath,TResult? Function()?  notOpen,TResult? Function( String message)?  storage,TResult? Function( String message)?  planning,TResult? Function( String message)?  recipe,}) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>({TResult? Function()?  invalidPath,TResult? Function()?  notOpen,TResult? Function( String message)?  storage,TResult? Function( String message)?  planning,TResult? Function( String message)?  recipe,TResult? Function( String message)?  restriction,}) {final _that = this;
 switch (_that) {
 case KimattaError_InvalidPath() when invalidPath != null:
 return invalidPath();case KimattaError_NotOpen() when notOpen != null:
 return notOpen();case KimattaError_Storage() when storage != null:
 return storage(_that.message);case KimattaError_Planning() when planning != null:
 return planning(_that.message);case KimattaError_Recipe() when recipe != null:
-return recipe(_that.message);case _:
+return recipe(_that.message);case KimattaError_Restriction() when restriction != null:
+return restriction(_that.message);case _:
   return null;
 
 }
@@ -444,6 +450,72 @@ class _$KimattaError_RecipeCopyWithImpl<$Res>
 /// with the given fields replaced by the non-null parameter values.
 @pragma('vm:prefer-inline') $Res call({Object? message = null,}) {
   return _then(KimattaError_Recipe(
+message: null == message ? _self.message : message // ignore: cast_nullable_to_non_nullable
+as String,
+  ));
+}
+
+
+}
+
+/// @nodoc
+
+
+class KimattaError_Restriction extends KimattaError {
+  const KimattaError_Restriction({required this.message}): super._();
+  
+
+ final  String message;
+
+/// Create a copy of KimattaError
+/// with the given fields replaced by the non-null parameter values.
+@JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+$KimattaError_RestrictionCopyWith<KimattaError_Restriction> get copyWith => _$KimattaError_RestrictionCopyWithImpl<KimattaError_Restriction>(this, _$identity);
+
+
+
+@override
+bool operator ==(Object other) {
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is KimattaError_Restriction&&(identical(other.message, message) || other.message == message));
+}
+
+
+@override
+int get hashCode => Object.hash(runtimeType,message);
+
+@override
+String toString() {
+  return 'KimattaError.restriction(message: $message)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class $KimattaError_RestrictionCopyWith<$Res> implements $KimattaErrorCopyWith<$Res> {
+  factory $KimattaError_RestrictionCopyWith(KimattaError_Restriction value, $Res Function(KimattaError_Restriction) _then) = _$KimattaError_RestrictionCopyWithImpl;
+@useResult
+$Res call({
+ String message
+});
+
+
+
+
+}
+/// @nodoc
+class _$KimattaError_RestrictionCopyWithImpl<$Res>
+    implements $KimattaError_RestrictionCopyWith<$Res> {
+  _$KimattaError_RestrictionCopyWithImpl(this._self, this._then);
+
+  final KimattaError_Restriction _self;
+  final $Res Function(KimattaError_Restriction) _then;
+
+/// Create a copy of KimattaError
+/// with the given fields replaced by the non-null parameter values.
+@pragma('vm:prefer-inline') $Res call({Object? message = null,}) {
+  return _then(KimattaError_Restriction(
 message: null == message ? _self.message : message // ignore: cast_nullable_to_non_nullable
 as String,
   ));

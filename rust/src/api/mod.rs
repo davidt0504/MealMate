@@ -3,3 +3,4 @@ pub mod health;
 pub mod household;
 pub mod planning;
 pub mod recipe;
+pub mod restrictions;

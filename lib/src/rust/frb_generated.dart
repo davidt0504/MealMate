@@ -8,6 +8,7 @@ import 'api/health.dart';
 import 'api/household.dart';
 import 'api/planning.dart';
 import 'api/recipe.dart';
+import 'api/restrictions.dart';
 
 import 'dart:async';
 import 'dart:convert';
@@ -73,7 +74,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.13.0';
 
   @override
-  int get rustContentHash => 563915109;
+  int get rustContentHash => 1348893926;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -91,6 +92,10 @@ abstract class RustLibApi extends BaseApi {
 
   Future<HouseholdDto> crateApiHouseholdBootstrapHousehold();
 
+  Future<HouseholdDto> crateApiHouseholdCompleteOnboarding({
+    required String householdId,
+  });
+
   String crateApiHealthCoreVersion();
 
   Future<PlanningCycleDto> crateApiPlanningEnsurePlanningCycle({
@@ -99,6 +104,8 @@ abstract class RustLibApi extends BaseApi {
   });
 
   Future<void> crateApiHealthInitApp();
+
+  Future<List<String>> crateApiRestrictionsKnownRestrictionKinds();
 
   Future<List<CustomIngredientDto>> crateApiRecipeListCustomIngredients({
     required String householdId,
@@ -111,6 +118,10 @@ abstract class RustLibApi extends BaseApi {
   Future<RecipeDto?> crateApiRecipeLoadRecipe({
     required String householdId,
     required String recipeId,
+  });
+
+  Future<List<RestrictionDto>> crateApiRestrictionsLoadRestrictions({
+    required String householdId,
   });
 
   Future<HealthReport> crateApiHealthOpenDatabase({required String dbPath});
@@ -128,6 +139,11 @@ abstract class RustLibApi extends BaseApi {
   });
 
   Future<RecipeDto> crateApiRecipeSaveRecipe({required RecipeDto recipe});
+
+  Future<List<RestrictionDto>> crateApiRestrictionsSaveRestrictions({
+    required String householdId,
+    required List<RestrictionDto> restrictions,
+  });
 }
 
 class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
@@ -199,12 +215,45 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       const TaskConstMeta(debugName: "bootstrap_household", argNames: []);
 
   @override
+  Future<HouseholdDto> crateApiHouseholdCompleteOnboarding({
+    required String householdId,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(householdId, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 3,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_household_dto,
+          decodeErrorData: sse_decode_kimatta_error,
+        ),
+        constMeta: kCrateApiHouseholdCompleteOnboardingConstMeta,
+        argValues: [householdId],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiHouseholdCompleteOnboardingConstMeta =>
+      const TaskConstMeta(
+        debugName: "complete_onboarding",
+        argNames: ["householdId"],
+      );
+
+  @override
   String crateApiHealthCoreVersion() {
     return handler.executeSync(
       SyncTask(
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 3)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 4)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_String,
@@ -234,7 +283,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 4,
+            funcId: 5,
             port: port_,
           );
         },
@@ -264,7 +313,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 5,
+            funcId: 6,
             port: port_,
           );
         },
@@ -283,6 +332,33 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       const TaskConstMeta(debugName: "init_app", argNames: []);
 
   @override
+  Future<List<String>> crateApiRestrictionsKnownRestrictionKinds() {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 7,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_list_String,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiRestrictionsKnownRestrictionKindsConstMeta,
+        argValues: [],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiRestrictionsKnownRestrictionKindsConstMeta =>
+      const TaskConstMeta(debugName: "known_restriction_kinds", argNames: []);
+
+  @override
   Future<List<CustomIngredientDto>> crateApiRecipeListCustomIngredients({
     required String householdId,
   }) {
@@ -294,7 +370,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 6,
+            funcId: 8,
             port: port_,
           );
         },
@@ -327,7 +403,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 7,
+            funcId: 9,
             port: port_,
           );
         },
@@ -359,7 +435,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 8,
+            funcId: 10,
             port: port_,
           );
         },
@@ -380,6 +456,39 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   );
 
   @override
+  Future<List<RestrictionDto>> crateApiRestrictionsLoadRestrictions({
+    required String householdId,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(householdId, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 11,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_list_restriction_dto,
+          decodeErrorData: sse_decode_kimatta_error,
+        ),
+        constMeta: kCrateApiRestrictionsLoadRestrictionsConstMeta,
+        argValues: [householdId],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiRestrictionsLoadRestrictionsConstMeta =>
+      const TaskConstMeta(
+        debugName: "load_restrictions",
+        argNames: ["householdId"],
+      );
+
+  @override
   Future<HealthReport> crateApiHealthOpenDatabase({required String dbPath}) {
     return handler.executeNormal(
       NormalTask(
@@ -389,7 +498,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 9,
+            funcId: 12,
             port: port_,
           );
         },
@@ -421,7 +530,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 10,
+            funcId: 13,
             port: port_,
           );
         },
@@ -460,7 +569,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 11,
+            funcId: 14,
             port: port_,
           );
         },
@@ -491,7 +600,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 12,
+            funcId: 15,
             port: port_,
           );
         },
@@ -508,6 +617,41 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
 
   TaskConstMeta get kCrateApiRecipeSaveRecipeConstMeta =>
       const TaskConstMeta(debugName: "save_recipe", argNames: ["recipe"]);
+
+  @override
+  Future<List<RestrictionDto>> crateApiRestrictionsSaveRestrictions({
+    required String householdId,
+    required List<RestrictionDto> restrictions,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(householdId, serializer);
+          sse_encode_list_restriction_dto(restrictions, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 16,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_list_restriction_dto,
+          decodeErrorData: sse_decode_kimatta_error,
+        ),
+        constMeta: kCrateApiRestrictionsSaveRestrictionsConstMeta,
+        argValues: [householdId, restrictions],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiRestrictionsSaveRestrictionsConstMeta =>
+      const TaskConstMeta(
+        debugName: "save_restrictions",
+        argNames: ["householdId", "restrictions"],
+      );
 
   @protected
   String dco_decode_String(dynamic raw) {
@@ -577,12 +721,13 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   HouseholdDto dco_decode_household_dto(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 3)
-      throw Exception('unexpected arr length: expect 3 but see ${arr.length}');
+    if (arr.length != 4)
+      throw Exception('unexpected arr length: expect 4 but see ${arr.length}');
     return HouseholdDto(
       id: dco_decode_String(arr[0]),
       name: dco_decode_opt_String(arr[1]),
       members: dco_decode_list_member_dto(arr[2]),
+      onboarded: dco_decode_bool(arr[3]),
     );
   }
 
@@ -636,6 +781,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         return KimattaError_Planning(message: dco_decode_String(raw[1]));
       case 4:
         return KimattaError_Recipe(message: dco_decode_String(raw[1]));
+      case 5:
+        return KimattaError_Restriction(message: dco_decode_String(raw[1]));
       default:
         throw Exception("unreachable");
     }
@@ -683,6 +830,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   List<RecipeSummaryDto> dco_decode_list_recipe_summary_dto(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return (raw as List<dynamic>).map(dco_decode_recipe_summary_dto).toList();
+  }
+
+  @protected
+  List<RestrictionDto> dco_decode_list_restriction_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>).map(dco_decode_restriction_dto).toList();
   }
 
   @protected
@@ -809,6 +962,19 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  RestrictionDto dco_decode_restriction_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    switch (raw[0]) {
+      case 0:
+        return RestrictionDto_Known(kind: dco_decode_String(raw[1]));
+      case 1:
+        return RestrictionDto_Other(text: dco_decode_String(raw[1]));
+      default:
+        throw Exception("unreachable");
+    }
+  }
+
+  @protected
   int dco_decode_u_32(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw as int;
@@ -913,7 +1079,13 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_id = sse_decode_String(deserializer);
     var var_name = sse_decode_opt_String(deserializer);
     var var_members = sse_decode_list_member_dto(deserializer);
-    return HouseholdDto(id: var_id, name: var_name, members: var_members);
+    var var_onboarded = sse_decode_bool(deserializer);
+    return HouseholdDto(
+      id: var_id,
+      name: var_name,
+      members: var_members,
+      onboarded: var_onboarded,
+    );
   }
 
   @protected
@@ -983,6 +1155,9 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       case 4:
         var var_message = sse_decode_String(deserializer);
         return KimattaError_Recipe(message: var_message);
+      case 5:
+        var var_message = sse_decode_String(deserializer);
+        return KimattaError_Restriction(message: var_message);
       default:
         throw UnimplementedError('');
     }
@@ -1071,6 +1246,20 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var ans_ = <RecipeSummaryDto>[];
     for (var idx_ = 0; idx_ < len_; ++idx_) {
       ans_.add(sse_decode_recipe_summary_dto(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
+  List<RestrictionDto> sse_decode_list_restriction_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <RestrictionDto>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_restriction_dto(deserializer));
     }
     return ans_;
   }
@@ -1230,6 +1419,23 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  RestrictionDto sse_decode_restriction_dto(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var tag_ = sse_decode_i_32(deserializer);
+    switch (tag_) {
+      case 0:
+        var var_kind = sse_decode_String(deserializer);
+        return RestrictionDto_Known(kind: var_kind);
+      case 1:
+        var var_text = sse_decode_String(deserializer);
+        return RestrictionDto_Other(text: var_text);
+      default:
+        throw UnimplementedError('');
+    }
+  }
+
+  @protected
   int sse_decode_u_32(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return deserializer.buffer.getUint32();
@@ -1335,6 +1541,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_String(self.id, serializer);
     sse_encode_opt_String(self.name, serializer);
     sse_encode_list_member_dto(self.members, serializer);
+    sse_encode_bool(self.onboarded, serializer);
   }
 
   @protected
@@ -1390,6 +1597,9 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         sse_encode_String(message, serializer);
       case KimattaError_Recipe(message: final message):
         sse_encode_i_32(4, serializer);
+        sse_encode_String(message, serializer);
+      case KimattaError_Restriction(message: final message):
+        sse_encode_i_32(5, serializer);
         sse_encode_String(message, serializer);
     }
   }
@@ -1470,6 +1680,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_i_32(self.length, serializer);
     for (final item in self) {
       sse_encode_recipe_summary_dto(item, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_list_restriction_dto(
+    List<RestrictionDto> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_restriction_dto(item, serializer);
     }
   }
 
@@ -1601,6 +1823,22 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_String(self.id, serializer);
     sse_encode_String(self.title, serializer);
+  }
+
+  @protected
+  void sse_encode_restriction_dto(
+    RestrictionDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    switch (self) {
+      case RestrictionDto_Known(kind: final kind):
+        sse_encode_i_32(0, serializer);
+        sse_encode_String(kind, serializer);
+      case RestrictionDto_Other(text: final text):
+        sse_encode_i_32(1, serializer);
+        sse_encode_String(text, serializer);
+    }
   }
 
   @protected

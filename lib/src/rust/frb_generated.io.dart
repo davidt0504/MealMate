@@ -8,6 +8,7 @@ import 'api/health.dart';
 import 'api/household.dart';
 import 'api/planning.dart';
 import 'api/recipe.dart';
+import 'api/restrictions.dart';
 
 import 'dart:async';
 import 'dart:convert';
@@ -86,6 +87,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   List<RecipeSummaryDto> dco_decode_list_recipe_summary_dto(dynamic raw);
 
   @protected
+  List<RestrictionDto> dco_decode_list_restriction_dto(dynamic raw);
+
+  @protected
   MealSlotDto dco_decode_meal_slot_dto(dynamic raw);
 
   @protected
@@ -117,6 +121,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   RecipeSummaryDto dco_decode_recipe_summary_dto(dynamic raw);
+
+  @protected
+  RestrictionDto dco_decode_restriction_dto(dynamic raw);
 
   @protected
   int dco_decode_u_32(dynamic raw);
@@ -205,6 +212,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  List<RestrictionDto> sse_decode_list_restriction_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   MealSlotDto sse_decode_meal_slot_dto(SseDeserializer deserializer);
 
   @protected
@@ -242,6 +254,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   RecipeSummaryDto sse_decode_recipe_summary_dto(SseDeserializer deserializer);
+
+  @protected
+  RestrictionDto sse_decode_restriction_dto(SseDeserializer deserializer);
 
   @protected
   int sse_decode_u_32(SseDeserializer deserializer);
@@ -352,6 +367,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_list_restriction_dto(
+    List<RestrictionDto> self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_meal_slot_dto(MealSlotDto self, SseSerializer serializer);
 
   @protected
@@ -396,6 +417,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_recipe_summary_dto(
     RecipeSummaryDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_restriction_dto(
+    RestrictionDto self,
     SseSerializer serializer,
   );
 
