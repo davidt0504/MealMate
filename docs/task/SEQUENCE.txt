@@ -57,6 +57,7 @@
 17. [OWNER DECISION] Keep or cut MVP-010 (recipe photos) — PRD v3 §16 demotes it
     before cutting controller proof. If CUT: record the cut in docs/ROADMAP.md,
     amend MVP-022's dependency line (card cell + register, D-029), skip to step 20.
+    # Decided 2026-08-29: CUT — recorded in docs/ROADMAP.md; steps 18–19 skipped.
 18. /plan-task Read docs/PRD_v3.md, docs/ROADMAP.md, docs/task/MVP_INVARIANTS.md, docs/task/mvp/MVP-010_RECIPE_PHOTO_SUPPORT.md, then plan its implementation.
 19. /execute-plan Read <plan path from step 18>, docs/ROADMAP.md, and docs/task/mvp/MVP-010_RECIPE_PHOTO_SUPPORT.md; repeat the mandatory execution gate, then execute the approved plan.
 
