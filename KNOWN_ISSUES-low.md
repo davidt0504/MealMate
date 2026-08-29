@@ -2,7 +2,7 @@
 
 ## orch/4 -- 2026-08-28
 
-Full review: /home/davidlinux/.local/state/claude-orch/5f7efeea1579/0276579f2864/wt/4/.orch/redteam-app-dart-2026-08-28T1845.md
+Full review: (lost) `wt/4/.orch/redteam-app-dart-2026-08-28T1845.md` was removed with the step-4 worktree before the orchestrator relayed it; the entries below are the only surviving record. Follow-up review: /home/davidlinux/.claude/reviews/redteam-mvp003-integration-verify-2026-08-28T1904-03fd.md
 
 ### LOW
 
@@ -318,4 +318,24 @@ Full review: /home/davidlinux/.claude/reviews/redteam-mvp003-android-shell-2026-
 
 - **The tab-traversal test's press count is an undocumented magic number** (`test/app_test.dart:175`) -- exactly five tab events, tuned to `/plan`'s current focusables (the Cover My Week button at `lib/app/router.dart:40` precedes the bar's five destinations), and the `expect(focused, isNotNull)` at `:180` is near-vacuous because `primaryFocus` is always set in a pumped app. When MVP-013 changes the Plan tree the test fails pointing at bar focusability rather than the real cause. Fix: loop tab presses, bounded, until the focused node's ancestor is a `NavigationBar`.
   Full review: /home/davidlinux/.claude/reviews/redteam-mvp003-android-shell-2026-08-28T1805-b91e.md
+  **Status:** OPEN
+
+---
+
+## integration -- 2026-08-28
+
+Full review: /home/davidlinux/.claude/reviews/redteam-mvp003-integration-verify-2026-08-28T1904-03fd.md
+
+### LOW
+
+- **`App`'s default `initialLocation` is never exercised** (`lib/app/app.dart:10`, `test/app_test.dart:17-24`) -- the harness always passes `initial` (default `/plan`), so the production default `homeLocation` that `lib/main.dart:13` relies on is never constructed under test; both agree today, so a divergence would pass silently. Fix: let the harness omit the argument when `initial` is null, or add one test pumping `const App()` and asserting the Plan title.
+  Full review: /home/davidlinux/.claude/reviews/redteam-mvp003-integration-verify-2026-08-28T1904-03fd.md
+  **Status:** OPEN
+
+- **Re-tapping the active tab resets its stack with no test** (`lib/app/shell.dart:17`) -- the only shell behaviour `test/app_test.dart` does not pin; a regression to "no-op on re-tap" would pass. Fix: push `/plan/cover`, re-tap Plan, assert the Plan title.
+  Full review: /home/davidlinux/.claude/reviews/redteam-mvp003-integration-verify-2026-08-28T1904-03fd.md
+  **Status:** OPEN
+
+- **MVP-003 evidence row ends "Not committed or pushed" after the merge to `integration`** (`docs/ROADMAP.md:172`) -- the row is commit `c28232c`, merged as `844d0f4` on `integration`; only `master` lacks it. Earlier rows share the convention, so this needs a handoff-contract decision. Fix: drop the sentence at the orchestrator's merge step, or make it precise ("on `integration` as `<sha>`; not on `master`").
+  Full review: /home/davidlinux/.claude/reviews/redteam-mvp003-integration-verify-2026-08-28T1904-03fd.md
   **Status:** OPEN

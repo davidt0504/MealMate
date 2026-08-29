@@ -4,7 +4,7 @@ Additional LOW findings are tracked in `KNOWN_ISSUES-low.md`.
 
 ## orch/4 -- 2026-08-28
 
-Full review: /home/davidlinux/.local/state/claude-orch/5f7efeea1579/0276579f2864/wt/4/.orch/redteam-mvp003-android-shell-2026-08-28T1805-b91e.md
+Full review: /home/davidlinux/.claude/reviews/redteam-mvp003-android-shell-2026-08-28T1805-b91e.md
 
 ### MEDIUM
 
