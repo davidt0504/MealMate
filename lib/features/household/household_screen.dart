@@ -14,12 +14,21 @@ String describeHousehold(HouseholdDto h) => switch (h.members.length) {
   final n => '$n members.',
 };
 
-String describeFailure(Object error) => switch (error) {
-  KimattaError_NotOpen() => 'Household unavailable: the database is not open',
+/// `subject` defaults to `'Household'` so every existing call site — and the strings they
+/// pin — is unchanged; the planning tile passes `'Planning cycle'` rather than rendering a
+/// planning failure as a household one.
+String describeFailure(
+  Object error, {
+  String subject = 'Household',
+}) => switch (error) {
+  KimattaError_NotOpen() => '$subject unavailable: the database is not open',
   KimattaError_InvalidPath() =>
-    'Household unavailable: the database path is invalid',
-  KimattaError_Storage(:final message) => 'Household unavailable: $message',
-  _ => 'Household unavailable: $error',
+    '$subject unavailable: the database path is invalid',
+  KimattaError_Storage(:final message) => '$subject unavailable: $message',
+  // Added with the variant itself, so the new error has prose rather than a raw
+  // freezed `toString()` the first time MVP-006's editor can produce it.
+  KimattaError_Planning(:final message) => '$subject unavailable: $message',
+  _ => '$subject unavailable: $error',
 };
 
 class HouseholdScreen extends ConsumerStatefulWidget {

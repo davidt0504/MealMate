@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:meal_mate/src/rust/api/error.dart';
 import 'package:meal_mate/src/rust/api/health.dart';
 import 'package:meal_mate/src/rust/api/household.dart';
+import 'package:meal_mate/src/rust/api/planning.dart';
 import 'package:meal_mate/src/rust/frb_generated.dart';
 
 void main() {
@@ -33,9 +34,9 @@ void main() {
     );
   });
 
-  test('open_database migrates a real database to schema v1', () async {
+  test('open_database migrates a real database to schema v2', () async {
     final report = await openDatabase(dbPath: await tempDb());
-    expect(report.schemaVersion, 1);
+    expect(report.schemaVersion, 2);
   });
 
   test('storage failure surfaces as KimattaError_Storage', () async {
@@ -88,6 +89,56 @@ void main() {
       throwsA(isA<KimattaError_Storage>()),
     );
     expect((await bootstrapHousehold()).name, isNull);
+  });
+
+  test(
+    'ensure_planning_cycle returns the dinner-only default across the bridge',
+    () async {
+      await openDatabase(dbPath: await tempDb());
+      final h = await bootstrapHousehold();
+      final c = await ensurePlanningCycle(
+        householdId: h.id,
+        defaultAnchorDate: '2026-08-29',
+      );
+      expect(c.lengthDays, 7);
+      expect(c.mealSlots, [MealSlotDto.dinner]);
+      expect(c.dates.length, 7);
+      expect(c.dates.first, '2026-08-29');
+      // The month-boundary case, end to end.
+      expect(c.dates.last, '2026-09-04');
+    },
+  );
+
+  test('a saved cycle survives reopening the same file', () async {
+    final path = await tempDb();
+    await openDatabase(dbPath: path);
+    final h = await bootstrapHousehold();
+    await savePlanningCycle(
+      householdId: h.id,
+      anchorDate: '2026-01-05',
+      lengthDays: 14,
+      mealSlots: [MealSlotDto.breakfast, MealSlotDto.dinner],
+    );
+    await openDatabase(dbPath: path);
+    final again = await ensurePlanningCycle(
+      householdId: h.id,
+      defaultAnchorDate: '2099-12-01',
+    );
+    expect(again.anchorDate, '2026-01-05');
+    expect(again.lengthDays, 14);
+    expect(again.mealSlots, [MealSlotDto.breakfast, MealSlotDto.dinner]);
+  });
+
+  test('an invalid anchor date is a typed Planning error in Dart', () async {
+    await openDatabase(dbPath: await tempDb());
+    final h = await bootstrapHousehold();
+    await expectLater(
+      () => ensurePlanningCycle(
+        householdId: h.id,
+        defaultAnchorDate: '2026-08-29T23:00:00Z',
+      ),
+      throwsA(isA<KimattaError_Planning>()),
+    );
   });
 
   test('a different file is a different household', () async {

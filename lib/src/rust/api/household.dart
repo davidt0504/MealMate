@@ -8,7 +8,7 @@ import 'error.dart';
 
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `to_dto`
+// These functions are ignored because they are not marked as `pub`: `rename_in`, `to_dto`
 
 /// Returns the local household, creating an anonymous one-person household on the first
 /// call (invariants 1 and 8). Later calls and later launches return the same ids.

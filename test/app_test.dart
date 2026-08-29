@@ -11,8 +11,25 @@ import 'package:meal_mate/features/settings/health_provider.dart';
 import 'package:meal_mate/src/rust/api/error.dart';
 import 'package:meal_mate/src/rust/api/health.dart';
 import 'package:meal_mate/src/rust/api/household.dart';
+import 'package:meal_mate/features/planning/planning_provider.dart';
+import 'package:meal_mate/src/rust/api/planning.dart';
 
-const okReport = HealthReport(dbPath: '/x/kimatta.db', schemaVersion: 1);
+const okReport = HealthReport(dbPath: '/x/kimatta.db', schemaVersion: 2);
+const okCycle = PlanningCycleDto(
+  householdId: 'h-1',
+  anchorDate: '2026-08-29',
+  lengthDays: 7,
+  mealSlots: [MealSlotDto.dinner],
+  dates: [
+    '2026-08-29',
+    '2026-08-30',
+    '2026-08-31',
+    '2026-09-01',
+    '2026-09-02',
+    '2026-09-03',
+    '2026-09-04',
+  ],
+);
 const okHousehold = HouseholdDto(
   id: 'h-1',
   name: null,
@@ -27,9 +44,9 @@ const twoMemberHousehold = HouseholdDto(
   ],
 );
 
-/// Both providers are always overridden, which is why `flutter test` never
-/// loads the native library: no test reaches `openDatabase` or
-/// `bootstrapHousehold`. The save path goes through `HouseholdNotifier.rename`,
+/// All three providers are always overridden, which is why `flutter test` never
+/// loads the native library: no test reaches `openDatabase`,
+/// `bootstrapHousehold` or `ensurePlanningCycle`. The save path goes through `HouseholdNotifier.rename`,
 /// so `rename:` fakes it at the same seam; a test that taps **Save name**
 /// without supplying one fails loudly rather than reaching the real bridge.
 /// `bridge_native_test.dart` is what proves the rename write itself.
@@ -62,17 +79,33 @@ class _FakeHouseholdNotifier extends HouseholdNotifier {
   }
 }
 
+/// Keeps the real provider's dependency edge on `householdProvider`, so the
+/// "bootstrapped once" counting tests still read 1 with the planning tile watching.
+class _FakePlanningCycleNotifier extends PlanningCycleNotifier {
+  _FakePlanningCycleNotifier(this._build);
+
+  final FutureOr<PlanningCycleDto> Function()? _build;
+
+  @override
+  Future<PlanningCycleDto> build() async {
+    await ref.watch(householdProvider.selectAsync((h) => h.id));
+    return (_build ?? () => okCycle)();
+  }
+}
+
 Widget harness({
   String initial = '/plan',
   FutureOr<HealthReport> Function()? health,
   FutureOr<HouseholdDto> Function()? household,
   Future<HouseholdDto> Function(String, String?)? rename,
+  FutureOr<PlanningCycleDto> Function()? cycle,
 }) => ProviderScope(
   overrides: [
     healthReportProvider.overrideWith((_) => (health ?? () => okReport)()),
     householdProvider.overrideWith(
       () => _FakeHouseholdNotifier(household, rename),
     ),
+    planningCycleProvider.overrideWith(() => _FakePlanningCycleNotifier(cycle)),
   ],
   child: App(initialLocation: initial),
 );
@@ -175,7 +208,7 @@ void main() {
 
     await tester.tap(tab('Settings'));
     await tester.pumpAndSettle();
-    expect(find.textContaining('schema v1 at /x/kimatta.db'), findsOneWidget);
+    expect(find.textContaining('schema v2 at /x/kimatta.db'), findsOneWidget);
   });
 
   testWidgets('Settings reports a storage failure instead of the report', (
@@ -252,7 +285,50 @@ void main() {
 
     pending.complete(okReport);
     await tester.pumpAndSettle();
-    expect(find.textContaining('schema v1 at /x/kimatta.db'), findsOneWidget);
+    expect(find.textContaining('schema v2 at /x/kimatta.db'), findsOneWidget);
+  });
+
+  // AC-3's bounded UI/state inspection: the default arrives with no setup step.
+  testWidgets(
+    'Settings shows the dinner-only default cycle without any setup',
+    (tester) async {
+      usePixel5(tester);
+      await tester.pumpWidget(harness(initial: '/settings'));
+      await tester.pumpAndSettle();
+      expect(find.text('Dinner only · 7 days from 2026-08-29'), findsOneWidget);
+    },
+  );
+
+  testWidgets('Settings reports a planning failure in prose', (tester) async {
+    usePixel5(tester);
+    await tester.pumpWidget(
+      harness(
+        initial: '/settings',
+        cycle: () => throw const KimattaError.storage(message: 'locked'),
+      ),
+    );
+    await tester.pumpAndSettle();
+    // "Planning cycle", not "Household" — the subject parameter is what makes this honest.
+    expect(find.text('Planning cycle unavailable: locked'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  // Expected-to-pass: pins the AsyncLoading arm. `pumpAndSettle` would hang on the
+  // uncompleted future, so the pending state is reached with a bare `pump`.
+  testWidgets('Settings shows a loading state before the cycle arrives', (
+    tester,
+  ) async {
+    usePixel5(tester);
+    final pending = Completer<PlanningCycleDto>();
+    await tester.pumpWidget(
+      harness(initial: '/settings', cycle: () => pending.future),
+    );
+    await tester.pump();
+    expect(find.text('Loading planning cycle…'), findsOneWidget);
+
+    pending.complete(okCycle);
+    await tester.pumpAndSettle();
+    expect(find.text('Dinner only · 7 days from 2026-08-29'), findsOneWidget);
   });
 
   testWidgets('every destination meets the accessibility guidelines', (
@@ -484,6 +560,25 @@ void main() {
       find.textContaining('Household unavailable: Bad state:'),
       findsOneWidget,
     );
+    expect(tester.takeException(), isNull);
+  });
+
+  // Pins `describeFailure`'s Planning arm, which the `_` arm above would
+  // otherwise absorb silently — the raw freezed `toString()` that arm was
+  // added to prevent. Routed through the planning tile, the only subject a
+  // `KimattaError.planning` can reach today.
+  testWidgets('Settings reports a planning-domain failure in prose', (
+    tester,
+  ) async {
+    usePixel5(tester);
+    await tester.pumpWidget(
+      harness(
+        initial: '/settings',
+        cycle: () => throw const KimattaError.planning(message: 'locked'),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Planning cycle unavailable: locked'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 

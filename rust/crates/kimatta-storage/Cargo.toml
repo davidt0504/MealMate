@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+food-domain = { path = "../food-domain" }
 household-core = { path = "../household-core" }
 rusqlite = { version = "0.40", features = ["bundled"] }
 rusqlite_migration = "2"

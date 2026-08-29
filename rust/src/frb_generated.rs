@@ -39,7 +39,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.13.0";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -451428487;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -1168370520;
 
 // Section: executor
 
@@ -105,6 +105,43 @@ fn wire__crate__api__health__core_version_impl(
                 let output_ok = Ok::<_, ()>(crate::api::health::core_version())?;
                 std::result::Result::Ok(output_ok)
             })())
+        },
+    )
+}
+fn wire__crate__api__planning__ensure_planning_cycle_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "ensure_planning_cycle",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_household_id = <String>::sse_decode(&mut deserializer);
+            let api_default_anchor_date = <String>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, crate::api::error::KimattaError>((move || {
+                    let output_ok = crate::api::planning::ensure_planning_cycle(
+                        api_household_id,
+                        api_default_anchor_date,
+                    )?;
+                    std::result::Result::Ok(output_ok)
+                })())
+            }
         },
     )
 }
@@ -210,6 +247,48 @@ fn wire__crate__api__household__rename_household_impl(
         },
     )
 }
+fn wire__crate__api__planning__save_planning_cycle_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "save_planning_cycle",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_household_id = <String>::sse_decode(&mut deserializer);
+            let api_anchor_date = <String>::sse_decode(&mut deserializer);
+            let api_length_days = <u32>::sse_decode(&mut deserializer);
+            let api_meal_slots =
+                <Vec<crate::api::planning::MealSlotDto>>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, crate::api::error::KimattaError>((move || {
+                    let output_ok = crate::api::planning::save_planning_cycle(
+                        api_household_id,
+                        api_anchor_date,
+                        api_length_days,
+                        api_meal_slots,
+                    )?;
+                    std::result::Result::Ok(output_ok)
+                })())
+            }
+        },
+    )
+}
 
 // Section: dart2rust
 
@@ -247,6 +326,13 @@ impl SseDecode for crate::api::household::HouseholdDto {
     }
 }
 
+impl SseDecode for i32 {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        deserializer.cursor.read_i32::<NativeEndian>().unwrap()
+    }
+}
+
 impl SseDecode for crate::api::error::KimattaError {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -264,10 +350,42 @@ impl SseDecode for crate::api::error::KimattaError {
                     message: var_message,
                 };
             }
+            3 => {
+                let mut var_message = <String>::sse_decode(deserializer);
+                return crate::api::error::KimattaError::Planning {
+                    message: var_message,
+                };
+            }
             _ => {
                 unimplemented!("");
             }
         }
+    }
+}
+
+impl SseDecode for Vec<String> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut len_ = <i32>::sse_decode(deserializer);
+        let mut ans_ = Vec::with_capacity(len_ as usize);
+        for idx_ in 0..len_ {
+            ans_.push(<String>::sse_decode(deserializer));
+        }
+        return ans_;
+    }
+}
+
+impl SseDecode for Vec<crate::api::planning::MealSlotDto> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut len_ = <i32>::sse_decode(deserializer);
+        let mut ans_ = Vec::with_capacity(len_ as usize);
+        for idx_ in 0..len_ {
+            ans_.push(<crate::api::planning::MealSlotDto>::sse_decode(
+                deserializer,
+            ));
+        }
+        return ans_;
     }
 }
 
@@ -295,6 +413,19 @@ impl SseDecode for Vec<u8> {
     }
 }
 
+impl SseDecode for crate::api::planning::MealSlotDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut inner = <i32>::sse_decode(deserializer);
+        return match inner {
+            0 => crate::api::planning::MealSlotDto::Breakfast,
+            1 => crate::api::planning::MealSlotDto::Lunch,
+            2 => crate::api::planning::MealSlotDto::Dinner,
+            _ => unreachable!("Invalid variant for MealSlotDto: {}", inner),
+        };
+    }
+}
+
 impl SseDecode for crate::api::household::MemberDto {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -318,6 +449,24 @@ impl SseDecode for Option<String> {
     }
 }
 
+impl SseDecode for crate::api::planning::PlanningCycleDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_householdId = <String>::sse_decode(deserializer);
+        let mut var_anchorDate = <String>::sse_decode(deserializer);
+        let mut var_lengthDays = <u32>::sse_decode(deserializer);
+        let mut var_mealSlots = <Vec<crate::api::planning::MealSlotDto>>::sse_decode(deserializer);
+        let mut var_dates = <Vec<String>>::sse_decode(deserializer);
+        return crate::api::planning::PlanningCycleDto {
+            household_id: var_householdId,
+            anchor_date: var_anchorDate,
+            length_days: var_lengthDays,
+            meal_slots: var_mealSlots,
+            dates: var_dates,
+        };
+    }
+}
+
 impl SseDecode for u32 {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -335,13 +484,6 @@ impl SseDecode for u8 {
 impl SseDecode for () {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {}
-}
-
-impl SseDecode for i32 {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
-        deserializer.cursor.read_i32::<NativeEndian>().unwrap()
-    }
 }
 
 impl SseDecode for bool {
@@ -363,9 +505,18 @@ fn pde_ffi_dispatcher_primary_impl(
         1 => {
             wire__crate__api__household__bootstrap_household_impl(port, ptr, rust_vec_len, data_len)
         }
-        3 => wire__crate__api__health__init_app_impl(port, ptr, rust_vec_len, data_len),
-        4 => wire__crate__api__health__open_database_impl(port, ptr, rust_vec_len, data_len),
-        5 => wire__crate__api__household__rename_household_impl(port, ptr, rust_vec_len, data_len),
+        3 => wire__crate__api__planning__ensure_planning_cycle_impl(
+            port,
+            ptr,
+            rust_vec_len,
+            data_len,
+        ),
+        4 => wire__crate__api__health__init_app_impl(port, ptr, rust_vec_len, data_len),
+        5 => wire__crate__api__health__open_database_impl(port, ptr, rust_vec_len, data_len),
+        6 => wire__crate__api__household__rename_household_impl(port, ptr, rust_vec_len, data_len),
+        7 => {
+            wire__crate__api__planning__save_planning_cycle_impl(port, ptr, rust_vec_len, data_len)
+        }
         _ => unreachable!(),
     }
 }
@@ -437,6 +588,9 @@ impl flutter_rust_bridge::IntoDart for crate::api::error::KimattaError {
             crate::api::error::KimattaError::Storage { message } => {
                 [2.into_dart(), message.into_into_dart().into_dart()].into_dart()
             }
+            crate::api::error::KimattaError::Planning { message } => {
+                [3.into_dart(), message.into_into_dart().into_dart()].into_dart()
+            }
             _ => {
                 unimplemented!("");
             }
@@ -451,6 +605,28 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::error::KimattaError>
     for crate::api::error::KimattaError
 {
     fn into_into_dart(self) -> crate::api::error::KimattaError {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::planning::MealSlotDto {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        match self {
+            Self::Breakfast => 0.into_dart(),
+            Self::Lunch => 1.into_dart(),
+            Self::Dinner => 2.into_dart(),
+            _ => unreachable!(),
+        }
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::planning::MealSlotDto
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::planning::MealSlotDto>
+    for crate::api::planning::MealSlotDto
+{
+    fn into_into_dart(self) -> crate::api::planning::MealSlotDto {
         self
     }
 }
@@ -472,6 +648,30 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::household::MemberDto>
     for crate::api::household::MemberDto
 {
     fn into_into_dart(self) -> crate::api::household::MemberDto {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::planning::PlanningCycleDto {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.household_id.into_into_dart().into_dart(),
+            self.anchor_date.into_into_dart().into_dart(),
+            self.length_days.into_into_dart().into_dart(),
+            self.meal_slots.into_into_dart().into_dart(),
+            self.dates.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::planning::PlanningCycleDto
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::planning::PlanningCycleDto>
+    for crate::api::planning::PlanningCycleDto
+{
+    fn into_into_dart(self) -> crate::api::planning::PlanningCycleDto {
         self
     }
 }
@@ -500,6 +700,13 @@ impl SseEncode for crate::api::household::HouseholdDto {
     }
 }
 
+impl SseEncode for i32 {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        serializer.cursor.write_i32::<NativeEndian>(self).unwrap();
+    }
+}
+
 impl SseEncode for crate::api::error::KimattaError {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -514,9 +721,33 @@ impl SseEncode for crate::api::error::KimattaError {
                 <i32>::sse_encode(2, serializer);
                 <String>::sse_encode(message, serializer);
             }
+            crate::api::error::KimattaError::Planning { message } => {
+                <i32>::sse_encode(3, serializer);
+                <String>::sse_encode(message, serializer);
+            }
             _ => {
                 unimplemented!("");
             }
+        }
+    }
+}
+
+impl SseEncode for Vec<String> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(self.len() as _, serializer);
+        for item in self {
+            <String>::sse_encode(item, serializer);
+        }
+    }
+}
+
+impl SseEncode for Vec<crate::api::planning::MealSlotDto> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(self.len() as _, serializer);
+        for item in self {
+            <crate::api::planning::MealSlotDto>::sse_encode(item, serializer);
         }
     }
 }
@@ -541,6 +772,23 @@ impl SseEncode for Vec<u8> {
     }
 }
 
+impl SseEncode for crate::api::planning::MealSlotDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(
+            match self {
+                crate::api::planning::MealSlotDto::Breakfast => 0,
+                crate::api::planning::MealSlotDto::Lunch => 1,
+                crate::api::planning::MealSlotDto::Dinner => 2,
+                _ => {
+                    unimplemented!("");
+                }
+            },
+            serializer,
+        );
+    }
+}
+
 impl SseEncode for crate::api::household::MemberDto {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -556,6 +804,17 @@ impl SseEncode for Option<String> {
         if let Some(value) = self {
             <String>::sse_encode(value, serializer);
         }
+    }
+}
+
+impl SseEncode for crate::api::planning::PlanningCycleDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.household_id, serializer);
+        <String>::sse_encode(self.anchor_date, serializer);
+        <u32>::sse_encode(self.length_days, serializer);
+        <Vec<crate::api::planning::MealSlotDto>>::sse_encode(self.meal_slots, serializer);
+        <Vec<String>>::sse_encode(self.dates, serializer);
     }
 }
 
@@ -576,13 +835,6 @@ impl SseEncode for u8 {
 impl SseEncode for () {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {}
-}
-
-impl SseEncode for i32 {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
-        serializer.cursor.write_i32::<NativeEndian>(self).unwrap();
-    }
 }
 
 impl SseEncode for bool {

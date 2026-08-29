@@ -6,6 +6,7 @@
 import 'api/error.dart';
 import 'api/health.dart';
 import 'api/household.dart';
+import 'api/planning.dart';
 
 import 'dart:async';
 import 'dart:convert';
@@ -71,7 +72,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.13.0';
 
   @override
-  int get rustContentHash => -451428487;
+  int get rustContentHash => -1168370520;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -87,6 +88,11 @@ abstract class RustLibApi extends BaseApi {
 
   String crateApiHealthCoreVersion();
 
+  Future<PlanningCycleDto> crateApiPlanningEnsurePlanningCycle({
+    required String householdId,
+    required String defaultAnchorDate,
+  });
+
   Future<void> crateApiHealthInitApp();
 
   Future<HealthReport> crateApiHealthOpenDatabase({required String dbPath});
@@ -94,6 +100,13 @@ abstract class RustLibApi extends BaseApi {
   Future<HouseholdDto> crateApiHouseholdRenameHousehold({
     required String householdId,
     String? name,
+  });
+
+  Future<PlanningCycleDto> crateApiPlanningSavePlanningCycle({
+    required String householdId,
+    required String anchorDate,
+    required int lengthDays,
+    required List<MealSlotDto> mealSlots,
   });
 }
 
@@ -155,6 +168,41 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       const TaskConstMeta(debugName: "core_version", argNames: []);
 
   @override
+  Future<PlanningCycleDto> crateApiPlanningEnsurePlanningCycle({
+    required String householdId,
+    required String defaultAnchorDate,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(householdId, serializer);
+          sse_encode_String(defaultAnchorDate, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 3,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_planning_cycle_dto,
+          decodeErrorData: sse_decode_kimatta_error,
+        ),
+        constMeta: kCrateApiPlanningEnsurePlanningCycleConstMeta,
+        argValues: [householdId, defaultAnchorDate],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiPlanningEnsurePlanningCycleConstMeta =>
+      const TaskConstMeta(
+        debugName: "ensure_planning_cycle",
+        argNames: ["householdId", "defaultAnchorDate"],
+      );
+
+  @override
   Future<void> crateApiHealthInitApp() {
     return handler.executeNormal(
       NormalTask(
@@ -163,7 +211,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 3,
+            funcId: 4,
             port: port_,
           );
         },
@@ -191,7 +239,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 4,
+            funcId: 5,
             port: port_,
           );
         },
@@ -223,7 +271,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 5,
+            funcId: 6,
             port: port_,
           );
         },
@@ -242,6 +290,45 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       const TaskConstMeta(
         debugName: "rename_household",
         argNames: ["householdId", "name"],
+      );
+
+  @override
+  Future<PlanningCycleDto> crateApiPlanningSavePlanningCycle({
+    required String householdId,
+    required String anchorDate,
+    required int lengthDays,
+    required List<MealSlotDto> mealSlots,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(householdId, serializer);
+          sse_encode_String(anchorDate, serializer);
+          sse_encode_u_32(lengthDays, serializer);
+          sse_encode_list_meal_slot_dto(mealSlots, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 7,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_planning_cycle_dto,
+          decodeErrorData: sse_decode_kimatta_error,
+        ),
+        constMeta: kCrateApiPlanningSavePlanningCycleConstMeta,
+        argValues: [householdId, anchorDate, lengthDays, mealSlots],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiPlanningSavePlanningCycleConstMeta =>
+      const TaskConstMeta(
+        debugName: "save_planning_cycle",
+        argNames: ["householdId", "anchorDate", "lengthDays", "mealSlots"],
       );
 
   @protected
@@ -276,6 +363,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  int dco_decode_i_32(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw as int;
+  }
+
+  @protected
   KimattaError dco_decode_kimatta_error(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     switch (raw[0]) {
@@ -285,9 +378,23 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         return KimattaError_NotOpen();
       case 2:
         return KimattaError_Storage(message: dco_decode_String(raw[1]));
+      case 3:
+        return KimattaError_Planning(message: dco_decode_String(raw[1]));
       default:
         throw Exception("unreachable");
     }
+  }
+
+  @protected
+  List<String> dco_decode_list_String(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>).map(dco_decode_String).toList();
+  }
+
+  @protected
+  List<MealSlotDto> dco_decode_list_meal_slot_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>).map(dco_decode_meal_slot_dto).toList();
   }
 
   @protected
@@ -300,6 +407,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   Uint8List dco_decode_list_prim_u_8_strict(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw as Uint8List;
+  }
+
+  @protected
+  MealSlotDto dco_decode_meal_slot_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return MealSlotDto.values[raw as int];
   }
 
   @protected
@@ -318,6 +431,21 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   String? dco_decode_opt_String(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw == null ? null : dco_decode_String(raw);
+  }
+
+  @protected
+  PlanningCycleDto dco_decode_planning_cycle_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 5)
+      throw Exception('unexpected arr length: expect 5 but see ${arr.length}');
+    return PlanningCycleDto(
+      householdId: dco_decode_String(arr[0]),
+      anchorDate: dco_decode_String(arr[1]),
+      lengthDays: dco_decode_u_32(arr[2]),
+      mealSlots: dco_decode_list_meal_slot_dto(arr[3]),
+      dates: dco_decode_list_String(arr[4]),
+    );
   }
 
   @protected
@@ -363,6 +491,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  int sse_decode_i_32(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return deserializer.buffer.getInt32();
+  }
+
+  @protected
   KimattaError sse_decode_kimatta_error(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
 
@@ -375,9 +509,38 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       case 2:
         var var_message = sse_decode_String(deserializer);
         return KimattaError_Storage(message: var_message);
+      case 3:
+        var var_message = sse_decode_String(deserializer);
+        return KimattaError_Planning(message: var_message);
       default:
         throw UnimplementedError('');
     }
+  }
+
+  @protected
+  List<String> sse_decode_list_String(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <String>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_String(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
+  List<MealSlotDto> sse_decode_list_meal_slot_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <MealSlotDto>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_meal_slot_dto(deserializer));
+    }
+    return ans_;
   }
 
   @protected
@@ -400,6 +563,13 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  MealSlotDto sse_decode_meal_slot_dto(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var inner = sse_decode_i_32(deserializer);
+    return MealSlotDto.values[inner];
+  }
+
+  @protected
   MemberDto sse_decode_member_dto(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var var_id = sse_decode_String(deserializer);
@@ -419,6 +589,23 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  PlanningCycleDto sse_decode_planning_cycle_dto(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_householdId = sse_decode_String(deserializer);
+    var var_anchorDate = sse_decode_String(deserializer);
+    var var_lengthDays = sse_decode_u_32(deserializer);
+    var var_mealSlots = sse_decode_list_meal_slot_dto(deserializer);
+    var var_dates = sse_decode_list_String(deserializer);
+    return PlanningCycleDto(
+      householdId: var_householdId,
+      anchorDate: var_anchorDate,
+      lengthDays: var_lengthDays,
+      mealSlots: var_mealSlots,
+      dates: var_dates,
+    );
+  }
+
+  @protected
   int sse_decode_u_32(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return deserializer.buffer.getUint32();
@@ -433,12 +620,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   @protected
   void sse_decode_unit(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
-  }
-
-  @protected
-  int sse_decode_i_32(SseDeserializer deserializer) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    return deserializer.buffer.getInt32();
   }
 
   @protected
@@ -469,6 +650,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_i_32(int self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    serializer.buffer.putInt32(self);
+  }
+
+  @protected
   void sse_encode_kimatta_error(KimattaError self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     switch (self) {
@@ -479,6 +666,30 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       case KimattaError_Storage(message: final message):
         sse_encode_i_32(2, serializer);
         sse_encode_String(message, serializer);
+      case KimattaError_Planning(message: final message):
+        sse_encode_i_32(3, serializer);
+        sse_encode_String(message, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_list_String(List<String> self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_String(item, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_list_meal_slot_dto(
+    List<MealSlotDto> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_meal_slot_dto(item, serializer);
     }
   }
 
@@ -505,6 +716,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_meal_slot_dto(MealSlotDto self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.index, serializer);
+  }
+
+  @protected
   void sse_encode_member_dto(MemberDto self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_String(self.id, serializer);
@@ -522,6 +739,19 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_planning_cycle_dto(
+    PlanningCycleDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.householdId, serializer);
+    sse_encode_String(self.anchorDate, serializer);
+    sse_encode_u_32(self.lengthDays, serializer);
+    sse_encode_list_meal_slot_dto(self.mealSlots, serializer);
+    sse_encode_list_String(self.dates, serializer);
+  }
+
+  @protected
   void sse_encode_u_32(int self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     serializer.buffer.putUint32(self);
@@ -536,12 +766,6 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   @protected
   void sse_encode_unit(void self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
-  }
-
-  @protected
-  void sse_encode_i_32(int self, SseSerializer serializer) {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    serializer.buffer.putInt32(self);
   }
 
   @protected

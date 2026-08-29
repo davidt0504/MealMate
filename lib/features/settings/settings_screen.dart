@@ -4,8 +4,9 @@ import 'package:go_router/go_router.dart';
 
 import 'package:meal_mate/features/household/household_provider.dart';
 import 'package:meal_mate/features/household/household_screen.dart';
+import 'package:meal_mate/features/planning/planning_cycle.dart';
+import 'package:meal_mate/features/planning/planning_provider.dart';
 import 'package:meal_mate/features/settings/health_provider.dart';
-import 'package:meal_mate/src/rust/api/error.dart';
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
@@ -17,18 +18,10 @@ class SettingsScreen extends ConsumerWidget {
     final line = switch (health) {
       AsyncData(:final value) =>
         'Local database: schema v${value.schemaVersion} at ${value.dbPath}',
-      AsyncError(:final error) => switch (error) {
-        KimattaError_NotOpen() =>
-          'Local database unavailable: the database is not open',
-        KimattaError_InvalidPath() =>
-          'Local database unavailable: the database path is invalid',
-        KimattaError_Storage(:final message) =>
-          'Local database unavailable: $message',
-        // `error` is statically `Object`, so this arm stays mandatory even
-        // though the two above exhaust the sealed union. With both variants
-        // matched it now means "not one of ours".
-        _ => 'Local database unavailable: $error',
-      },
+      AsyncError(:final error) => describeFailure(
+        error,
+        subject: 'Local database',
+      ),
       _ => 'Local database: checking…',
     };
     return Scaffold(
@@ -45,6 +38,19 @@ class SettingsScreen extends ConsumerWidget {
             }),
             trailing: const Icon(Icons.chevron_right),
             onTap: () => context.go('/settings/household'),
+          ),
+          // Read-only: no onTap, no chevron. Editing the cycle is MVP-006 AC-2's,
+          // and an edit affordance here would duplicate it.
+          ListTile(
+            title: const Text('Planning cycle'),
+            subtitle: Text(switch (ref.watch(planningCycleProvider)) {
+              AsyncData(:final value) => describePlanningCycle(value),
+              AsyncError(:final error) => describeFailure(
+                error,
+                subject: 'Planning cycle',
+              ),
+              _ => 'Loading planning cycle…',
+            }),
           ),
           ListTile(title: const Text('Diagnostics'), subtitle: Text(line)),
         ],
