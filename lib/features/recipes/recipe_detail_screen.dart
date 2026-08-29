@@ -153,6 +153,8 @@ class _RecipeDetailScreenState extends ConsumerState<RecipeDetailScreen> {
       // renders nothing rather than a fabricated state.
       if (r.assessment case final a?) ..._assessment(a),
       if (r.servings case final n?) Text('Serves $n'),
+      // Rendered only when there is an estimate: no "0 min", no "unknown" (PRD §10).
+      if (r.prepMinutes case final n?) Text('Prep $n min'),
       const SizedBox(height: 8),
       Text('Ingredients', style: Theme.of(context).textTheme.titleMedium),
       if (r.lines.isEmpty) const Text('No ingredients listed.'),

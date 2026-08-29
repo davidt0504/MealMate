@@ -12,6 +12,7 @@ import 'api/household.dart';
 import 'api/planning.dart';
 import 'api/recipe.dart';
 import 'api/restrictions.dart';
+import 'api/starter.dart';
 
 import 'dart:async';
 import 'dart:convert';
@@ -144,6 +145,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   RestrictionDto dco_decode_restriction_dto(dynamic raw);
+
+  @protected
+  StarterInstallReportDto dco_decode_starter_install_report_dto(dynamic raw);
 
   @protected
   int dco_decode_u_32(dynamic raw);
@@ -299,6 +303,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   RestrictionDto sse_decode_restriction_dto(SseDeserializer deserializer);
+
+  @protected
+  StarterInstallReportDto sse_decode_starter_install_report_dto(
+    SseDeserializer deserializer,
+  );
 
   @protected
   int sse_decode_u_32(SseDeserializer deserializer);
@@ -492,6 +501,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_restriction_dto(
     RestrictionDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_starter_install_report_dto(
+    StarterInstallReportDto self,
     SseSerializer serializer,
   );
 

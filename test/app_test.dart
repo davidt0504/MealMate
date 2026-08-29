@@ -20,8 +20,20 @@ import 'package:meal_mate/features/restrictions/restriction_copy.dart';
 import 'package:meal_mate/src/rust/api/planning.dart';
 import 'package:meal_mate/src/rust/api/recipe.dart';
 import 'package:meal_mate/src/rust/api/restrictions.dart';
+import 'package:meal_mate/src/rust/api/starter.dart';
+import 'package:meal_mate/features/recipes/starter_provider.dart';
 
 const okReport = HealthReport(dbPath: '/x/kimatta.db', schemaVersion: 5);
+
+/// The report an install returns today: the catalog seeds, and nothing installs because
+/// nothing has a recorded cook review (MVP-011 AC-3).
+const okStarterReport = StarterInstallReportDto(
+  installed: 0,
+  skipped: 0,
+  catalogInstalled: 37,
+  available: 0,
+  pendingCookReview: 10,
+);
 
 /// Two lines, one with every structured field and one with only its text, so the detail and
 /// edit tests exercise both shapes.
@@ -30,6 +42,7 @@ const okRecipe = RecipeDto(
   householdId: 'h-1',
   title: 'Pancakes',
   servings: 4,
+  prepMinutes: 20,
   instructions: 'Mix. Fry.',
   lines: [
     IngredientLineDto(
@@ -94,6 +107,18 @@ const checkedCleanSummary = RecipeSummaryDto(
   id: 'r-3',
   title: 'Rice',
   assessment: checkedCleanAssessment,
+);
+
+/// `okRecipe` with no prep estimate, for the absence case.
+final okRecipeNoPrep = RecipeDto(
+  id: okRecipe.id,
+  householdId: okRecipe.householdId,
+  title: okRecipe.title,
+  servings: okRecipe.servings,
+  instructions: okRecipe.instructions,
+  lines: okRecipe.lines,
+  provenance: okRecipe.provenance,
+  assessment: okRecipe.assessment,
 );
 
 /// `okRecipe` with two conflicts — one known kind, one wording-only `Other` — and the
@@ -466,8 +491,15 @@ Widget harness({
   Future<RecipeDto> Function(String, String)? archiveRecipe,
   Future<RecipeDto> Function(String, String)? restoreRecipe,
   FutureOr<List<String>> Function()? unitKinds,
+  Future<StarterInstallReportDto> Function(String)? starterInstall,
 }) => ProviderScope(
   overrides: [
+    // Unconditional, like every other bridge seam here: `App` subscribes to this on the
+    // first frame, and an un-overridden provider would reach the real bridge, which
+    // `flutter test` never initialises.
+    starterInstallProvider.overrideWithValue(
+      starterInstall ?? (_) async => okStarterReport,
+    ),
     // Unconditional, as the restriction overrides are: the "all five destinations" test
     // visits Recipes, and an un-overridden provider would reach the real bridge.
     recipeLibraryProvider.overrideWith(
@@ -2404,6 +2436,191 @@ void main() {
       ),
     ]);
     expect(title('Recipes'), findsOneWidget);
+  });
+
+  // --- MVP-011 step 10(1): the once-per-launch starter install -----------------------
+
+  testWidgets(
+    'starter content installs once per launch for an already-onboarded household',
+    (tester) async {
+      // Adversarial: this is the regression an onboarding-wired install would have
+      // shipped. `okHousehold.onboarded` is true, so Welcome is unreachable and a
+      // one-shot tied to it would never run again on this device.
+      usePixel5(tester);
+      final calls = <String>[];
+      await tester.pumpWidget(
+        harness(
+          starterInstall: (id) async {
+            calls.add(id);
+            return okStarterReport;
+          },
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(calls, ['h-1']);
+    },
+  );
+
+  testWidgets('renaming the household does not re-run the starter install', (
+    tester,
+  ) async {
+    // Pins the `_installStarted` latch: `HouseholdNotifier.rename` publishes `AsyncData`,
+    // so the listener fires again on every Save name.
+    usePixel5(tester);
+    var calls = 0;
+    await tester.pumpWidget(
+      harness(
+        initial: '/settings/household',
+        starterInstall: (_) async {
+          calls++;
+          return okStarterReport;
+        },
+        rename: (id, name) async => HouseholdDto(
+          id: id,
+          name: name,
+          members: okHousehold.members,
+          onboarded: true,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(calls, 1);
+
+    await tester.enterText(find.byType(TextField), 'Casa');
+    await tester.tap(find.widgetWithText(FilledButton, 'Save name'));
+    await tester.pumpAndSettle();
+    expect(calls, 1);
+  });
+
+  testWidgets('the install is not called before the household resolves', (
+    tester,
+  ) async {
+    usePixel5(tester);
+    var calls = 0;
+    final pending = Completer<HouseholdDto>();
+    await tester.pumpWidget(
+      harness(
+        household: () => pending.future,
+        starterInstall: (_) async {
+          calls++;
+          return okStarterReport;
+        },
+      ),
+    );
+    await tester.pump();
+    expect(calls, 0);
+
+    pending.complete(okHousehold);
+    await tester.pumpAndSettle();
+    expect(calls, 1);
+  });
+
+  testWidgets('a failed starter install does not block the app', (
+    tester,
+  ) async {
+    // Pins the `scaffoldMessengerKey` path: `_AppState`'s context sits above
+    // `MaterialApp.router`, so without the key this throws rather than reporting.
+    usePixel5(tester);
+    await tester.pumpWidget(
+      harness(
+        starterInstall: (_) async =>
+            throw const KimattaError.storage(message: 'disk full'),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Starter recipes unavailable: disk full'), findsOneWidget);
+    // Navigation is untouched: the app is still usable.
+    expect(title('Plan'), findsOneWidget);
+  });
+
+  testWidgets('editing an existing recipe preserves its prep time', (
+    tester,
+  ) async {
+    // Risk 11: FRB emits a nullable DTO field as an *optional* named parameter, so the form
+    // compiles unchanged while sending `prepMinutes: null` and wiping the stored value.
+    // Nothing else catches this.
+    useTallView(tester);
+    RecipeDto? sent;
+    await tester.pumpWidget(
+      harness(
+        initial: '/recipes/r-1/edit',
+        recipe: (_) => okRecipe,
+        saveRecipe: (dto) async {
+          sent = dto;
+          return okRecipe;
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tapVisible(tester, find.widgetWithText(FilledButton, 'Save recipe'));
+    await tester.pumpAndSettle();
+    expect(sent!.prepMinutes, 20);
+  });
+
+  testWidgets('the form saves an entered prep time', (tester) async {
+    useTallView(tester);
+    RecipeDto? sent;
+    await tester.pumpWidget(
+      harness(
+        initial: '/recipes/new',
+        saveRecipe: (dto) async {
+          sent = dto;
+          return okRecipe;
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.enterText(field('Title'), 'Soup');
+    await tester.enterText(field('Prep time (minutes)'), '35');
+    await tapVisible(tester, find.widgetWithText(FilledButton, 'Save recipe'));
+    await tester.pumpAndSettle();
+    expect(sent!.prepMinutes, 35);
+  });
+
+  testWidgets('a zero prep time blocks save and names the field', (
+    tester,
+  ) async {
+    useTallView(tester);
+    var saves = 0;
+    await tester.pumpWidget(
+      harness(
+        initial: '/recipes/new',
+        saveRecipe: (_) async {
+          saves++;
+          return okRecipe;
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.enterText(field('Title'), 'Soup');
+    await tester.enterText(field('Prep time (minutes)'), '0');
+    await tapVisible(tester, find.widgetWithText(FilledButton, 'Save recipe'));
+    await tester.pumpAndSettle();
+    expect(
+      find.textContaining('Prep time must be a whole number of minutes'),
+      findsOneWidget,
+    );
+    expect(saves, 0);
+  });
+
+  testWidgets('the detail screen shows prep time when there is one', (
+    tester,
+  ) async {
+    useTallView(tester);
+    await tester.pumpWidget(harness(initial: '/recipes/r-1'));
+    await tester.pumpAndSettle();
+    expect(find.text('Prep 20 min'), findsOneWidget);
+  });
+
+  testWidgets('the detail screen omits prep time when there is none', (
+    tester,
+  ) async {
+    useTallView(tester);
+    await tester.pumpWidget(
+      harness(initial: '/recipes/r-1', recipe: (_) => okRecipeNoPrep),
+    );
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Prep'), findsNothing);
   });
 
   testWidgets('a blank title blocks save with an inline error', (tester) async {

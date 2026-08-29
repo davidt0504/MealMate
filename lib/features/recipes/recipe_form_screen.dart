@@ -89,12 +89,15 @@ class _LineDraft {
 class _RecipeFormScreenState extends ConsumerState<RecipeFormScreen> {
   final _title = TextEditingController();
   final _servings = TextEditingController();
+  final _prepMinutes = TextEditingController();
   final _instructions = TextEditingController();
   final List<_LineDraft> _lines = [];
   final _titleKey = GlobalKey();
   final _servingsKey = GlobalKey();
+  final _prepMinutesKey = GlobalKey();
   String? _titleError;
   String? _servingsError;
+  String? _prepMinutesError;
   bool _saving = false;
   bool _seeded = false;
   RecipeDto? _existing;
@@ -105,6 +108,7 @@ class _RecipeFormScreenState extends ConsumerState<RecipeFormScreen> {
   void dispose() {
     _title.dispose();
     _servings.dispose();
+    _prepMinutes.dispose();
     _instructions.dispose();
     for (final l in _lines) {
       l.dispose();
@@ -122,6 +126,7 @@ class _RecipeFormScreenState extends ConsumerState<RecipeFormScreen> {
     }
     _title.text = existing.title;
     _servings.text = existing.servings?.toString() ?? '';
+    _prepMinutes.text = existing.prepMinutes?.toString() ?? '';
     _instructions.text = existing.instructions;
     _lines.addAll(existing.lines.map(_LineDraft.new));
   }
@@ -131,6 +136,7 @@ class _RecipeFormScreenState extends ConsumerState<RecipeFormScreen> {
     var ok = true;
     _titleError = null;
     _servingsError = null;
+    _prepMinutesError = null;
     if (_title.text.trim().isEmpty) {
       _titleError = 'Give the recipe a title.';
       ok = false;
@@ -143,6 +149,16 @@ class _RecipeFormScreenState extends ConsumerState<RecipeFormScreen> {
       if (servings == null || servings < 1 || servings > maxQuantity) {
         _servingsError =
             'Servings must be a whole number from 1 to $maxQuantity.';
+        ok = false;
+      }
+    }
+    int? prepMinutes;
+    if (_prepMinutes.text.trim().isNotEmpty) {
+      prepMinutes = int.tryParse(_prepMinutes.text.trim());
+      // Same bound and same reason as `servings`: a bridge `u32`.
+      if (prepMinutes == null || prepMinutes < 1 || prepMinutes > maxQuantity) {
+        _prepMinutesError =
+            'Prep time must be a whole number of minutes from 1 to $maxQuantity.';
         ok = false;
       }
     }
@@ -204,6 +220,7 @@ class _RecipeFormScreenState extends ConsumerState<RecipeFormScreen> {
       householdId: householdId,
       title: _title.text,
       servings: servings,
+      prepMinutes: prepMinutes,
       instructions: _instructions.text,
       lines: lines,
       provenance:
@@ -215,6 +232,7 @@ class _RecipeFormScreenState extends ConsumerState<RecipeFormScreen> {
   GlobalKey? _firstErrorKey() {
     if (_titleError != null) return _titleKey;
     if (_servingsError != null) return _servingsKey;
+    if (_prepMinutesError != null) return _prepMinutesKey;
     for (final l in _lines) {
       if (l.error != null) return l.errorKey;
     }
@@ -338,6 +356,17 @@ class _RecipeFormScreenState extends ConsumerState<RecipeFormScreen> {
               labelText: 'Servings',
               helperText: 'Optional.',
               errorText: _servingsError,
+            ),
+          ),
+          TextField(
+            key: _prepMinutesKey,
+            controller: _prepMinutes,
+            enabled: !_saving,
+            keyboardType: TextInputType.number,
+            decoration: InputDecoration(
+              labelText: 'Prep time (minutes)',
+              helperText: 'Optional.',
+              errorText: _prepMinutesError,
             ),
           ),
           TextField(
