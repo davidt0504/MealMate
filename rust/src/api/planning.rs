@@ -18,7 +18,7 @@ pub struct PlanningCycleDto {
     pub dates: Vec<String>,           // the cycle's civil dates, ISO, length_days of them
 }
 
-fn to_domain(slot: &MealSlotDto) -> MealSlot {
+pub(crate) fn slot_to_domain(slot: &MealSlotDto) -> MealSlot {
     match slot {
         MealSlotDto::Breakfast => MealSlot::Breakfast,
         MealSlotDto::Lunch => MealSlot::Lunch,
@@ -26,7 +26,7 @@ fn to_domain(slot: &MealSlotDto) -> MealSlot {
     }
 }
 
-fn from_domain(slot: MealSlot) -> MealSlotDto {
+pub(crate) fn slot_from_domain(slot: MealSlot) -> MealSlotDto {
     match slot {
         MealSlot::Breakfast => MealSlotDto::Breakfast,
         MealSlot::Lunch => MealSlotDto::Lunch,
@@ -80,7 +80,7 @@ fn save_in(
 ) -> Result<PlanningCycleDto, KimattaError> {
     let id = HouseholdId::new(household_id)?;
     let anchor = kimatta_storage::parse_civil_date(anchor_date)?;
-    let scope = MealScope::new(meal_slots.iter().map(to_domain))?;
+    let scope = MealScope::new(meal_slots.iter().map(slot_to_domain))?;
     let cycle = PlanningCycle::new(id, anchor, length_days, scope)?;
     kimatta_storage::save_planning_cycle(conn, &cycle)?;
     Ok(to_dto(&cycle))
@@ -98,7 +98,7 @@ fn to_dto(cycle: &PlanningCycle) -> PlanningCycleDto {
             .slots()
             .iter()
             .copied()
-            .map(from_domain)
+            .map(slot_from_domain)
             .collect(),
         dates: cycle
             .dates()

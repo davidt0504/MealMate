@@ -1847,6 +1847,26 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('Settings reports a planned-meal failure in prose', (
+    tester,
+  ) async {
+    usePixel5(tester);
+    await tester.pumpWidget(
+      harness(
+        initial: '/settings',
+        restrictions: () => throw const KimattaError.plannedMeal(
+          message: 'open must stand alone',
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.text('Restrictions unavailable: open must stand alone'),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('the recipe library shows an honest empty state', (tester) async {
     usePixel5(tester);
     await tester.pumpWidget(harness(initial: '/recipes'));

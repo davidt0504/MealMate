@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:meal_mate/src/rust/api/error.dart';
 import 'package:meal_mate/src/rust/api/health.dart';
 import 'package:meal_mate/src/rust/api/household.dart';
+import 'package:meal_mate/src/rust/api/planned_meals.dart';
 import 'package:meal_mate/src/rust/api/planning.dart';
 import 'package:meal_mate/src/rust/api/recipe.dart';
 import 'package:meal_mate/src/rust/api/restrictions.dart';
@@ -39,9 +40,9 @@ void main() {
     );
   });
 
-  test('open_database migrates a real database to schema v6', () async {
+  test('open_database migrates a real database to schema v7', () async {
     final report = await openDatabase(dbPath: await tempDb());
-    expect(report.schemaVersion, 6);
+    expect(report.schemaVersion, 7);
   });
 
   test('storage failure surfaces as KimattaError_Storage', () async {
@@ -557,6 +558,155 @@ void main() {
       expect(unitLabel(kind), isNotEmpty, reason: '$kind has no label');
       expect(unitLabel(kind), isNot(contains('_')), reason: '$kind is raw');
     }
+  });
+
+  // MVP-012: expected-to-pass pins of the planned-meal bridge on a real file. The generated
+  // `PlannedMealDto.==` compares `components` by list identity, so assertions go field by
+  // field with a deep-list matcher, as the recipe tests do.
+  Future<PlannedMealDto> plannedDinner(String householdId, String date) async {
+    await ensurePlanningCycle(
+      householdId: householdId,
+      defaultAnchorDate: date,
+    );
+    final recipe = await saveRecipe(recipe: recipeFor(householdId, const []));
+    return savePlannedMeal(
+      meal: PlannedMealDto(
+        id: '',
+        householdId: householdId,
+        date: date,
+        slot: MealSlotDto.dinner,
+        components: [
+          MealComponentDto(
+            kind: 'recipe',
+            recipeId: recipe.id,
+            scale: const ScaleDto(numer: 3, denom: 2),
+          ),
+          const MealComponentDto(kind: 'leftovers', note: ' chili '),
+        ],
+        locked: false,
+      ),
+    );
+  }
+
+  test(
+    'a planned meal with two components survives reopening the same file',
+    () async {
+      final path = await tempDb();
+      await openDatabase(dbPath: path);
+      final h = await bootstrapHousehold();
+      final saved = await plannedDinner(h.id, '2026-08-30');
+      expect(saved.id, isNotEmpty);
+      expect(saved.locked, isFalse);
+      await openDatabase(dbPath: path);
+      final again = await loadPlannedMeal(householdId: h.id, mealId: saved.id);
+      expect(again, isNotNull);
+      expect(again!.date, '2026-08-30');
+      expect(again.slot, MealSlotDto.dinner);
+      expect(again.components, hasLength(2));
+      expect(again.components[0].kind, 'recipe');
+      expect(again.components[0].recipeId, saved.components[0].recipeId);
+      expect(again.components[0].scale, const ScaleDto(numer: 3, denom: 2));
+      expect(again.components[1].kind, 'leftovers');
+      expect(again.components[1].note, ' chili ');
+      expect(again.components[1].recipeId, isNull);
+      final listed = await listPlannedMeals(
+        householdId: h.id,
+        fromDate: '2026-08-30',
+        toDate: '2026-08-30',
+      );
+      expect(listed.single.id, saved.id);
+    },
+  );
+
+  test('a locked planned meal stays locked across save', () async {
+    await openDatabase(dbPath: await tempDb());
+    final h = await bootstrapHousehold();
+    final saved = await plannedDinner(h.id, '2026-08-30');
+    final locked = await setPlannedMealLock(
+      householdId: h.id,
+      mealId: saved.id,
+      locked: true,
+    );
+    expect(locked.locked, isTrue);
+    final resaved = await savePlannedMeal(
+      meal: PlannedMealDto(
+        id: saved.id,
+        householdId: h.id,
+        date: '2026-08-30',
+        slot: MealSlotDto.dinner,
+        components: const [MealComponentDto(kind: 'dining_out')],
+        locked: false,
+      ),
+    );
+    expect(resaved.locked, isTrue);
+    expect(resaved.components.single.kind, 'dining_out');
+  });
+
+  test('a planned meal id from a different household is not found', () async {
+    await openDatabase(dbPath: await tempDb());
+    final h = await bootstrapHousehold();
+    final saved = await plannedDinner(h.id, '2026-08-30');
+    expect(
+      await loadPlannedMeal(householdId: 'not-${h.id}', mealId: saved.id),
+      isNull,
+    );
+    expect(
+      await listPlannedMeals(
+        householdId: 'not-${h.id}',
+        fromDate: '2026-01-01',
+        toDate: '2026-12-31',
+      ),
+      isEmpty,
+    );
+    await expectLater(
+      () => deletePlannedMeal(householdId: 'not-${h.id}', mealId: saved.id),
+      throwsA(isA<KimattaError_Storage>()),
+    );
+    expect(
+      await loadPlannedMeal(householdId: h.id, mealId: saved.id),
+      isNotNull,
+    );
+  });
+
+  test('a PlannedMeal error is a typed KimattaError_PlannedMeal', () async {
+    await openDatabase(dbPath: await tempDb());
+    final h = await bootstrapHousehold();
+    await ensurePlanningCycle(
+      householdId: h.id,
+      defaultAnchorDate: '2026-08-30',
+    );
+    await expectLater(
+      () => savePlannedMeal(
+        meal: PlannedMealDto(
+          id: '',
+          householdId: h.id,
+          date: '2026-08-30',
+          slot: MealSlotDto.dinner,
+          components: const [
+            MealComponentDto(kind: 'open'),
+            MealComponentDto(kind: 'leftovers'),
+          ],
+          locked: false,
+        ),
+      ),
+      throwsA(isA<KimattaError_PlannedMeal>()),
+    );
+    expect(
+      await listPlannedMeals(
+        householdId: h.id,
+        fromDate: '2026-08-30',
+        toDate: '2026-08-30',
+      ),
+      isEmpty,
+    );
+    expect(await knownMealComponentKinds(), [
+      'recipe',
+      'leftovers',
+      'dining_out',
+      'frozen_quick',
+      'freeform',
+      'open',
+    ]);
   });
 
   test('custom ingredients list only for their household', () async {

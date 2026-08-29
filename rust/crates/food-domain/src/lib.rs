@@ -1,6 +1,7 @@
 //! Food domain types (PRD v3 §8). Depends on the household kernel, never the reverse.
 #![forbid(unsafe_code)]
 
+pub mod planned_meal;
 pub mod preference;
 pub mod recipe;
 pub mod restriction;
@@ -11,6 +12,7 @@ use jiff::Span;
 use thiserror::Error;
 
 pub use jiff::civil::Date as CivilDate; // re-exported so dependents need no jiff dependency
+pub use planned_meal::*;
 pub use preference::*;
 pub use recipe::*;
 pub use restriction::*;
