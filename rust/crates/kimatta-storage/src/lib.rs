@@ -11,10 +11,11 @@ pub use food_domain::starter::{
 pub use food_domain::{
     assess, format_civil_date, parse_civil_date, CivilDate, Conflict, CustomIngredient,
     CustomIngredientId, HouseholdRestrictions, Ingredient, IngredientId, IngredientLine,
-    IngredientRef, MealScope, MealSlot, MemberPreference, MemberPreferences, PlanningCycle,
-    PlanningError, PreferenceError, ProvenanceKind, Quantity, QuantityRange, Rational, Recipe,
-    RecipeError, RecipeId, RecipeProvenance, RecipeRights, Restriction, RestrictionAssessment,
-    RestrictionError, RestrictionKind, RightsBasis, Sentiment, Unit, UnitKind, DEFAULT_CYCLE_DAYS,
+    IngredientRef, MealComponent, MealScope, MealSlot, MemberPreference, MemberPreferences,
+    PlannedMeal, PlannedMealError, PlannedMealId, PlanningCycle, PlanningError, PreferenceError,
+    ProvenanceKind, Quantity, QuantityRange, Rational, Recipe, RecipeError, RecipeId,
+    RecipeProvenance, RecipeRights, Restriction, RestrictionAssessment, RestrictionError,
+    RestrictionKind, RightsBasis, Sentiment, Unit, UnitKind, WriteSource, DEFAULT_CYCLE_DAYS,
     MAX_CYCLE_DAYS, MIN_CYCLE_DAYS, RULE_VERSION,
 };
 pub use household_core::{Household, HouseholdId, HouseholdMember, IdError, MemberId};
@@ -100,6 +101,40 @@ pub enum StorageError {
         position: usize,
         kind: String,
         text: Option<String>,
+    },
+    #[error(transparent)]
+    PlannedMeal(#[from] PlannedMealError),
+    #[error("household {0} has no planning cycle yet; read its cycle before planning a meal")]
+    NoPlanningCycle(String),
+    #[error("no planned meal {meal} in household {household}")]
+    NoSuchPlannedMeal { meal: String, household: String },
+    #[error("planned meal {0} is locked against automation")]
+    LockedPlannedMeal(String),
+    #[error("household {household} does not plan the {slot} slot")]
+    SlotNotEnabled { household: String, slot: String },
+    #[error("recipe {recipe} belongs to household {actual}, not {expected}")]
+    ComponentRecipeMismatch {
+        recipe: String,
+        expected: String,
+        actual: String,
+    },
+    #[error("household {household} already plans {slot} on {date}")]
+    OccupiedSlot {
+        household: String,
+        date: String,
+        slot: String,
+    },
+    #[error(
+        "planned meal {meal} component {position} has kind {kind:?} with recipe {recipe_id:?} \
+         and scale ({scale_numer:?}, {scale_denom:?})"
+    )]
+    CorruptComponent {
+        meal: String,
+        position: usize,
+        kind: String,
+        recipe_id: Option<String>,
+        scale_numer: Option<u32>,
+        scale_denom: Option<u32>,
     },
 }
 
@@ -246,6 +281,48 @@ const MIGRATION_ARRAY: &[M] = &[
                 OR verified_on GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]');
         ALTER TABLE recipe_provenance ADD COLUMN starter_slug TEXT;
         CREATE INDEX recipe_provenance_starter_slug ON recipe_provenance(starter_slug);",
+    ),
+    // Planned meal occurrences (MVP-012). A `planned_meal` row asserts *planned* only, never
+    // cooked (invariant 19): confirmation is the outcome ledger's, so no status column lives
+    // here. One occurrence per `(household, date, slot)`; `locked` is written only by its own
+    // command, never by a save. Components are keyed `(parent, position)` and replaced whole,
+    // as every other child set is. No CHECK on `slot`/`kind`: vocabularies validated by parse,
+    // as `unit_kind` is. The CHECKs that *are* here pin the kind/column pairing — a non-recipe
+    // meal is a `kind` of its own, never a NULL `recipe_id` (card stop condition) — and, for
+    // `freeform` alone, that the note the kind exists to carry is actually there, so no write
+    // can land a row the reader will refuse. That last one trims the ASCII whitespace set
+    // rather than SQLite's `trim` default of spaces only; it is still coarser than the
+    // `str::trim` the reader applies, which is why `check_freeform_notes` guards in Rust too.
+    // `recipe_id` carries no cascade and is indexed, for the reason the line FKs give; recipes
+    // are archived, never deleted, so no component dangles.
+    M::up(
+        "CREATE TABLE planned_meal (
+        id TEXT PRIMARY KEY NOT NULL,
+        household_id TEXT NOT NULL REFERENCES household(id) ON DELETE CASCADE,
+        date TEXT NOT NULL CHECK (date GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'),
+        slot TEXT NOT NULL,
+        locked INTEGER NOT NULL DEFAULT 0 CHECK (locked IN (0, 1)),
+        UNIQUE (household_id, date, slot)
+    ) STRICT;
+    CREATE INDEX planned_meal_household_date ON planned_meal(household_id, date);
+    CREATE TABLE meal_component (
+        planned_meal_id TEXT NOT NULL REFERENCES planned_meal(id) ON DELETE CASCADE,
+        position INTEGER NOT NULL,
+        kind TEXT NOT NULL,
+        recipe_id TEXT REFERENCES recipe(id),
+        note TEXT,
+        scale_numer INTEGER,
+        scale_denom INTEGER,
+        PRIMARY KEY (planned_meal_id, position),
+        CHECK ((kind = 'recipe') = (recipe_id IS NOT NULL)),
+        CHECK (kind = 'recipe' OR (scale_numer IS NULL AND scale_denom IS NULL)),
+        CHECK (kind <> 'recipe' OR note IS NULL),
+        CHECK (kind <> 'freeform'
+            OR (note IS NOT NULL AND trim(note, char(32, 9, 10, 11, 12, 13)) <> '')),
+        CHECK ((scale_numer IS NULL) = (scale_denom IS NULL)),
+        CHECK (scale_numer IS NULL OR (scale_numer >= 1 AND scale_denom >= 1))
+    ) STRICT;
+    CREATE INDEX meal_component_recipe ON meal_component(recipe_id);",
     ),
 ];
 pub const MIGRATIONS: Migrations<'static> = Migrations::from_slice(MIGRATION_ARRAY);
@@ -1533,6 +1610,374 @@ fn set_archive_marker(
     Ok(())
 }
 
+/// Every recipe component must name a recipe in `meal.household_id()` — archived ones
+/// included, since an occurrence keeps its reference when its recipe is archived (MVP-008
+/// decision). All probes run before any write, as `check_line_refs` does.
+fn check_component_recipes(conn: &Connection, meal: &PlannedMeal) -> Result<(), StorageError> {
+    for component in meal.components() {
+        let MealComponent::Recipe { recipe_id, .. } = component else {
+            continue;
+        };
+        let owner: Option<String> = conn
+            .query_row(
+                "SELECT household_id FROM recipe WHERE id = ?1",
+                params![recipe_id.as_str()],
+                |r| r.get(0),
+            )
+            .optional()?;
+        match owner {
+            None => {
+                return Err(StorageError::NoSuchRecipe {
+                    recipe: recipe_id.as_str().to_owned(),
+                    household: meal.household_id().as_str().to_owned(),
+                })
+            }
+            Some(actual) if actual != meal.household_id().as_str() => {
+                return Err(StorageError::ComponentRecipeMismatch {
+                    recipe: recipe_id.as_str().to_owned(),
+                    expected: meal.household_id().as_str().to_owned(),
+                    actual,
+                });
+            }
+            Some(_) => {}
+        }
+    }
+    Ok(())
+}
+
+/// Every freeform component must carry a note `MealComponent::freeform` would accept. That
+/// constructor is the only place the rule lives, but an enum variant's fields are as public as
+/// the enum, so `MealComponent::Freeform { note }` builds one around it — and the read path
+/// routes through `freeform()`, so such a row commits and is then unreadable, taking the whole
+/// date range with it. The rule is re-run through the constructor rather than restated, since
+/// the v7 CHECK behind it can only trim ASCII whitespace and `str::trim` strips more.
+/// Runs before any write, as `check_component_recipes` does.
+fn check_freeform_notes(meal: &PlannedMeal) -> Result<(), StorageError> {
+    for component in meal.components() {
+        if let MealComponent::Freeform { note } = component {
+            MealComponent::freeform(note.as_str())?;
+        }
+    }
+    Ok(())
+}
+
+/// Inserts or wholly replaces the occurrence and its component set in one IMMEDIATE
+/// transaction. Checked before any write, in order: the household exists; it has a planning
+/// cycle (`NoPlanningCycle` — a household that has never read its cycle cannot plan yet);
+/// the slot is enabled (`SlotNotEnabled`, **write-time only** — disabling a slot later never
+/// hides or deletes what was planned in it); every recipe component belongs to this household;
+/// every freeform component carries a note its own constructor would accept
+/// (`FreeformNeedsANote`, which a caller building the variant directly can otherwise bypass);
+/// an existing id owned elsewhere is `NoSuchPlannedMeal`, never hijacked; an existing locked row
+/// refuses `Automation` outright (`LockedPlannedMeal`, invariant 18); and a `(household, date,
+/// slot)` already held by a *different* id is `OccupiedSlot`, typed before the UNIQUE fires.
+///
+/// `locked` is **never written here**, as `archived_at` is not by `save_recipe`: a fresh row
+/// takes the column default and an update leaves the column alone, so the value's own
+/// `locked()` is not what ends up stored — callers that need it re-read.
+pub fn save_planned_meal(
+    conn: &mut Connection,
+    meal: &PlannedMeal,
+    source: WriteSource,
+) -> Result<(), StorageError> {
+    let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    let household = meal.household_id();
+    require_household(&tx, household)?;
+    let cycle = load_planning_cycle(&tx, household)?
+        .ok_or_else(|| StorageError::NoPlanningCycle(household.as_str().to_owned()))?;
+    if !cycle.scope().contains(meal.slot()) {
+        return Err(StorageError::SlotNotEnabled {
+            household: household.as_str().to_owned(),
+            slot: meal.slot().as_str().to_owned(),
+        });
+    }
+    check_component_recipes(&tx, meal)?;
+    check_freeform_notes(meal)?;
+    let id = meal.id().as_str();
+    let existing: Option<(String, bool)> = tx
+        .query_row(
+            "SELECT household_id, locked FROM planned_meal WHERE id = ?1",
+            params![id],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .optional()?;
+    if let Some((owner, locked)) = existing {
+        if owner != household.as_str() {
+            return Err(StorageError::NoSuchPlannedMeal {
+                meal: id.to_owned(),
+                household: household.as_str().to_owned(),
+            });
+        }
+        if locked && source == WriteSource::Automation {
+            return Err(StorageError::LockedPlannedMeal(id.to_owned()));
+        }
+    }
+    let date = format_civil_date(meal.date());
+    let holder: Option<String> = tx
+        .query_row(
+            "SELECT id FROM planned_meal WHERE household_id = ?1 AND date = ?2 AND slot = ?3",
+            params![household.as_str(), date, meal.slot().as_str()],
+            |r| r.get(0),
+        )
+        .optional()?;
+    if holder.is_some_and(|h| h != id) {
+        return Err(StorageError::OccupiedSlot {
+            household: household.as_str().to_owned(),
+            date,
+            slot: meal.slot().as_str().to_owned(),
+        });
+    }
+    tx.execute(
+        "INSERT INTO planned_meal (id, household_id, date, slot) VALUES (?1, ?2, ?3, ?4)
+         ON CONFLICT(id) DO UPDATE SET date = excluded.date, slot = excluded.slot",
+        params![id, household.as_str(), date, meal.slot().as_str()],
+    )?;
+    tx.execute(
+        "DELETE FROM meal_component WHERE planned_meal_id = ?1",
+        params![id],
+    )?;
+    for (position, component) in meal.components().iter().enumerate() {
+        let (recipe_id, note, scale) = match component {
+            MealComponent::Recipe { recipe_id, scale } => (Some(recipe_id.as_str()), None, *scale),
+            MealComponent::Leftovers { note }
+            | MealComponent::DiningOut { note }
+            | MealComponent::FrozenQuick { note }
+            | MealComponent::Open { note } => (None, note.as_deref(), None),
+            MealComponent::Freeform { note } => (None, Some(note.as_str()), None),
+        };
+        tx.execute(
+            "INSERT INTO meal_component
+             (planned_meal_id, position, kind, recipe_id, note, scale_numer, scale_denom)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            params![
+                id,
+                position as u32,
+                component.kind_str(),
+                recipe_id,
+                note,
+                scale.map(Rational::numer),
+                scale.map(Rational::denom),
+            ],
+        )?;
+    }
+    tx.commit()?;
+    Ok(())
+}
+
+/// Sets or clears the lock on exactly this household's occurrence. `Automation` is refused
+/// outright, whichever way the flag is going: a lock is the user's Tier-0 word (invariant 18),
+/// and letting automation clear one would reopen every write the lock exists to refuse.
+/// Idempotent for the user; absent or foreign is `NoSuchPlannedMeal`.
+pub fn set_planned_meal_lock(
+    conn: &mut Connection,
+    household: &HouseholdId,
+    id: &PlannedMealId,
+    locked: bool,
+    source: WriteSource,
+) -> Result<(), StorageError> {
+    if source == WriteSource::Automation {
+        return Err(StorageError::LockedPlannedMeal(id.as_str().to_owned()));
+    }
+    let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    let changed = tx.execute(
+        "UPDATE planned_meal SET locked = ?1 WHERE id = ?2 AND household_id = ?3",
+        params![locked, id.as_str(), household.as_str()],
+    )?;
+    if changed == 0 {
+        return Err(StorageError::NoSuchPlannedMeal {
+            meal: id.as_str().to_owned(),
+            household: household.as_str().to_owned(),
+        });
+    }
+    tx.commit()?;
+    Ok(())
+}
+
+/// Removes the occurrence and, by cascade, its components. A hard delete is right here: an
+/// occurrence is current plan state, not a planner record (invariant 20 guards `PlannerRun`,
+/// MVP-023's table). `Automation` on a locked row is `LockedPlannedMeal`; absent or foreign is
+/// `NoSuchPlannedMeal`.
+pub fn delete_planned_meal(
+    conn: &mut Connection,
+    household: &HouseholdId,
+    id: &PlannedMealId,
+    source: WriteSource,
+) -> Result<(), StorageError> {
+    let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    let locked: Option<bool> = tx
+        .query_row(
+            "SELECT locked FROM planned_meal WHERE id = ?1 AND household_id = ?2",
+            params![id.as_str(), household.as_str()],
+            |r| r.get(0),
+        )
+        .optional()?;
+    match locked {
+        None => {
+            return Err(StorageError::NoSuchPlannedMeal {
+                meal: id.as_str().to_owned(),
+                household: household.as_str().to_owned(),
+            })
+        }
+        Some(true) if source == WriteSource::Automation => {
+            return Err(StorageError::LockedPlannedMeal(id.as_str().to_owned()));
+        }
+        Some(_) => {}
+    }
+    tx.execute(
+        "DELETE FROM planned_meal WHERE id = ?1",
+        params![id.as_str()],
+    )?;
+    tx.commit()?;
+    Ok(())
+}
+
+/// One stored component, before it goes back through the domain constructors.
+struct ComponentRow {
+    position: usize,
+    kind: String,
+    recipe_id: Option<String>,
+    note: Option<String>,
+    scale_numer: Option<u32>,
+    scale_denom: Option<u32>,
+}
+
+const COMPONENT_COLUMNS: &str =
+    "c.planned_meal_id, c.position, c.kind, c.recipe_id, c.note, c.scale_numer, c.scale_denom";
+
+fn component_row(r: &rusqlite::Row<'_>) -> rusqlite::Result<(String, ComponentRow)> {
+    Ok((
+        r.get(0)?,
+        ComponentRow {
+            position: r.get::<_, u32>(1)? as usize,
+            kind: r.get(2)?,
+            recipe_id: r.get(3)?,
+            note: r.get(4)?,
+            scale_numer: r.get(5)?,
+            scale_denom: r.get(6)?,
+        },
+    ))
+}
+
+/// A row whose columns do not describe its `kind` — including a half-present scale — is
+/// `CorruptComponent` with its coordinates, never coerced (the rule `restriction_from_row`
+/// states). An unknown `kind` token or a blank freeform note is the domain's own error.
+fn component_from_row(meal: &str, row: ComponentRow) -> Result<MealComponent, StorageError> {
+    let corrupt = || StorageError::CorruptComponent {
+        meal: meal.to_owned(),
+        position: row.position,
+        kind: row.kind.clone(),
+        recipe_id: row.recipe_id.clone(),
+        scale_numer: row.scale_numer,
+        scale_denom: row.scale_denom,
+    };
+    let scale = match (row.scale_numer, row.scale_denom) {
+        (Some(n), Some(d)) => Some(MealComponent::parse_scale(n, d)?),
+        (None, None) => None,
+        _ => return Err(corrupt()),
+    };
+    let recipe_id = row.recipe_id.clone().map(RecipeId::new).transpose()?;
+    MealComponent::parse_row(&row.kind, recipe_id, row.note.clone(), scale)?.ok_or_else(corrupt)
+}
+
+fn meal_from_rows(
+    household: &HouseholdId,
+    id: String,
+    date: String,
+    slot: String,
+    locked: bool,
+    rows: Vec<ComponentRow>,
+) -> Result<PlannedMeal, StorageError> {
+    let components = rows
+        .into_iter()
+        .map(|row| component_from_row(&id, row))
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(PlannedMeal::new(
+        PlannedMealId::new(id)?,
+        household.clone(),
+        parse_civil_date(&date)?,
+        MealSlot::parse(&slot)?,
+        components,
+        locked,
+    )?)
+}
+
+/// The occurrence `id` **in `household`**, or `None` — another household's is `None`, never
+/// the row. Every stored value goes back through the domain constructors.
+pub fn load_planned_meal(
+    conn: &Connection,
+    household: &HouseholdId,
+    id: &PlannedMealId,
+) -> Result<Option<PlannedMeal>, StorageError> {
+    let row = conn
+        .query_row(
+            "SELECT date, slot, locked FROM planned_meal WHERE id = ?1 AND household_id = ?2",
+            params![id.as_str(), household.as_str()],
+            |r| {
+                Ok((
+                    r.get::<_, String>(0)?,
+                    r.get::<_, String>(1)?,
+                    r.get::<_, bool>(2)?,
+                ))
+            },
+        )
+        .optional()?;
+    let Some((date, slot, locked)) = row else {
+        return Ok(None);
+    };
+    let mut stmt = conn.prepare(&format!(
+        "SELECT {COMPONENT_COLUMNS} FROM meal_component c
+         WHERE c.planned_meal_id = ?1 ORDER BY c.position"
+    ))?;
+    let rows = stmt
+        .query_map(params![id.as_str()], |r| Ok(component_row(r)?.1))?
+        .collect::<Result<Vec<_>, _>>()?;
+    meal_from_rows(household, id.as_str().to_owned(), date, slot, locked, rows).map(Some)
+}
+
+/// Every occurrence in `household` dated `from..=to`, ordered by date then `MealSlot`
+/// canonical order — sorted in Rust after parse, since the slot vocabulary lives here, not in
+/// SQL. Components for the whole listing come from one query, as `list_recipes` line names do.
+pub fn list_planned_meals(
+    conn: &Connection,
+    household: &HouseholdId,
+    from: CivilDate,
+    to: CivilDate,
+) -> Result<Vec<PlannedMeal>, StorageError> {
+    let (from, to) = (format_civil_date(from), format_civil_date(to));
+    let mut components = conn.prepare(&format!(
+        "SELECT {COMPONENT_COLUMNS} FROM meal_component c
+         JOIN planned_meal p ON p.id = c.planned_meal_id
+         WHERE p.household_id = ?1 AND p.date BETWEEN ?2 AND ?3
+         ORDER BY c.planned_meal_id, c.position"
+    ))?;
+    let mut by_meal: HashMap<String, Vec<ComponentRow>> = HashMap::new();
+    for row in components.query_map(params![household.as_str(), from, to], component_row)? {
+        let (meal_id, row) = row?;
+        by_meal.entry(meal_id).or_default().push(row);
+    }
+    let mut stmt = conn.prepare(
+        "SELECT id, date, slot, locked FROM planned_meal
+         WHERE household_id = ?1 AND date BETWEEN ?2 AND ?3 ORDER BY date, id",
+    )?;
+    let mut meals = stmt
+        .query_map(params![household.as_str(), from, to], |r| {
+            Ok((
+                r.get::<_, String>(0)?,
+                r.get::<_, String>(1)?,
+                r.get::<_, String>(2)?,
+                r.get::<_, bool>(3)?,
+            ))
+        })?
+        .map(|row| {
+            let (id, date, slot, locked) = row?;
+            let rows = by_meal.remove(&id).unwrap_or_default();
+            meal_from_rows(household, id, date, slot, locked, rows)
+        })
+        .collect::<Result<Vec<_>, StorageError>>()?;
+    meals.sort_by_key(|m| (m.date(), m.slot()));
+    Ok(meals)
+}
+
 #[cfg(test)]
 mod tests {
     use household_core::{HouseholdId, MemberId};
@@ -1708,7 +2153,7 @@ mod tests {
     /// on-device v1→v2 migration (PRD §12: tested from representative prior versions); since
     /// v4 it proves v1→latest end to end.
     #[test]
-    fn an_existing_v1_database_migrates_to_v6_without_losing_data() {
+    fn an_existing_v1_database_migrates_to_v7_without_losing_data() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("kimatta.db");
         {
@@ -1723,7 +2168,7 @@ mod tests {
             .unwrap();
         }
         let conn = open(&path).unwrap();
-        assert_eq!(schema_version(&conn).unwrap(), 6);
+        assert_eq!(schema_version(&conn).unwrap(), 7);
         assert_eq!(count(&conn, "household"), 1);
         assert_eq!(count(&conn, "household_member"), 2);
         assert_eq!(count(&conn, "planning_cycle"), 0);
@@ -1937,16 +2382,16 @@ mod tests {
     }
 
     #[test]
-    fn empty_db_migrates_to_v6() {
+    fn empty_db_migrates_to_v7() {
         let conn = open(":memory:").unwrap();
-        assert_eq!(schema_version(&conn).unwrap(), 6);
+        assert_eq!(schema_version(&conn).unwrap(), 7);
     }
 
     // --- Step 4: schema v3 -----------------------------------------------------------------
 
     /// Test-level stand-in for the on-device v2→v3 migration, as the v1 test is for v1→v2.
     #[test]
-    fn an_existing_v2_database_migrates_to_v6_without_losing_data() {
+    fn an_existing_v2_database_migrates_to_v7_without_losing_data() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("kimatta.db");
         {
@@ -1967,7 +2412,7 @@ mod tests {
             .unwrap();
         }
         let conn = open(&path).unwrap();
-        assert_eq!(schema_version(&conn).unwrap(), 6);
+        assert_eq!(schema_version(&conn).unwrap(), 7);
         assert_eq!(count(&conn, "household"), 1);
         assert_eq!(count(&conn, "planning_cycle"), 1);
         assert_eq!(count(&conn, "planning_meal_slot"), 2);
@@ -1980,7 +2425,7 @@ mod tests {
     /// theirs. A recipe is saved at v3 so the migration is proved not to disturb the tables
     /// migration 3 introduced, not merely the household one it alters.
     #[test]
-    fn an_existing_v3_database_migrates_to_v6_without_losing_data() {
+    fn an_existing_v3_database_migrates_to_v7_without_losing_data() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("kimatta.db");
         {
@@ -1992,7 +2437,7 @@ mod tests {
             insert_pre_v6_recipe(&raw, "h", "r");
         }
         let conn = open(&path).unwrap();
-        assert_eq!(schema_version(&conn).unwrap(), 6);
+        assert_eq!(schema_version(&conn).unwrap(), 7);
         assert_eq!(count(&conn, "household"), 1);
         assert_eq!(count(&conn, "household_member"), 1);
         assert_eq!(count(&conn, "recipe"), 1);
@@ -2006,7 +2451,7 @@ mod tests {
     /// test: a recipe saved at v4 must survive the `ALTER TABLE`s that add `archived_at` (v5)
     /// and `prep_minutes`/the rights columns (v6).
     #[test]
-    fn an_existing_v4_database_migrates_to_v6_without_losing_data() {
+    fn an_existing_v4_database_migrates_to_v7_without_losing_data() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("kimatta.db");
         {
@@ -2018,7 +2463,7 @@ mod tests {
             insert_pre_v6_recipe(&raw, "h", "r");
         }
         let conn = open(&path).unwrap();
-        assert_eq!(schema_version(&conn).unwrap(), 6);
+        assert_eq!(schema_version(&conn).unwrap(), 7);
         assert_eq!(count(&conn, "household"), 1);
         assert_eq!(count(&conn, "recipe"), 1);
         assert_eq!(count(&conn, "household_restriction"), 0);
@@ -3368,7 +3813,7 @@ mod tests {
             insert_household(&mut conn, &household("h"), &[member("m", "h")]).unwrap();
         }
         let conn = open(&path).unwrap();
-        assert_eq!(schema_version(&conn).unwrap(), 6);
+        assert_eq!(schema_version(&conn).unwrap(), 7);
         assert_eq!(count(&conn, "household"), 1);
         assert_eq!(count(&conn, "household_member"), 1);
         let on: i32 = conn
@@ -3960,7 +4405,7 @@ mod tests {
     }
 
     #[test]
-    fn an_existing_v5_database_migrates_to_v6_without_losing_data() {
+    fn an_existing_v5_database_migrates_to_v7_without_losing_data() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("kimatta.db");
         {
@@ -3972,10 +4417,1021 @@ mod tests {
             insert_pre_v6_recipe(&raw, "h", "r");
         }
         let conn = open(&path).unwrap();
-        assert_eq!(schema_version(&conn).unwrap(), 6);
+        assert_eq!(schema_version(&conn).unwrap(), 7);
         assert_eq!(count(&conn, "household"), 1);
         assert_eq!(count(&conn, "recipe"), 1);
         assert_eq!(load(&conn, "h", "r").unwrap().title(), "Recipe r");
+    }
+
+    // --- MVP-012 step 2: schema v7, planned meals ---------------------------------------
+
+    const RAW_PLANNED_MEAL: &str = "INSERT INTO planned_meal (id, household_id, date, slot)
+        VALUES (?1, ?2, ?3, ?4)";
+    const RAW_COMPONENT: &str = "INSERT INTO meal_component
+        (planned_meal_id, position, kind, recipe_id, note, scale_numer, scale_denom)
+        VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)";
+
+    /// A household, a recipe and one occurrence row, inserted raw so the component-level
+    /// constraints below are the only thing under test.
+    fn raw_occurrence(conn: &mut Connection) {
+        seed(conn, "h");
+        save_recipe(conn, &recipe("h", "r", vec![])).unwrap();
+        conn.execute(RAW_PLANNED_MEAL, params!["pm", "h", "2026-08-29", "dinner"])
+            .unwrap();
+    }
+
+    /// Test-level stand-in for the on-device v6→v7 migration, in the pattern of its
+    /// predecessors: a recipe saved at v6 must survive the two new tables, which touch nothing
+    /// that exists.
+    #[test]
+    fn an_existing_v6_database_migrates_to_v7_without_losing_data() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("kimatta.db");
+        {
+            let mut raw = Connection::open(&path).unwrap();
+            MIGRATIONS.to_version(&mut raw, 6).unwrap();
+            assert_eq!(schema_version(&raw).unwrap(), 6);
+            raw.pragma_update(None, "foreign_keys", "ON").unwrap();
+            seed(&mut raw, "h");
+            save_recipe(&mut raw, &recipe("h", "r", vec![])).unwrap();
+        }
+        let conn = open(&path).unwrap();
+        assert_eq!(schema_version(&conn).unwrap(), 7);
+        assert_eq!(count(&conn, "household"), 1);
+        assert_eq!(count(&conn, "recipe"), 1);
+        assert_eq!(load(&conn, "h", "r").unwrap().title(), "Recipe r");
+        assert_eq!(count(&conn, "planned_meal"), 0);
+        assert_eq!(count(&conn, "meal_component"), 0);
+    }
+
+    /// Absent-at-6 then present-at-7, for the reason `the_line_ingredient_foreign_keys_are_indexed`
+    /// gives: the claim is that migration 7 ships the indexes, not that the latest schema has
+    /// them.
+    #[test]
+    fn the_component_recipe_foreign_key_is_indexed() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        MIGRATIONS.to_version(&mut conn, 6).unwrap();
+        assert!(index_names(&conn, "meal_component").is_empty());
+        assert!(index_names(&conn, "planned_meal").is_empty());
+        MIGRATIONS.to_version(&mut conn, 7).unwrap();
+        assert!(index_names(&conn, "meal_component").contains(&"meal_component_recipe".to_owned()));
+        assert!(
+            index_names(&conn, "planned_meal").contains(&"planned_meal_household_date".to_owned())
+        );
+    }
+
+    fn index_names(conn: &Connection, table: &str) -> Vec<String> {
+        let mut stmt = conn
+            .prepare("SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = ?1")
+            .unwrap();
+        let names = stmt
+            .query_map(params![table], |r| r.get::<_, String>(0))
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap();
+        names
+    }
+
+    #[test]
+    fn a_second_occurrence_in_the_same_slot_is_refused_by_the_unique_constraint() {
+        let mut conn = open(":memory:").unwrap();
+        raw_occurrence(&mut conn);
+        let err = conn
+            .execute(
+                RAW_PLANNED_MEAL,
+                params!["pm2", "h", "2026-08-29", "dinner"],
+            )
+            .unwrap_err();
+        assert_constraint_violation(err);
+        // The same date in another slot, and the same slot on another date, are both fine.
+        conn.execute(RAW_PLANNED_MEAL, params!["pm3", "h", "2026-08-29", "lunch"])
+            .unwrap();
+        conn.execute(
+            RAW_PLANNED_MEAL,
+            params!["pm4", "h", "2026-08-30", "dinner"],
+        )
+        .unwrap();
+        assert_eq!(count(&conn, "planned_meal"), 3);
+    }
+
+    #[test]
+    fn a_recipe_component_without_a_recipe_id_is_refused_by_the_check() {
+        let mut conn = open(":memory:").unwrap();
+        raw_occurrence(&mut conn);
+        let none = Option::<String>::None;
+        let err = conn
+            .execute(
+                RAW_COMPONENT,
+                params![
+                    "pm",
+                    0,
+                    "recipe",
+                    none,
+                    none,
+                    Option::<u32>::None,
+                    Option::<u32>::None
+                ],
+            )
+            .unwrap_err();
+        assert_constraint_violation(err);
+        // The mirror: a non-recipe row carrying a recipe reference.
+        let err = conn
+            .execute(
+                RAW_COMPONENT,
+                params![
+                    "pm",
+                    0,
+                    "leftovers",
+                    "r",
+                    none,
+                    Option::<u32>::None,
+                    Option::<u32>::None
+                ],
+            )
+            .unwrap_err();
+        assert_constraint_violation(err);
+        assert_eq!(count(&conn, "meal_component"), 0);
+    }
+
+    #[test]
+    fn a_half_present_scale_is_refused_by_the_check() {
+        let mut conn = open(":memory:").unwrap();
+        raw_occurrence(&mut conn);
+        let none = Option::<String>::None;
+        for (numer, denom) in [
+            (Some(1), None),
+            (None, Some(2)),
+            (Some(0), Some(1)),
+            (Some(1), Some(0)),
+        ] {
+            let err = conn
+                .execute(
+                    RAW_COMPONENT,
+                    params!["pm", 0, "recipe", "r", none, numer, denom],
+                )
+                .unwrap_err();
+            assert_constraint_violation(err);
+        }
+        conn.execute(RAW_COMPONENT, params!["pm", 0, "recipe", "r", none, 3, 2])
+            .unwrap();
+        assert_eq!(count(&conn, "meal_component"), 1);
+    }
+
+    #[test]
+    fn a_scaled_non_recipe_component_is_refused_by_the_check() {
+        let mut conn = open(":memory:").unwrap();
+        raw_occurrence(&mut conn);
+        let none = Option::<String>::None;
+        let err = conn
+            .execute(
+                RAW_COMPONENT,
+                params!["pm", 0, "leftovers", none, "chili", 1, 2],
+            )
+            .unwrap_err();
+        assert_constraint_violation(err);
+        // And the other direction: a recipe row carrying a note.
+        let err = conn
+            .execute(
+                RAW_COMPONENT,
+                params![
+                    "pm",
+                    0,
+                    "recipe",
+                    "r",
+                    "x",
+                    Option::<u32>::None,
+                    Option::<u32>::None
+                ],
+            )
+            .unwrap_err();
+        assert_constraint_violation(err);
+        assert_eq!(count(&conn, "meal_component"), 0);
+    }
+
+    /// The one CHECK that constrains a note's *value* rather than the kind/column pairing,
+    /// because `freeform` is the one kind whose note is not optional. Without it a blank note
+    /// is writable and then unreadable — `parse_row` routes freeform through `freeform()`,
+    /// which refuses it, and one such row fails a whole date range. The set is ASCII
+    /// whitespace, wider than SQLite's space-only `trim` default and still narrower than the
+    /// `str::trim` the reader applies, which is why `check_freeform_notes` guards in Rust too.
+    #[test]
+    fn a_blank_freeform_note_is_refused_by_the_check() {
+        let mut conn = open(":memory:").unwrap();
+        raw_occurrence(&mut conn);
+        let none = Option::<String>::None;
+        let no_scale = (Option::<u32>::None, Option::<u32>::None);
+        for blank in ["", " ", "\t", "\n", "\r", "\u{b}", "\u{c}", " \t\r\n "] {
+            let err = conn
+                .execute(
+                    RAW_COMPONENT,
+                    params!["pm", 0, "freeform", none, blank, no_scale.0, no_scale.1],
+                )
+                .unwrap_err();
+            assert_constraint_violation(err);
+        }
+        // A NULL note under the same kind is refused too: `parse_row` reports that shape as
+        // corrupt rather than coercing it.
+        let err = conn
+            .execute(
+                RAW_COMPONENT,
+                params!["pm", 0, "freeform", none, none, no_scale.0, no_scale.1],
+            )
+            .unwrap_err();
+        assert_constraint_violation(err);
+        // The note is checked, never trimmed: surrounding whitespace is stored verbatim.
+        conn.execute(
+            RAW_COMPONENT,
+            params!["pm", 0, "freeform", none, " pizza ", no_scale.0, no_scale.1],
+        )
+        .unwrap();
+        let stored: String = conn
+            .query_row("SELECT note FROM meal_component", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(stored, " pizza ");
+        // Only `freeform` is constrained this way; the optional-note kinds are untouched.
+        conn.execute(
+            RAW_COMPONENT,
+            params!["pm", 1, "leftovers", none, "", no_scale.0, no_scale.1],
+        )
+        .unwrap();
+        assert_eq!(count(&conn, "meal_component"), 2);
+    }
+
+    // --- MVP-012 steps 3–4: planned meal storage, lock contract, scoping -----------------
+
+    fn pmid(raw: &str) -> PlannedMealId {
+        PlannedMealId::new(raw).unwrap()
+    }
+
+    fn rid(raw: &str) -> RecipeId {
+        RecipeId::new(raw).unwrap()
+    }
+
+    fn scaled(recipe: &str, numer: u32, denom: u32) -> MealComponent {
+        MealComponent::recipe(rid(recipe), Some(rat(numer, denom)))
+    }
+
+    fn leftovers(note: &str) -> MealComponent {
+        MealComponent::Leftovers {
+            note: Some(note.to_owned()),
+        }
+    }
+
+    fn occurrence(
+        household: &str,
+        id: &str,
+        date: &str,
+        slot: MealSlot,
+        components: Vec<MealComponent>,
+    ) -> PlannedMeal {
+        PlannedMeal::new(
+            pmid(id),
+            hid(household),
+            parse_civil_date(date).unwrap(),
+            slot,
+            components,
+            false,
+        )
+        .unwrap()
+    }
+
+    /// A household with a lunch+dinner cycle and one recipe `r-<household>`, so a meal test
+    /// never trips the cycle or recipe checks unless that is what it is testing.
+    fn seed_for_meals(conn: &mut Connection, household: &str) {
+        seed(conn, household);
+        save_planning_cycle(
+            conn,
+            &cycle(
+                household,
+                "2026-08-29",
+                7,
+                &[MealSlot::Lunch, MealSlot::Dinner],
+            ),
+        )
+        .unwrap();
+        save_recipe(conn, &recipe(household, &format!("r-{household}"), vec![])).unwrap();
+    }
+
+    /// A typical dinner for `h`: a scaled recipe, an as-written recipe and leftovers.
+    fn dinner(id: &str, date: &str) -> PlannedMeal {
+        occurrence(
+            "h",
+            id,
+            date,
+            MealSlot::Dinner,
+            vec![
+                scaled("r-h", 3, 2),
+                MealComponent::recipe(rid("r-h"), None),
+                leftovers("chili"),
+            ],
+        )
+    }
+
+    fn load_meal(conn: &Connection, household: &str, id: &str) -> Option<PlannedMeal> {
+        load_planned_meal(conn, &hid(household), &pmid(id)).unwrap()
+    }
+
+    fn user_save(conn: &mut Connection, meal: &PlannedMeal) -> Result<(), StorageError> {
+        save_planned_meal(conn, meal, WriteSource::User)
+    }
+
+    fn lock(
+        conn: &mut Connection,
+        household: &str,
+        id: &str,
+        locked: bool,
+        source: WriteSource,
+    ) -> Result<(), StorageError> {
+        set_planned_meal_lock(conn, &hid(household), &pmid(id), locked, source)
+    }
+
+    fn locked_raw(conn: &Connection, id: &str) -> bool {
+        conn.query_row(
+            "SELECT locked FROM planned_meal WHERE id = ?1",
+            params![id],
+            |r| r.get(0),
+        )
+        .unwrap()
+    }
+
+    fn listed(conn: &Connection, household: &str, from: &str, to: &str) -> Vec<(String, MealSlot)> {
+        list_planned_meals(
+            conn,
+            &hid(household),
+            parse_civil_date(from).unwrap(),
+            parse_civil_date(to).unwrap(),
+        )
+        .unwrap()
+        .iter()
+        .map(|m| (format_civil_date(m.date()), m.slot()))
+        .collect()
+    }
+
+    /// AC-1.
+    #[test]
+    fn a_multi_component_occurrence_round_trips_by_date_and_slot() {
+        let mut conn = open(":memory:").unwrap();
+        seed_for_meals(&mut conn, "h");
+        let meal = dinner("pm", "2026-08-30");
+        user_save(&mut conn, &meal).unwrap();
+        assert_eq!(load_meal(&conn, "h", "pm"), Some(meal));
+        assert_eq!(count(&conn, "meal_component"), 3);
+    }
+
+    /// AC-1: every non-recipe kind is a kind token, never an absent recipe (stop condition).
+    #[test]
+    fn every_non_recipe_kind_round_trips() {
+        let mut conn = open(":memory:").unwrap();
+        seed_for_meals(&mut conn, "h");
+        let mixed = occurrence(
+            "h",
+            "pm",
+            "2026-08-29",
+            MealSlot::Dinner,
+            vec![
+                leftovers(" chili "),
+                MealComponent::DiningOut { note: None },
+                MealComponent::FrozenQuick {
+                    note: Some("pierogi".to_owned()),
+                },
+                MealComponent::freeform(" pizza night ").unwrap(),
+            ],
+        );
+        let open = occurrence(
+            "h",
+            "pm-open",
+            "2026-08-29",
+            MealSlot::Lunch,
+            vec![MealComponent::Open {
+                note: Some("away".to_owned()),
+            }],
+        );
+        user_save(&mut conn, &mixed).unwrap();
+        user_save(&mut conn, &open).unwrap();
+        assert_eq!(load_meal(&conn, "h", "pm"), Some(mixed));
+        assert_eq!(load_meal(&conn, "h", "pm-open"), Some(open));
+        let null_recipes: u32 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM meal_component WHERE recipe_id IS NULL",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(null_recipes, 5);
+        let kinds: Vec<String> = conn
+            .prepare("SELECT DISTINCT kind FROM meal_component ORDER BY kind")
+            .unwrap()
+            .query_map([], |r| r.get(0))
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap();
+        assert_eq!(
+            kinds,
+            [
+                "dining_out",
+                "freeform",
+                "frozen_quick",
+                "leftovers",
+                "open"
+            ]
+        );
+    }
+
+    /// AC-2: a reorder survives a re-save and each scale follows its recipe.
+    #[test]
+    fn save_replaces_the_whole_component_set_and_keeps_order() {
+        let mut conn = open(":memory:").unwrap();
+        seed_for_meals(&mut conn, "h");
+        let mut meal = dinner("pm", "2026-08-30");
+        user_save(&mut conn, &meal).unwrap();
+        meal.move_component(2, 0).unwrap();
+        meal.set_scale(2, Some(rat(1, 4))).unwrap();
+        user_save(&mut conn, &meal).unwrap();
+        let loaded = load_meal(&conn, "h", "pm").unwrap();
+        assert_eq!(
+            loaded.components(),
+            &[leftovers("chili"), scaled("r-h", 3, 2), scaled("r-h", 1, 4),]
+        );
+        assert_eq!(count(&conn, "meal_component"), 3);
+    }
+
+    #[test]
+    fn scales_are_stored_in_lowest_terms() {
+        let mut conn = open(":memory:").unwrap();
+        seed_for_meals(&mut conn, "h");
+        let meal = occurrence(
+            "h",
+            "pm",
+            "2026-08-29",
+            MealSlot::Dinner,
+            vec![scaled("r-h", 2, 4)],
+        );
+        user_save(&mut conn, &meal).unwrap();
+        let stored: (u32, u32) = conn
+            .query_row(
+                "SELECT scale_numer, scale_denom FROM meal_component WHERE planned_meal_id = 'pm'",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(stored, (1, 2));
+    }
+
+    #[test]
+    fn list_returns_an_inclusive_date_range_in_date_then_slot_order() {
+        let mut conn = open(":memory:").unwrap();
+        seed_for_meals(&mut conn, "h");
+        // Inserted out of order so the read cannot be passing by rowid.
+        for (id, date, slot) in [
+            ("a", "2026-08-30", MealSlot::Dinner),
+            ("b", "2026-08-30", MealSlot::Lunch),
+            ("c", "2026-08-29", MealSlot::Dinner),
+            ("d", "2026-08-31", MealSlot::Lunch),
+            ("e", "2026-09-01", MealSlot::Dinner),
+            ("f", "2026-08-28", MealSlot::Dinner),
+        ] {
+            user_save(
+                &mut conn,
+                &occurrence("h", id, date, slot, vec![leftovers(id)]),
+            )
+            .unwrap();
+        }
+        assert_eq!(
+            listed(&conn, "h", "2026-08-29", "2026-08-31"),
+            [
+                ("2026-08-29".to_owned(), MealSlot::Dinner),
+                ("2026-08-30".to_owned(), MealSlot::Lunch),
+                ("2026-08-30".to_owned(), MealSlot::Dinner),
+                ("2026-08-31".to_owned(), MealSlot::Lunch),
+            ]
+        );
+        // Components ride along from the one listing query.
+        let all = list_planned_meals(
+            &conn,
+            &hid("h"),
+            parse_civil_date("2026-08-29").unwrap(),
+            parse_civil_date("2026-08-31").unwrap(),
+        )
+        .unwrap();
+        assert_eq!(all[1].components(), &[leftovers("b")]);
+    }
+
+    #[test]
+    fn list_of_an_empty_range_is_empty() {
+        let mut conn = open(":memory:").unwrap();
+        seed_for_meals(&mut conn, "h");
+        user_save(&mut conn, &dinner("pm", "2026-08-30")).unwrap();
+        assert!(listed(&conn, "h", "2026-09-01", "2026-09-07").is_empty());
+        // An inverted range is simply empty, not an error.
+        assert!(listed(&conn, "h", "2026-08-31", "2026-08-29").is_empty());
+    }
+
+    /// AC-4.
+    #[test]
+    fn a_component_naming_another_households_recipe_is_rejected_before_any_write() {
+        let mut conn = open(":memory:").unwrap();
+        seed_for_meals(&mut conn, "h");
+        seed_for_meals(&mut conn, "h2");
+        let meal = occurrence(
+            "h",
+            "pm",
+            "2026-08-29",
+            MealSlot::Dinner,
+            vec![leftovers("x"), MealComponent::recipe(rid("r-h2"), None)],
+        );
+        let err = user_save(&mut conn, &meal).unwrap_err();
+        assert!(
+            matches!(&err, StorageError::ComponentRecipeMismatch { recipe, expected, actual }
+                if recipe == "r-h2" && expected == "h" && actual == "h2"),
+            "got {err:?}"
+        );
+        assert_eq!(count(&conn, "planned_meal"), 0);
+        assert_eq!(count(&conn, "meal_component"), 0);
+        let ghost = occurrence(
+            "h",
+            "pm",
+            "2026-08-29",
+            MealSlot::Dinner,
+            vec![MealComponent::recipe(rid("ghost"), None)],
+        );
+        assert!(matches!(
+            user_save(&mut conn, &ghost).unwrap_err(),
+            StorageError::NoSuchRecipe { .. }
+        ));
+        assert_eq!(count(&conn, "planned_meal"), 0);
+    }
+
+    /// Discharges the half of MVP-008's archive policy that had only a proxy until now.
+    #[test]
+    fn an_archived_recipe_is_still_a_valid_component() {
+        let mut conn = open(":memory:").unwrap();
+        seed_for_meals(&mut conn, "h");
+        let meal = dinner("pm", "2026-08-30");
+        user_save(&mut conn, &meal).unwrap();
+        archive(&mut conn, "h", "r-h", "2026-08-30").unwrap();
+        assert_eq!(load_meal(&conn, "h", "pm"), Some(meal.clone()));
+        // And a new occurrence may still name it.
+        user_save(&mut conn, &dinner("pm2", "2026-08-31")).unwrap();
+        assert_eq!(count(&conn, "planned_meal"), 2);
+    }
+
+    #[test]
+    fn a_slot_outside_the_enabled_scope_is_rejected_on_write() {
+        let mut conn = open(":memory:").unwrap();
+        seed_for_meals(&mut conn, "h");
+        let meal = occurrence(
+            "h",
+            "pm",
+            "2026-08-29",
+            MealSlot::Breakfast,
+            vec![leftovers("x")],
+        );
+        let err = user_save(&mut conn, &meal).unwrap_err();
+        assert!(
+            matches!(&err, StorageError::SlotNotEnabled { household, slot }
+                if household == "h" && slot == "breakfast"),
+            "got {err:?}"
+        );
+        assert_eq!(count(&conn, "planned_meal"), 0);
+    }
+
+    /// The write-time-only half of the slot rule.
+    #[test]
+    fn disabling_a_slot_later_keeps_existing_occurrences_readable() {
+        let mut conn = open(":memory:").unwrap();
+        seed_for_meals(&mut conn, "h");
+        let lunch = occurrence(
+            "h",
+            "pm",
+            "2026-08-29",
+            MealSlot::Lunch,
+            vec![leftovers("x")],
+        );
+        user_save(&mut conn, &lunch).unwrap();
+        save_planning_cycle(&mut conn, &cycle("h", "2026-08-29", 7, &[MealSlot::Dinner])).unwrap();
+        assert_eq!(load_meal(&conn, "h", "pm"), Some(lunch.clone()));
+        assert_eq!(
+            listed(&conn, "h", "2026-08-29", "2026-08-29"),
+            [("2026-08-29".to_owned(), MealSlot::Lunch)]
+        );
+        // A re-save into the now-disabled slot is refused; the stored row is untouched.
+        assert!(matches!(
+            user_save(&mut conn, &lunch).unwrap_err(),
+            StorageError::SlotNotEnabled { .. }
+        ));
+        assert_eq!(load_meal(&conn, "h", "pm"), Some(lunch));
+    }
+
+    #[test]
+    fn a_household_with_no_cycle_cannot_plan_yet() {
+        let mut conn = open(":memory:").unwrap();
+        seed(&mut conn, "h");
+        let meal = occurrence(
+            "h",
+            "pm",
+            "2026-08-29",
+            MealSlot::Dinner,
+            vec![leftovers("x")],
+        );
+        let err = user_save(&mut conn, &meal).unwrap_err();
+        assert!(
+            matches!(&err, StorageError::NoPlanningCycle(h) if h == "h"),
+            "got {err:?}"
+        );
+        assert_eq!(count(&conn, "planned_meal"), 0);
+    }
+
+    #[test]
+    fn saving_a_new_id_into_an_occupied_slot_is_occupied_slot() {
+        let mut conn = open(":memory:").unwrap();
+        seed_for_meals(&mut conn, "h");
+        user_save(&mut conn, &dinner("pm", "2026-08-30")).unwrap();
+        let err = user_save(&mut conn, &dinner("pm2", "2026-08-30")).unwrap_err();
+        assert!(
+            matches!(&err, StorageError::OccupiedSlot { household, date, slot }
+                if household == "h" && date == "2026-08-30" && slot == "dinner"),
+            "got {err:?}"
+        );
+        assert_eq!(count(&conn, "planned_meal"), 1);
+        // Re-saving the holder itself into its own slot is an update, not a conflict.
+        user_save(&mut conn, &dinner("pm", "2026-08-30")).unwrap();
+        assert_eq!(count(&conn, "planned_meal"), 1);
+    }
+
+    /// Reaches a shape the DDL CHECKs forbid, so the reader's own refusal is what is proved.
+    #[test]
+    fn a_corrupt_component_row_is_reported_with_its_coordinates() {
+        let mut conn = open(":memory:").unwrap();
+        seed_for_meals(&mut conn, "h");
+        user_save(&mut conn, &dinner("pm", "2026-08-30")).unwrap();
+        conn.pragma_update(None, "ignore_check_constraints", "ON")
+            .unwrap();
+        conn.execute(
+            "UPDATE meal_component SET scale_denom = NULL WHERE planned_meal_id = 'pm' AND position = 0",
+            [],
+        )
+        .unwrap();
+        let err = load_planned_meal(&conn, &hid("h"), &pmid("pm")).unwrap_err();
+        assert!(
+            matches!(&err, StorageError::CorruptComponent { meal, position: 0, kind, recipe_id, scale_numer: Some(3), scale_denom: None }
+                if meal == "pm" && kind == "recipe" && recipe_id.as_deref() == Some("r-h")),
+            "got {err:?}"
+        );
+        conn.execute(
+            "UPDATE meal_component SET scale_numer = NULL, note = 'x'
+             WHERE planned_meal_id = 'pm' AND position = 0",
+            [],
+        )
+        .unwrap();
+        let err = load_planned_meal(&conn, &hid("h"), &pmid("pm")).unwrap_err();
+        assert!(
+            matches!(&err, StorageError::CorruptComponent { position: 0, kind, .. } if kind == "recipe"),
+            "got {err:?}"
+        );
+        // The listing path refuses the same row rather than dropping the meal.
+        assert!(list_planned_meals(
+            &conn,
+            &hid("h"),
+            parse_civil_date("2026-08-30").unwrap(),
+            parse_civil_date("2026-08-30").unwrap(),
+        )
+        .is_err());
+    }
+
+    /// `MealComponent`'s variants have public fields — Rust has no per-variant privacy — so a
+    /// caller can hand storage a `Freeform` that `freeform()` would have refused. `Automation`
+    /// is the caller this guards: MVP-023 builds domain values itself rather than through the
+    /// bridge, whose `component_to_domain` already routes through `parse_row`.
+    #[test]
+    fn a_blank_freeform_note_is_refused_before_anything_is_written() {
+        let mut conn = open(":memory:").unwrap();
+        seed_for_meals(&mut conn, "h");
+        let meal = occurrence(
+            "h",
+            "pm",
+            "2026-08-30",
+            MealSlot::Dinner,
+            vec![MealComponent::Freeform {
+                note: String::new(),
+            }],
+        );
+        let err = save_planned_meal(&mut conn, &meal, WriteSource::Automation).unwrap_err();
+        assert!(
+            matches!(
+                &err,
+                StorageError::PlannedMeal(PlannedMealError::FreeformNeedsANote)
+            ),
+            "got {err:?}"
+        );
+        assert_eq!(count(&conn, "planned_meal"), 0);
+        assert_eq!(count(&conn, "meal_component"), 0);
+    }
+
+    /// The guard is the domain constructor rather than a re-spelling of its rule, because
+    /// Rust's `str::trim` strips more than SQLite's: none of these notes is blank to a schema
+    /// `CHECK (trim(note) <> '')`, which removes spaces only, and every one of them is blank
+    /// to `freeform()`. Writing the rule twice would have drifted here.
+    #[test]
+    fn freeform_notes_blank_only_to_rust_are_refused_too() {
+        for blank in ["\t", "\n", "\u{a0}", " \t\r\n "] {
+            let mut conn = open(":memory:").unwrap();
+            seed_for_meals(&mut conn, "h");
+            let meal = occurrence(
+                "h",
+                "pm",
+                "2026-08-30",
+                MealSlot::Dinner,
+                vec![MealComponent::Freeform {
+                    note: blank.to_owned(),
+                }],
+            );
+            let err = user_save(&mut conn, &meal).unwrap_err();
+            assert!(
+                matches!(
+                    &err,
+                    StorageError::PlannedMeal(PlannedMealError::FreeformNeedsANote)
+                ),
+                "{blank:?}: got {err:?}"
+            );
+            assert_eq!(count(&conn, "meal_component"), 0);
+        }
+    }
+
+    #[test]
+    fn an_unknown_kind_row_is_rejected_on_read() {
+        let mut conn = open(":memory:").unwrap();
+        seed_for_meals(&mut conn, "h");
+        user_save(&mut conn, &dinner("pm", "2026-08-30")).unwrap();
+        conn.execute(
+            "UPDATE meal_component SET kind = 'takeout' WHERE planned_meal_id = 'pm' AND position = 2",
+            [],
+        )
+        .unwrap();
+        let err = load_planned_meal(&conn, &hid("h"), &pmid("pm")).unwrap_err();
+        assert!(
+            matches!(&err, StorageError::PlannedMeal(PlannedMealError::UnknownComponentKind(k))
+                if k == "takeout"),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn occurrence_for_an_absent_household_is_rejected() {
+        let mut conn = open(":memory:").unwrap();
+        let meal = occurrence(
+            "ghost",
+            "pm",
+            "2026-08-29",
+            MealSlot::Dinner,
+            vec![leftovers("x")],
+        );
+        assert!(matches!(
+            user_save(&mut conn, &meal).unwrap_err(),
+            StorageError::NoSuchHousehold(_)
+        ));
+        assert!(matches!(
+            lock(&mut conn, "ghost", "pm", true, WriteSource::User).unwrap_err(),
+            StorageError::NoSuchPlannedMeal { .. }
+        ));
+        assert_eq!(count(&conn, "planned_meal"), 0);
+    }
+
+    /// AC-4: h2 can neither see nor touch h1's occurrence, and h1's value is equal after every
+    /// attempt.
+    #[test]
+    fn planned_meal_reads_and_writes_are_household_scoped() {
+        let mut conn = open(":memory:").unwrap();
+        seed_for_meals(&mut conn, "h");
+        seed_for_meals(&mut conn, "h2");
+        let meal = dinner("pm", "2026-08-30");
+        user_save(&mut conn, &meal).unwrap();
+        assert_eq!(load_meal(&conn, "h2", "pm"), None);
+        assert!(listed(&conn, "h2", "2026-08-01", "2026-12-31").is_empty());
+        let hijack = occurrence(
+            "h2",
+            "pm",
+            "2026-08-30",
+            MealSlot::Dinner,
+            vec![leftovers("theirs")],
+        );
+        assert!(matches!(
+            user_save(&mut conn, &hijack).unwrap_err(),
+            StorageError::NoSuchPlannedMeal { .. }
+        ));
+        assert_eq!(load_meal(&conn, "h", "pm"), Some(meal.clone()));
+        assert!(matches!(
+            lock(&mut conn, "h2", "pm", true, WriteSource::User).unwrap_err(),
+            StorageError::NoSuchPlannedMeal { .. }
+        ));
+        assert!(!locked_raw(&conn, "pm"));
+        assert!(matches!(
+            delete_planned_meal(&mut conn, &hid("h2"), &pmid("pm"), WriteSource::User).unwrap_err(),
+            StorageError::NoSuchPlannedMeal { .. }
+        ));
+        assert_eq!(load_meal(&conn, "h", "pm"), Some(meal));
+        assert_eq!(count(&conn, "planned_meal"), 1);
+    }
+
+    /// AC-3.
+    #[test]
+    fn a_user_write_to_a_locked_occurrence_succeeds() {
+        let mut conn = open(":memory:").unwrap();
+        seed_for_meals(&mut conn, "h");
+        user_save(&mut conn, &dinner("pm", "2026-08-30")).unwrap();
+        lock(&mut conn, "h", "pm", true, WriteSource::User).unwrap();
+        let edited = occurrence(
+            "h",
+            "pm",
+            "2026-08-30",
+            MealSlot::Dinner,
+            vec![leftovers("changed")],
+        );
+        user_save(&mut conn, &edited).unwrap();
+        let loaded = load_meal(&conn, "h", "pm").unwrap();
+        assert_eq!(loaded.components(), &[leftovers("changed")]);
+        assert!(loaded.locked());
+    }
+
+    /// AC-3, adversarial: neither a component swap nor a delete gets through, and nothing moves.
+    #[test]
+    fn an_automation_write_to_a_locked_occurrence_is_refused_and_writes_nothing() {
+        let mut conn = open(":memory:").unwrap();
+        seed_for_meals(&mut conn, "h");
+        let meal = dinner("pm", "2026-08-30");
+        user_save(&mut conn, &meal).unwrap();
+        lock(&mut conn, "h", "pm", true, WriteSource::User).unwrap();
+        let swapped = occurrence(
+            "h",
+            "pm",
+            "2026-08-30",
+            MealSlot::Dinner,
+            vec![MealComponent::DiningOut { note: None }],
+        );
+        let err = save_planned_meal(&mut conn, &swapped, WriteSource::Automation).unwrap_err();
+        assert!(
+            matches!(&err, StorageError::LockedPlannedMeal(id) if id == "pm"),
+            "got {err:?}"
+        );
+        let err = delete_planned_meal(&mut conn, &hid("h"), &pmid("pm"), WriteSource::Automation)
+            .unwrap_err();
+        assert!(matches!(err, StorageError::LockedPlannedMeal(_)));
+        let loaded = load_meal(&conn, "h", "pm").unwrap();
+        assert_eq!(loaded.components(), meal.components());
+        assert!(loaded.locked());
+        assert_eq!(count(&conn, "meal_component"), 3);
+    }
+
+    #[test]
+    fn an_automation_write_to_an_unlocked_occurrence_succeeds() {
+        let mut conn = open(":memory:").unwrap();
+        seed_for_meals(&mut conn, "h");
+        user_save(&mut conn, &dinner("pm", "2026-08-30")).unwrap();
+        let swapped = occurrence(
+            "h",
+            "pm",
+            "2026-08-30",
+            MealSlot::Dinner,
+            vec![MealComponent::DiningOut { note: None }],
+        );
+        save_planned_meal(&mut conn, &swapped, WriteSource::Automation).unwrap();
+        assert_eq!(load_meal(&conn, "h", "pm"), Some(swapped));
+        delete_planned_meal(&mut conn, &hid("h"), &pmid("pm"), WriteSource::Automation).unwrap();
+        assert_eq!(count(&conn, "planned_meal"), 0);
+    }
+
+    #[test]
+    fn unlock_then_automation_write_succeeds() {
+        let mut conn = open(":memory:").unwrap();
+        seed_for_meals(&mut conn, "h");
+        user_save(&mut conn, &dinner("pm", "2026-08-30")).unwrap();
+        lock(&mut conn, "h", "pm", true, WriteSource::User).unwrap();
+        lock(&mut conn, "h", "pm", false, WriteSource::User).unwrap();
+        let swapped = occurrence(
+            "h",
+            "pm",
+            "2026-08-30",
+            MealSlot::Dinner,
+            vec![leftovers("auto")],
+        );
+        save_planned_meal(&mut conn, &swapped, WriteSource::Automation).unwrap();
+        assert_eq!(load_meal(&conn, "h", "pm"), Some(swapped));
+    }
+
+    #[test]
+    fn automation_may_create_an_occurrence_in_a_free_slot() {
+        let mut conn = open(":memory:").unwrap();
+        seed_for_meals(&mut conn, "h");
+        let meal = dinner("pm", "2026-08-30");
+        save_planned_meal(&mut conn, &meal, WriteSource::Automation).unwrap();
+        assert_eq!(load_meal(&conn, "h", "pm"), Some(meal));
+        assert!(!locked_raw(&conn, "pm"));
+    }
+
+    #[test]
+    fn lock_is_idempotent_and_scoped() {
+        let mut conn = open(":memory:").unwrap();
+        seed_for_meals(&mut conn, "h");
+        user_save(&mut conn, &dinner("pm", "2026-08-30")).unwrap();
+        lock(&mut conn, "h", "pm", true, WriteSource::User).unwrap();
+        lock(&mut conn, "h", "pm", true, WriteSource::User).unwrap();
+        assert!(locked_raw(&conn, "pm"));
+        lock(&mut conn, "h", "pm", false, WriteSource::User).unwrap();
+        lock(&mut conn, "h", "pm", false, WriteSource::User).unwrap();
+        assert!(!locked_raw(&conn, "pm"));
+        assert!(matches!(
+            lock(&mut conn, "h", "absent", true, WriteSource::User).unwrap_err(),
+            StorageError::NoSuchPlannedMeal { meal, household } if meal == "absent" && household == "h"
+        ));
+    }
+
+    /// Closes the unlock-then-write bypass: automation may neither set nor clear a lock.
+    #[test]
+    fn automation_cannot_change_lock_state() {
+        let mut conn = open(":memory:").unwrap();
+        seed_for_meals(&mut conn, "h");
+        user_save(&mut conn, &dinner("pm", "2026-08-30")).unwrap();
+        assert!(matches!(
+            lock(&mut conn, "h", "pm", true, WriteSource::Automation).unwrap_err(),
+            StorageError::LockedPlannedMeal(_)
+        ));
+        assert!(!locked_raw(&conn, "pm"));
+        lock(&mut conn, "h", "pm", true, WriteSource::User).unwrap();
+        assert!(matches!(
+            lock(&mut conn, "h", "pm", false, WriteSource::Automation).unwrap_err(),
+            StorageError::LockedPlannedMeal(_)
+        ));
+        assert!(locked_raw(&conn, "pm"));
+    }
+
+    /// The re-read value, not the DTO echo, is what is asserted: the save carries `locked =
+    /// false` in the value and the row stays locked.
+    #[test]
+    fn save_never_changes_lock_state() {
+        let mut conn = open(":memory:").unwrap();
+        seed_for_meals(&mut conn, "h");
+        user_save(&mut conn, &dinner("pm", "2026-08-30")).unwrap();
+        lock(&mut conn, "h", "pm", true, WriteSource::User).unwrap();
+        let mut unlocked_value = dinner("pm", "2026-08-30");
+        unlocked_value.set_locked(false);
+        user_save(&mut conn, &unlocked_value).unwrap();
+        assert!(locked_raw(&conn, "pm"));
+        assert!(load_meal(&conn, "h", "pm").unwrap().locked());
+    }
+
+    #[test]
+    fn a_new_occurrence_is_never_locked_on_insert() {
+        let mut conn = open(":memory:").unwrap();
+        seed_for_meals(&mut conn, "h");
+        let mut meal = dinner("pm", "2026-08-30");
+        meal.set_locked(true);
+        user_save(&mut conn, &meal).unwrap();
+        assert!(!locked_raw(&conn, "pm"));
+        assert!(!load_meal(&conn, "h", "pm").unwrap().locked());
+    }
+
+    #[test]
+    fn delete_removes_the_occurrence_and_its_components() {
+        let mut conn = open(":memory:").unwrap();
+        seed_for_meals(&mut conn, "h");
+        user_save(&mut conn, &dinner("pm", "2026-08-30")).unwrap();
+        user_save(&mut conn, &dinner("keep", "2026-08-31")).unwrap();
+        delete_planned_meal(&mut conn, &hid("h"), &pmid("pm"), WriteSource::User).unwrap();
+        assert_eq!(load_meal(&conn, "h", "pm"), None);
+        assert_eq!(count(&conn, "planned_meal"), 1);
+        assert_eq!(count(&conn, "meal_component"), 3);
+        // The recipe the components named is untouched.
+        assert_eq!(count(&conn, "recipe"), 1);
+        assert!(matches!(
+            delete_planned_meal(&mut conn, &hid("h"), &pmid("pm"), WriteSource::User).unwrap_err(),
+            StorageError::NoSuchPlannedMeal { .. }
+        ));
+    }
+
+    #[test]
+    fn deleting_a_household_cascades_to_its_planned_meals() {
+        let mut conn = open(":memory:").unwrap();
+        seed_for_meals(&mut conn, "h");
+        seed_for_meals(&mut conn, "h2");
+        user_save(&mut conn, &dinner("pm", "2026-08-30")).unwrap();
+        user_save(
+            &mut conn,
+            &occurrence(
+                "h2",
+                "pm2",
+                "2026-08-30",
+                MealSlot::Dinner,
+                vec![leftovers("x")],
+            ),
+        )
+        .unwrap();
+        conn.execute("DELETE FROM household WHERE id = 'h'", [])
+            .unwrap();
+        assert_eq!(count(&conn, "planned_meal"), 1);
+        assert_eq!(count(&conn, "meal_component"), 1);
+        assert_eq!(
+            load_meal(&conn, "h2", "pm2").unwrap().components(),
+            &[leftovers("x")]
+        );
     }
 
     #[test]

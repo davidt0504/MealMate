@@ -6,6 +6,7 @@
 import 'api/error.dart';
 import 'api/health.dart';
 import 'api/household.dart';
+import 'api/planned_meals.dart';
 import 'api/planning.dart';
 import 'api/recipe.dart';
 import 'api/restrictions.dart';
@@ -75,7 +76,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.13.0';
 
   @override
-  int get rustContentHash => -2080577187;
+  int get rustContentHash => -556126255;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -105,6 +106,11 @@ abstract class RustLibApi extends BaseApi {
 
   String crateApiHealthCoreVersion();
 
+  Future<void> crateApiPlannedMealsDeletePlannedMeal({
+    required String householdId,
+    required String mealId,
+  });
+
   Future<PlanningCycleDto> crateApiPlanningEnsurePlanningCycle({
     required String householdId,
     required String defaultAnchorDate,
@@ -115,6 +121,8 @@ abstract class RustLibApi extends BaseApi {
   Future<StarterInstallReportDto> crateApiStarterInstallStarterContent({
     required String householdId,
   });
+
+  Future<List<String>> crateApiPlannedMealsKnownMealComponentKinds();
 
   Future<List<String>> crateApiRestrictionsKnownRestrictionKinds();
 
@@ -128,8 +136,19 @@ abstract class RustLibApi extends BaseApi {
     required String householdId,
   });
 
+  Future<List<PlannedMealDto>> crateApiPlannedMealsListPlannedMeals({
+    required String householdId,
+    required String fromDate,
+    required String toDate,
+  });
+
   Future<List<RecipeSummaryDto>> crateApiRecipeListRecipes({
     required String householdId,
+  });
+
+  Future<PlannedMealDto?> crateApiPlannedMealsLoadPlannedMeal({
+    required String householdId,
+    required String mealId,
   });
 
   Future<RecipeDto?> crateApiRecipeLoadRecipe({
@@ -153,6 +172,10 @@ abstract class RustLibApi extends BaseApi {
     required String recipeId,
   });
 
+  Future<PlannedMealDto> crateApiPlannedMealsSavePlannedMeal({
+    required PlannedMealDto meal,
+  });
+
   Future<PlanningCycleDto> crateApiPlanningSavePlanningCycle({
     required String householdId,
     required String anchorDate,
@@ -165,6 +188,12 @@ abstract class RustLibApi extends BaseApi {
   Future<List<RestrictionDto>> crateApiRestrictionsSaveRestrictions({
     required String householdId,
     required List<RestrictionDto> restrictions,
+  });
+
+  Future<PlannedMealDto> crateApiPlannedMealsSetPlannedMealLock({
+    required String householdId,
+    required String mealId,
+    required bool locked,
   });
 }
 
@@ -329,6 +358,41 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       const TaskConstMeta(debugName: "core_version", argNames: []);
 
   @override
+  Future<void> crateApiPlannedMealsDeletePlannedMeal({
+    required String householdId,
+    required String mealId,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(householdId, serializer);
+          sse_encode_String(mealId, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 6,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_kimatta_error,
+        ),
+        constMeta: kCrateApiPlannedMealsDeletePlannedMealConstMeta,
+        argValues: [householdId, mealId],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiPlannedMealsDeletePlannedMealConstMeta =>
+      const TaskConstMeta(
+        debugName: "delete_planned_meal",
+        argNames: ["householdId", "mealId"],
+      );
+
+  @override
   Future<PlanningCycleDto> crateApiPlanningEnsurePlanningCycle({
     required String householdId,
     required String defaultAnchorDate,
@@ -342,7 +406,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 6,
+            funcId: 7,
             port: port_,
           );
         },
@@ -372,7 +436,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 7,
+            funcId: 8,
             port: port_,
           );
         },
@@ -402,7 +466,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 8,
+            funcId: 9,
             port: port_,
           );
         },
@@ -424,6 +488,36 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
+  Future<List<String>> crateApiPlannedMealsKnownMealComponentKinds() {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 10,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_list_String,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiPlannedMealsKnownMealComponentKindsConstMeta,
+        argValues: [],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiPlannedMealsKnownMealComponentKindsConstMeta =>
+      const TaskConstMeta(
+        debugName: "known_meal_component_kinds",
+        argNames: [],
+      );
+
+  @override
   Future<List<String>> crateApiRestrictionsKnownRestrictionKinds() {
     return handler.executeNormal(
       NormalTask(
@@ -432,7 +526,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 9,
+            funcId: 11,
             port: port_,
           );
         },
@@ -459,7 +553,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 10,
+            funcId: 12,
             port: port_,
           );
         },
@@ -489,7 +583,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 11,
+            funcId: 13,
             port: port_,
           );
         },
@@ -522,7 +616,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 12,
+            funcId: 14,
             port: port_,
           );
         },
@@ -544,6 +638,43 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
+  Future<List<PlannedMealDto>> crateApiPlannedMealsListPlannedMeals({
+    required String householdId,
+    required String fromDate,
+    required String toDate,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(householdId, serializer);
+          sse_encode_String(fromDate, serializer);
+          sse_encode_String(toDate, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 15,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_list_planned_meal_dto,
+          decodeErrorData: sse_decode_kimatta_error,
+        ),
+        constMeta: kCrateApiPlannedMealsListPlannedMealsConstMeta,
+        argValues: [householdId, fromDate, toDate],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiPlannedMealsListPlannedMealsConstMeta =>
+      const TaskConstMeta(
+        debugName: "list_planned_meals",
+        argNames: ["householdId", "fromDate", "toDate"],
+      );
+
+  @override
   Future<List<RecipeSummaryDto>> crateApiRecipeListRecipes({
     required String householdId,
   }) {
@@ -555,7 +686,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 13,
+            funcId: 16,
             port: port_,
           );
         },
@@ -574,6 +705,41 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       const TaskConstMeta(debugName: "list_recipes", argNames: ["householdId"]);
 
   @override
+  Future<PlannedMealDto?> crateApiPlannedMealsLoadPlannedMeal({
+    required String householdId,
+    required String mealId,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(householdId, serializer);
+          sse_encode_String(mealId, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 17,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_opt_box_autoadd_planned_meal_dto,
+          decodeErrorData: sse_decode_kimatta_error,
+        ),
+        constMeta: kCrateApiPlannedMealsLoadPlannedMealConstMeta,
+        argValues: [householdId, mealId],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiPlannedMealsLoadPlannedMealConstMeta =>
+      const TaskConstMeta(
+        debugName: "load_planned_meal",
+        argNames: ["householdId", "mealId"],
+      );
+
+  @override
   Future<RecipeDto?> crateApiRecipeLoadRecipe({
     required String householdId,
     required String recipeId,
@@ -587,7 +753,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 14,
+            funcId: 18,
             port: port_,
           );
         },
@@ -619,7 +785,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 15,
+            funcId: 19,
             port: port_,
           );
         },
@@ -650,7 +816,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 16,
+            funcId: 20,
             port: port_,
           );
         },
@@ -682,7 +848,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 17,
+            funcId: 21,
             port: port_,
           );
         },
@@ -717,7 +883,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 18,
+            funcId: 22,
             port: port_,
           );
         },
@@ -739,6 +905,36 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
+  Future<PlannedMealDto> crateApiPlannedMealsSavePlannedMeal({
+    required PlannedMealDto meal,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_box_autoadd_planned_meal_dto(meal, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 23,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_planned_meal_dto,
+          decodeErrorData: sse_decode_kimatta_error,
+        ),
+        constMeta: kCrateApiPlannedMealsSavePlannedMealConstMeta,
+        argValues: [meal],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiPlannedMealsSavePlannedMealConstMeta =>
+      const TaskConstMeta(debugName: "save_planned_meal", argNames: ["meal"]);
+
+  @override
   Future<PlanningCycleDto> crateApiPlanningSavePlanningCycle({
     required String householdId,
     required String anchorDate,
@@ -756,7 +952,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 19,
+            funcId: 24,
             port: port_,
           );
         },
@@ -787,7 +983,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 20,
+            funcId: 25,
             port: port_,
           );
         },
@@ -819,7 +1015,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 21,
+            funcId: 26,
             port: port_,
           );
         },
@@ -838,6 +1034,43 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       const TaskConstMeta(
         debugName: "save_restrictions",
         argNames: ["householdId", "restrictions"],
+      );
+
+  @override
+  Future<PlannedMealDto> crateApiPlannedMealsSetPlannedMealLock({
+    required String householdId,
+    required String mealId,
+    required bool locked,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(householdId, serializer);
+          sse_encode_String(mealId, serializer);
+          sse_encode_bool(locked, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 27,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_planned_meal_dto,
+          decodeErrorData: sse_decode_kimatta_error,
+        ),
+        constMeta: kCrateApiPlannedMealsSetPlannedMealLockConstMeta,
+        argValues: [householdId, mealId, locked],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiPlannedMealsSetPlannedMealLockConstMeta =>
+      const TaskConstMeta(
+        debugName: "set_planned_meal_lock",
+        argNames: ["householdId", "mealId", "locked"],
       );
 
   @protected
@@ -867,6 +1100,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  PlannedMealDto dco_decode_box_autoadd_planned_meal_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_planned_meal_dto(raw);
+  }
+
+  @protected
   RecipeDto dco_decode_box_autoadd_recipe_dto(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return dco_decode_recipe_dto(raw);
@@ -878,6 +1117,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   ) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return dco_decode_restriction_assessment_dto(raw);
+  }
+
+  @protected
+  ScaleDto dco_decode_box_autoadd_scale_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_scale_dto(raw);
   }
 
   @protected
@@ -992,6 +1237,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         return KimattaError_Recipe(message: dco_decode_String(raw[1]));
       case 5:
         return KimattaError_Restriction(message: dco_decode_String(raw[1]));
+      case 6:
+        return KimattaError_PlannedMeal(message: dco_decode_String(raw[1]));
       default:
         throw Exception("unreachable");
     }
@@ -1024,6 +1271,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  List<MealComponentDto> dco_decode_list_meal_component_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>).map(dco_decode_meal_component_dto).toList();
+  }
+
+  @protected
   List<MealSlotDto> dco_decode_list_meal_slot_dto(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return (raw as List<dynamic>).map(dco_decode_meal_slot_dto).toList();
@@ -1033,6 +1286,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   List<MemberDto> dco_decode_list_member_dto(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return (raw as List<dynamic>).map(dco_decode_member_dto).toList();
+  }
+
+  @protected
+  List<PlannedMealDto> dco_decode_list_planned_meal_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>).map(dco_decode_planned_meal_dto).toList();
   }
 
   @protected
@@ -1051,6 +1310,20 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   List<RestrictionDto> dco_decode_list_restriction_dto(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return (raw as List<dynamic>).map(dco_decode_restriction_dto).toList();
+  }
+
+  @protected
+  MealComponentDto dco_decode_meal_component_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 4)
+      throw Exception('unexpected arr length: expect 4 but see ${arr.length}');
+    return MealComponentDto(
+      kind: dco_decode_String(arr[0]),
+      recipeId: dco_decode_opt_String(arr[1]),
+      note: dco_decode_opt_String(arr[2]),
+      scale: dco_decode_opt_box_autoadd_scale_dto(arr[3]),
+    );
   }
 
   @protected
@@ -1084,6 +1357,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  PlannedMealDto? dco_decode_opt_box_autoadd_planned_meal_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw == null ? null : dco_decode_box_autoadd_planned_meal_dto(raw);
+  }
+
+  @protected
   RecipeDto? dco_decode_opt_box_autoadd_recipe_dto(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw == null ? null : dco_decode_box_autoadd_recipe_dto(raw);
@@ -1099,9 +1378,31 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  ScaleDto? dco_decode_opt_box_autoadd_scale_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw == null ? null : dco_decode_box_autoadd_scale_dto(raw);
+  }
+
+  @protected
   int? dco_decode_opt_box_autoadd_u_32(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw == null ? null : dco_decode_box_autoadd_u_32(raw);
+  }
+
+  @protected
+  PlannedMealDto dco_decode_planned_meal_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 6)
+      throw Exception('unexpected arr length: expect 6 but see ${arr.length}');
+    return PlannedMealDto(
+      id: dco_decode_String(arr[0]),
+      householdId: dco_decode_String(arr[1]),
+      date: dco_decode_String(arr[2]),
+      slot: dco_decode_meal_slot_dto(arr[3]),
+      components: dco_decode_list_meal_component_dto(arr[4]),
+      locked: dco_decode_bool(arr[5]),
+    );
   }
 
   @protected
@@ -1223,6 +1524,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  ScaleDto dco_decode_scale_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 2)
+      throw Exception('unexpected arr length: expect 2 but see ${arr.length}');
+    return ScaleDto(
+      numer: dco_decode_u_32(arr[0]),
+      denom: dco_decode_u_32(arr[1]),
+    );
+  }
+
+  @protected
   StarterInstallReportDto dco_decode_starter_install_report_dto(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
@@ -1300,6 +1613,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  PlannedMealDto sse_decode_box_autoadd_planned_meal_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_planned_meal_dto(deserializer));
+  }
+
+  @protected
   RecipeDto sse_decode_box_autoadd_recipe_dto(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return (sse_decode_recipe_dto(deserializer));
@@ -1311,6 +1632,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return (sse_decode_restriction_assessment_dto(deserializer));
+  }
+
+  @protected
+  ScaleDto sse_decode_box_autoadd_scale_dto(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_scale_dto(deserializer));
   }
 
   @protected
@@ -1444,6 +1771,9 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       case 5:
         var var_message = sse_decode_String(deserializer);
         return KimattaError_Restriction(message: var_message);
+      case 6:
+        var var_message = sse_decode_String(deserializer);
+        return KimattaError_PlannedMeal(message: var_message);
       default:
         throw UnimplementedError('');
     }
@@ -1502,6 +1832,20 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  List<MealComponentDto> sse_decode_list_meal_component_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <MealComponentDto>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_meal_component_dto(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
   List<MealSlotDto> sse_decode_list_meal_slot_dto(
     SseDeserializer deserializer,
   ) {
@@ -1523,6 +1867,20 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var ans_ = <MemberDto>[];
     for (var idx_ = 0; idx_ < len_; ++idx_) {
       ans_.add(sse_decode_member_dto(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
+  List<PlannedMealDto> sse_decode_list_planned_meal_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <PlannedMealDto>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_planned_meal_dto(deserializer));
     }
     return ans_;
   }
@@ -1560,6 +1918,21 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       ans_.add(sse_decode_restriction_dto(deserializer));
     }
     return ans_;
+  }
+
+  @protected
+  MealComponentDto sse_decode_meal_component_dto(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_kind = sse_decode_String(deserializer);
+    var var_recipeId = sse_decode_opt_String(deserializer);
+    var var_note = sse_decode_opt_String(deserializer);
+    var var_scale = sse_decode_opt_box_autoadd_scale_dto(deserializer);
+    return MealComponentDto(
+      kind: var_kind,
+      recipeId: var_recipeId,
+      note: var_note,
+      scale: var_scale,
+    );
   }
 
   @protected
@@ -1602,6 +1975,19 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  PlannedMealDto? sse_decode_opt_box_autoadd_planned_meal_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    if (sse_decode_bool(deserializer)) {
+      return (sse_decode_box_autoadd_planned_meal_dto(deserializer));
+    } else {
+      return null;
+    }
+  }
+
+  @protected
   RecipeDto? sse_decode_opt_box_autoadd_recipe_dto(
     SseDeserializer deserializer,
   ) {
@@ -1629,6 +2015,17 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  ScaleDto? sse_decode_opt_box_autoadd_scale_dto(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    if (sse_decode_bool(deserializer)) {
+      return (sse_decode_box_autoadd_scale_dto(deserializer));
+    } else {
+      return null;
+    }
+  }
+
+  @protected
   int? sse_decode_opt_box_autoadd_u_32(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
 
@@ -1637,6 +2034,25 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     } else {
       return null;
     }
+  }
+
+  @protected
+  PlannedMealDto sse_decode_planned_meal_dto(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_id = sse_decode_String(deserializer);
+    var var_householdId = sse_decode_String(deserializer);
+    var var_date = sse_decode_String(deserializer);
+    var var_slot = sse_decode_meal_slot_dto(deserializer);
+    var var_components = sse_decode_list_meal_component_dto(deserializer);
+    var var_locked = sse_decode_bool(deserializer);
+    return PlannedMealDto(
+      id: var_id,
+      householdId: var_householdId,
+      date: var_date,
+      slot: var_slot,
+      components: var_components,
+      locked: var_locked,
+    );
   }
 
   @protected
@@ -1790,6 +2206,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  ScaleDto sse_decode_scale_dto(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_numer = sse_decode_u_32(deserializer);
+    var var_denom = sse_decode_u_32(deserializer);
+    return ScaleDto(numer: var_numer, denom: var_denom);
+  }
+
+  @protected
   StarterInstallReportDto sse_decode_starter_install_report_dto(
     SseDeserializer deserializer,
   ) {
@@ -1875,6 +2299,15 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_box_autoadd_planned_meal_dto(
+    PlannedMealDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_planned_meal_dto(self, serializer);
+  }
+
+  @protected
   void sse_encode_box_autoadd_recipe_dto(
     RecipeDto self,
     SseSerializer serializer,
@@ -1890,6 +2323,15 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_restriction_assessment_dto(self, serializer);
+  }
+
+  @protected
+  void sse_encode_box_autoadd_scale_dto(
+    ScaleDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_scale_dto(self, serializer);
   }
 
   @protected
@@ -1992,6 +2434,9 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       case KimattaError_Restriction(message: final message):
         sse_encode_i_32(5, serializer);
         sse_encode_String(message, serializer);
+      case KimattaError_PlannedMeal(message: final message):
+        sse_encode_i_32(6, serializer);
+        sse_encode_String(message, serializer);
     }
   }
 
@@ -2041,6 +2486,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_list_meal_component_dto(
+    List<MealComponentDto> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_meal_component_dto(item, serializer);
+    }
+  }
+
+  @protected
   void sse_encode_list_meal_slot_dto(
     List<MealSlotDto> self,
     SseSerializer serializer,
@@ -2061,6 +2518,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_i_32(self.length, serializer);
     for (final item in self) {
       sse_encode_member_dto(item, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_list_planned_meal_dto(
+    List<PlannedMealDto> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_planned_meal_dto(item, serializer);
     }
   }
 
@@ -2096,6 +2565,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     for (final item in self) {
       sse_encode_restriction_dto(item, serializer);
     }
+  }
+
+  @protected
+  void sse_encode_meal_component_dto(
+    MealComponentDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.kind, serializer);
+    sse_encode_opt_String(self.recipeId, serializer);
+    sse_encode_opt_String(self.note, serializer);
+    sse_encode_opt_box_autoadd_scale_dto(self.scale, serializer);
   }
 
   @protected
@@ -2135,6 +2616,19 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_opt_box_autoadd_planned_meal_dto(
+    PlannedMealDto? self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    sse_encode_bool(self != null, serializer);
+    if (self != null) {
+      sse_encode_box_autoadd_planned_meal_dto(self, serializer);
+    }
+  }
+
+  @protected
   void sse_encode_opt_box_autoadd_recipe_dto(
     RecipeDto? self,
     SseSerializer serializer,
@@ -2161,6 +2655,19 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_opt_box_autoadd_scale_dto(
+    ScaleDto? self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    sse_encode_bool(self != null, serializer);
+    if (self != null) {
+      sse_encode_box_autoadd_scale_dto(self, serializer);
+    }
+  }
+
+  @protected
   void sse_encode_opt_box_autoadd_u_32(int? self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
 
@@ -2168,6 +2675,20 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     if (self != null) {
       sse_encode_box_autoadd_u_32(self, serializer);
     }
+  }
+
+  @protected
+  void sse_encode_planned_meal_dto(
+    PlannedMealDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.id, serializer);
+    sse_encode_String(self.householdId, serializer);
+    sse_encode_String(self.date, serializer);
+    sse_encode_meal_slot_dto(self.slot, serializer);
+    sse_encode_list_meal_component_dto(self.components, serializer);
+    sse_encode_bool(self.locked, serializer);
   }
 
   @protected
@@ -2280,6 +2801,13 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         sse_encode_i_32(1, serializer);
         sse_encode_String(text, serializer);
     }
+  }
+
+  @protected
+  void sse_encode_scale_dto(ScaleDto self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_u_32(self.numer, serializer);
+    sse_encode_u_32(self.denom, serializer);
   }
 
   @protected

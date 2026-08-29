@@ -629,3 +629,22 @@ Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-orch-21-2026-
 - **The roster conflict test depends on two unstated orderings** (`rust/crates/food-domain/src/starter.rs:645`) -- `every_recipe_matches_its_declared_conflicts` uses `Vec::dedup` on unsorted data and compares order-sensitively, so it is correct only because `assess` nests the restriction loop outside the line loop and because every `expected_conflicts` array is authored in `RestrictionKind::ALL` order. An `assess` refactor to line-outer iteration would fail all affected entries with a message blaming the content file. Fix: sort before `dedup` or compare as sets, and note that declaration order is not significant.
   Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-orch-21-2026-08-29T1336-81e8.md
   **Status:** RESOLVED (orch/21 pass 1) -- the sort arm, extracted into a `canonical` helper both sides of the assertion now call (`rust/crates/food-domain/src/starter.rs:395`). Sorting is by index in `RestrictionKind::ALL`, not `sort_unstable`, because the enum derives no `Ord` and deriving one on a domain type purely so a test can sort would be a production change for test convenience. Set comparison was rejected: `HashSet`'s `Debug` is unordered, which would have made the existing "assess found X, the file declares Y" failure message nondeterministic. This also brings the site in line with its two siblings (`every_slug_is_unique`, `every_catalog_id_is_unique`), which already sorted before `dedup`. `policy.expected_conflicts_order` in the content file now records that declaration order is not significant. Pinned by `canonical_collapses_interleaved_duplicates_and_ignores_authoring_order`.
+
+---
+
+## orch/23 -- 2026-08-29
+
+Source: /home/davidlinux/.claude/reviews/impl-handoff-orch-23-2026-08-29T1500-9be1.md
+Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-orch-23-2026-08-29T1512-79d5.md
+
+### LOW
+
+- **`CorruptComponent` omits `note`, the field that makes a recipe row corrupt** (`rust/crates/kimatta-storage/src/lib.rs:1840`) -- the error carries kind/recipe_id/scale but not `note`, so the "recipe row carrying a note" shape renders a message describing a valid component and names no anomaly. Its own test at line 5014 is forced down to `..` for the same reason. Fix: add `note: Option<String>` to the variant and its format string; `ComponentRow` already holds it.
+  Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-orch-23-2026-08-29T1512-79d5.md
+  **Status:** OPEN
+
+---
+
+- **Automation lock refusal asserts a lock state it never read** (`rust/crates/kimatta-storage/src/lib.rs:1753`) -- `set_planned_meal_lock` returns `LockedPlannedMeal` for every `Automation` call before opening a transaction, so the message "planned meal X is locked against automation" claims the row exists and is locked when neither was checked. The refusal is correct; only the wording is. Fix: a distinct `AutomationMayNotLock(String)` variant, leaving `LockedPlannedMeal` to lines 1686 and 1796 which do read `locked` first.
+  Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-orch-23-2026-08-29T1512-79d5.md
+  **Status:** OPEN

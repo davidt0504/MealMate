@@ -195,7 +195,7 @@ pub fn list_custom_ingredients(
 
 /// A blank DTO id is replaced before the newtype sees it, so `IdError::Empty` is unreachable
 /// from a blank id; the mint condition (`trim().is_empty()`) matches the newtype's own.
-fn id_or_minted(raw: String) -> String {
+pub(crate) fn id_or_minted(raw: String) -> String {
     if raw.trim().is_empty() {
         Uuid::new_v4().to_string()
     } else {
