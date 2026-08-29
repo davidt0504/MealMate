@@ -36,6 +36,7 @@
     # Done 2026-08-28 — see the docs/ROADMAP.md evidence log.
 
 5.  /plan-task Read docs/PRD_v3.md, docs/ROADMAP.md, docs/task/MVP_INVARIANTS.md, docs/task/mvp/MVP-004_EMULATOR_AUTH_HOUSEHOLD_PERSISTENCE.md, then plan its implementation.
+    # Planned 2026-08-28; executed to Verify the same day — see the docs/ROADMAP.md evidence log.
 6.  /execute-plan Read <plan path from step 5>, docs/ROADMAP.md, and docs/task/mvp/MVP-004_EMULATOR_AUTH_HOUSEHOLD_PERSISTENCE.md; repeat the mandatory execution gate, then execute the approved plan.
 
 7.  /plan-task Read docs/PRD_v3.md, docs/ROADMAP.md, docs/task/MVP_INVARIANTS.md, docs/task/mvp/MVP-005_PLANNING_CYCLE_MEAL_SCOPE.md, then plan its implementation.

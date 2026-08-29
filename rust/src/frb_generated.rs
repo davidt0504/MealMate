@@ -39,7 +39,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.13.0";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = 1873331351;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -451428487;
 
 // Section: executor
 
@@ -47,6 +47,38 @@ flutter_rust_bridge::frb_generated_default_handler!();
 
 // Section: wire_funcs
 
+fn wire__crate__api__household__bootstrap_household_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "bootstrap_household",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, crate::api::error::KimattaError>((move || {
+                    let output_ok = crate::api::household::bootstrap_household()?;
+                    std::result::Result::Ok(output_ok)
+                })())
+            }
+        },
+    )
+}
 fn wire__crate__api__health__core_version_impl(
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
     rust_vec_len_: i32,
@@ -73,39 +105,6 @@ fn wire__crate__api__health__core_version_impl(
                 let output_ok = Ok::<_, ()>(crate::api::health::core_version())?;
                 std::result::Result::Ok(output_ok)
             })())
-        },
-    )
-}
-fn wire__crate__api__health__health_check_impl(
-    port_: flutter_rust_bridge::for_generated::MessagePort,
-    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
-    rust_vec_len_: i32,
-    data_len_: i32,
-) {
-    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
-        flutter_rust_bridge::for_generated::TaskInfo {
-            debug_name: "health_check",
-            port: Some(port_),
-            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
-        },
-        move || {
-            let message = unsafe {
-                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
-                    ptr_,
-                    rust_vec_len_,
-                    data_len_,
-                )
-            };
-            let mut deserializer =
-                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
-            let api_db_path = <String>::sse_decode(&mut deserializer);
-            deserializer.end();
-            move |context| {
-                transform_result_sse::<_, crate::api::health::KimattaError>((move || {
-                    let output_ok = crate::api::health::health_check(api_db_path)?;
-                    std::result::Result::Ok(output_ok)
-                })())
-            }
         },
     )
 }
@@ -143,6 +142,74 @@ fn wire__crate__api__health__init_app_impl(
         },
     )
 }
+fn wire__crate__api__health__open_database_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "open_database",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_db_path = <String>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, crate::api::error::KimattaError>((move || {
+                    let output_ok = crate::api::health::open_database(api_db_path)?;
+                    std::result::Result::Ok(output_ok)
+                })())
+            }
+        },
+    )
+}
+fn wire__crate__api__household__rename_household_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "rename_household",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_household_id = <String>::sse_decode(&mut deserializer);
+            let api_name = <Option<String>>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, crate::api::error::KimattaError>((move || {
+                    let output_ok =
+                        crate::api::household::rename_household(api_household_id, api_name)?;
+                    std::result::Result::Ok(output_ok)
+                })())
+            }
+        },
+    )
+}
 
 // Section: dart2rust
 
@@ -166,17 +233,34 @@ impl SseDecode for crate::api::health::HealthReport {
     }
 }
 
-impl SseDecode for crate::api::health::KimattaError {
+impl SseDecode for crate::api::household::HouseholdDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_id = <String>::sse_decode(deserializer);
+        let mut var_name = <Option<String>>::sse_decode(deserializer);
+        let mut var_members = <Vec<crate::api::household::MemberDto>>::sse_decode(deserializer);
+        return crate::api::household::HouseholdDto {
+            id: var_id,
+            name: var_name,
+            members: var_members,
+        };
+    }
+}
+
+impl SseDecode for crate::api::error::KimattaError {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
         let mut tag_ = <i32>::sse_decode(deserializer);
         match tag_ {
             0 => {
-                return crate::api::health::KimattaError::InvalidPath;
+                return crate::api::error::KimattaError::InvalidPath;
             }
             1 => {
+                return crate::api::error::KimattaError::NotOpen;
+            }
+            2 => {
                 let mut var_message = <String>::sse_decode(deserializer);
-                return crate::api::health::KimattaError::Storage {
+                return crate::api::error::KimattaError::Storage {
                     message: var_message,
                 };
             }
@@ -184,6 +268,18 @@ impl SseDecode for crate::api::health::KimattaError {
                 unimplemented!("");
             }
         }
+    }
+}
+
+impl SseDecode for Vec<crate::api::household::MemberDto> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut len_ = <i32>::sse_decode(deserializer);
+        let mut ans_ = Vec::with_capacity(len_ as usize);
+        for idx_ in 0..len_ {
+            ans_.push(<crate::api::household::MemberDto>::sse_decode(deserializer));
+        }
+        return ans_;
     }
 }
 
@@ -196,6 +292,29 @@ impl SseDecode for Vec<u8> {
             ans_.push(<u8>::sse_decode(deserializer));
         }
         return ans_;
+    }
+}
+
+impl SseDecode for crate::api::household::MemberDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_id = <String>::sse_decode(deserializer);
+        let mut var_displayName = <String>::sse_decode(deserializer);
+        return crate::api::household::MemberDto {
+            id: var_id,
+            display_name: var_displayName,
+        };
+    }
+}
+
+impl SseDecode for Option<String> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        if (<bool>::sse_decode(deserializer)) {
+            return Some(<String>::sse_decode(deserializer));
+        } else {
+            return None;
+        }
     }
 }
 
@@ -241,8 +360,12 @@ fn pde_ffi_dispatcher_primary_impl(
 ) {
     // Codec=Pde (Serialization + dispatch), see doc to use other codecs
     match func_id {
-        2 => wire__crate__api__health__health_check_impl(port, ptr, rust_vec_len, data_len),
+        1 => {
+            wire__crate__api__household__bootstrap_household_impl(port, ptr, rust_vec_len, data_len)
+        }
         3 => wire__crate__api__health__init_app_impl(port, ptr, rust_vec_len, data_len),
+        4 => wire__crate__api__health__open_database_impl(port, ptr, rust_vec_len, data_len),
+        5 => wire__crate__api__household__rename_household_impl(port, ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
@@ -255,7 +378,7 @@ fn pde_ffi_dispatcher_sync_impl(
 ) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
     // Codec=Pde (Serialization + dispatch), see doc to use other codecs
     match func_id {
-        1 => wire__crate__api__health__core_version_impl(ptr, rust_vec_len, data_len),
+        2 => wire__crate__api__health__core_version_impl(ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
@@ -284,12 +407,35 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::health::HealthReport>
     }
 }
 // Codec=Dco (DartCObject based), see doc to use other codecs
-impl flutter_rust_bridge::IntoDart for crate::api::health::KimattaError {
+impl flutter_rust_bridge::IntoDart for crate::api::household::HouseholdDto {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.id.into_into_dart().into_dart(),
+            self.name.into_into_dart().into_dart(),
+            self.members.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::household::HouseholdDto
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::household::HouseholdDto>
+    for crate::api::household::HouseholdDto
+{
+    fn into_into_dart(self) -> crate::api::household::HouseholdDto {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::error::KimattaError {
     fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
         match self {
-            crate::api::health::KimattaError::InvalidPath => [0.into_dart()].into_dart(),
-            crate::api::health::KimattaError::Storage { message } => {
-                [1.into_dart(), message.into_into_dart().into_dart()].into_dart()
+            crate::api::error::KimattaError::InvalidPath => [0.into_dart()].into_dart(),
+            crate::api::error::KimattaError::NotOpen => [1.into_dart()].into_dart(),
+            crate::api::error::KimattaError::Storage { message } => {
+                [2.into_dart(), message.into_into_dart().into_dart()].into_dart()
             }
             _ => {
                 unimplemented!("");
@@ -298,13 +444,34 @@ impl flutter_rust_bridge::IntoDart for crate::api::health::KimattaError {
     }
 }
 impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
-    for crate::api::health::KimattaError
+    for crate::api::error::KimattaError
 {
 }
-impl flutter_rust_bridge::IntoIntoDart<crate::api::health::KimattaError>
-    for crate::api::health::KimattaError
+impl flutter_rust_bridge::IntoIntoDart<crate::api::error::KimattaError>
+    for crate::api::error::KimattaError
 {
-    fn into_into_dart(self) -> crate::api::health::KimattaError {
+    fn into_into_dart(self) -> crate::api::error::KimattaError {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::household::MemberDto {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.id.into_into_dart().into_dart(),
+            self.display_name.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::household::MemberDto
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::household::MemberDto>
+    for crate::api::household::MemberDto
+{
+    fn into_into_dart(self) -> crate::api::household::MemberDto {
         self
     }
 }
@@ -324,20 +491,42 @@ impl SseEncode for crate::api::health::HealthReport {
     }
 }
 
-impl SseEncode for crate::api::health::KimattaError {
+impl SseEncode for crate::api::household::HouseholdDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.id, serializer);
+        <Option<String>>::sse_encode(self.name, serializer);
+        <Vec<crate::api::household::MemberDto>>::sse_encode(self.members, serializer);
+    }
+}
+
+impl SseEncode for crate::api::error::KimattaError {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
         match self {
-            crate::api::health::KimattaError::InvalidPath => {
+            crate::api::error::KimattaError::InvalidPath => {
                 <i32>::sse_encode(0, serializer);
             }
-            crate::api::health::KimattaError::Storage { message } => {
+            crate::api::error::KimattaError::NotOpen => {
                 <i32>::sse_encode(1, serializer);
+            }
+            crate::api::error::KimattaError::Storage { message } => {
+                <i32>::sse_encode(2, serializer);
                 <String>::sse_encode(message, serializer);
             }
             _ => {
                 unimplemented!("");
             }
+        }
+    }
+}
+
+impl SseEncode for Vec<crate::api::household::MemberDto> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(self.len() as _, serializer);
+        for item in self {
+            <crate::api::household::MemberDto>::sse_encode(item, serializer);
         }
     }
 }
@@ -348,6 +537,24 @@ impl SseEncode for Vec<u8> {
         <i32>::sse_encode(self.len() as _, serializer);
         for item in self {
             <u8>::sse_encode(item, serializer);
+        }
+    }
+}
+
+impl SseEncode for crate::api::household::MemberDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.id, serializer);
+        <String>::sse_encode(self.display_name, serializer);
+    }
+}
+
+impl SseEncode for Option<String> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <bool>::sse_encode(self.is_some(), serializer);
+        if let Some(value) = self {
+            <String>::sse_encode(value, serializer);
         }
     }
 }

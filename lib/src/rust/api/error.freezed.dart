@@ -3,7 +3,7 @@
 // ignore_for_file: type=lint, type=warning, deprecated_member_use, deprecated_member_use_from_same_package
 // ignore_for_file: unused_element, deprecated_member_use, deprecated_member_use_from_same_package, use_function_type_syntax_for_parameters, unnecessary_const, avoid_init_to_null, invalid_override_different_default_values_named, prefer_expression_function_bodies, annotate_overrides, invalid_annotation_target, unnecessary_question_mark
 
-part of 'health.dart';
+part of 'error.dart';
 
 // **************************************************************************
 // FreezedGenerator
@@ -56,11 +56,12 @@ extension KimattaErrorPatterns on KimattaError {
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeMap<TResult extends Object?>({TResult Function( KimattaError_InvalidPath value)?  invalidPath,TResult Function( KimattaError_Storage value)?  storage,required TResult orElse(),}){
+@optionalTypeArgs TResult maybeMap<TResult extends Object?>({TResult Function( KimattaError_InvalidPath value)?  invalidPath,TResult Function( KimattaError_NotOpen value)?  notOpen,TResult Function( KimattaError_Storage value)?  storage,required TResult orElse(),}){
 final _that = this;
 switch (_that) {
 case KimattaError_InvalidPath() when invalidPath != null:
-return invalidPath(_that);case KimattaError_Storage() when storage != null:
+return invalidPath(_that);case KimattaError_NotOpen() when notOpen != null:
+return notOpen(_that);case KimattaError_Storage() when storage != null:
 return storage(_that);case _:
   return orElse();
 
@@ -79,11 +80,12 @@ return storage(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult map<TResult extends Object?>({required TResult Function( KimattaError_InvalidPath value)  invalidPath,required TResult Function( KimattaError_Storage value)  storage,}){
+@optionalTypeArgs TResult map<TResult extends Object?>({required TResult Function( KimattaError_InvalidPath value)  invalidPath,required TResult Function( KimattaError_NotOpen value)  notOpen,required TResult Function( KimattaError_Storage value)  storage,}){
 final _that = this;
 switch (_that) {
 case KimattaError_InvalidPath():
-return invalidPath(_that);case KimattaError_Storage():
+return invalidPath(_that);case KimattaError_NotOpen():
+return notOpen(_that);case KimattaError_Storage():
 return storage(_that);}
 }
 /// A variant of `map` that fallback to returning `null`.
@@ -98,11 +100,12 @@ return storage(_that);}
 /// }
 /// ```
 
-@optionalTypeArgs TResult? mapOrNull<TResult extends Object?>({TResult? Function( KimattaError_InvalidPath value)?  invalidPath,TResult? Function( KimattaError_Storage value)?  storage,}){
+@optionalTypeArgs TResult? mapOrNull<TResult extends Object?>({TResult? Function( KimattaError_InvalidPath value)?  invalidPath,TResult? Function( KimattaError_NotOpen value)?  notOpen,TResult? Function( KimattaError_Storage value)?  storage,}){
 final _that = this;
 switch (_that) {
 case KimattaError_InvalidPath() when invalidPath != null:
-return invalidPath(_that);case KimattaError_Storage() when storage != null:
+return invalidPath(_that);case KimattaError_NotOpen() when notOpen != null:
+return notOpen(_that);case KimattaError_Storage() when storage != null:
 return storage(_that);case _:
   return null;
 
@@ -120,10 +123,11 @@ return storage(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>({TResult Function()?  invalidPath,TResult Function( String message)?  storage,required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>({TResult Function()?  invalidPath,TResult Function()?  notOpen,TResult Function( String message)?  storage,required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case KimattaError_InvalidPath() when invalidPath != null:
-return invalidPath();case KimattaError_Storage() when storage != null:
+return invalidPath();case KimattaError_NotOpen() when notOpen != null:
+return notOpen();case KimattaError_Storage() when storage != null:
 return storage(_that.message);case _:
   return orElse();
 
@@ -142,10 +146,11 @@ return storage(_that.message);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>({required TResult Function()  invalidPath,required TResult Function( String message)  storage,}) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>({required TResult Function()  invalidPath,required TResult Function()  notOpen,required TResult Function( String message)  storage,}) {final _that = this;
 switch (_that) {
 case KimattaError_InvalidPath():
-return invalidPath();case KimattaError_Storage():
+return invalidPath();case KimattaError_NotOpen():
+return notOpen();case KimattaError_Storage():
 return storage(_that.message);}
 }
 /// A variant of `when` that fallback to returning `null`
@@ -160,10 +165,11 @@ return storage(_that.message);}
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>({TResult? Function()?  invalidPath,TResult? Function( String message)?  storage,}) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>({TResult? Function()?  invalidPath,TResult? Function()?  notOpen,TResult? Function( String message)?  storage,}) {final _that = this;
 switch (_that) {
 case KimattaError_InvalidPath() when invalidPath != null:
-return invalidPath();case KimattaError_Storage() when storage != null:
+return invalidPath();case KimattaError_NotOpen() when notOpen != null:
+return notOpen();case KimattaError_Storage() when storage != null:
 return storage(_that.message);case _:
   return null;
 
@@ -196,6 +202,38 @@ int get hashCode => runtimeType.hashCode;
 @override
 String toString() {
   return 'KimattaError.invalidPath()';
+}
+
+
+}
+
+
+
+
+/// @nodoc
+
+
+class KimattaError_NotOpen extends KimattaError {
+  const KimattaError_NotOpen(): super._();
+  
+
+
+
+
+
+
+@override
+bool operator ==(Object other) {
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is KimattaError_NotOpen);
+}
+
+
+@override
+int get hashCode => runtimeType.hashCode;
+
+@override
+String toString() {
+  return 'KimattaError.notOpen()';
 }
 
 

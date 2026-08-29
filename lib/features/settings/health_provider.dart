@@ -11,5 +11,5 @@ import 'package:meal_mate/src/rust/api/health.dart';
 /// on Android.
 final healthReportProvider = FutureProvider<HealthReport>((ref) async {
   final dir = await getApplicationSupportDirectory();
-  return healthCheck(dbPath: '${dir.path}${Platform.pathSeparator}kimatta.db');
+  return openDatabase(dbPath: '${dir.path}${Platform.pathSeparator}kimatta.db');
 });
