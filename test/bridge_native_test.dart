@@ -6,6 +6,7 @@ import 'package:meal_mate/src/rust/api/error.dart';
 import 'package:meal_mate/src/rust/api/health.dart';
 import 'package:meal_mate/src/rust/api/household.dart';
 import 'package:meal_mate/src/rust/api/planning.dart';
+import 'package:meal_mate/src/rust/api/recipe.dart';
 import 'package:meal_mate/src/rust/frb_generated.dart';
 
 void main() {
@@ -34,9 +35,9 @@ void main() {
     );
   });
 
-  test('open_database migrates a real database to schema v2', () async {
+  test('open_database migrates a real database to schema v3', () async {
     final report = await openDatabase(dbPath: await tempDb());
-    expect(report.schemaVersion, 2);
+    expect(report.schemaVersion, 3);
   });
 
   test('storage failure surfaces as KimattaError_Storage', () async {
@@ -147,5 +148,164 @@ void main() {
     await openDatabase(dbPath: await tempDb());
     final b = await bootstrapHousehold();
     expect(b.id, isNot(a.id));
+  });
+
+  RecipeDto recipeFor(String householdId, List<IngredientLineDto> lines) {
+    return RecipeDto(
+      id: '',
+      householdId: householdId,
+      title: 'Pancakes',
+      servings: 4,
+      instructions: 'Mix. Fry.',
+      lines: lines,
+      provenance: const RecipeProvenanceDto(kind: 'authored'),
+    );
+  }
+
+  test(
+    'a recipe with structured and original lines round-trips across the bridge',
+    () async {
+      await openDatabase(dbPath: await tempDb());
+      final h = await bootstrapHousehold();
+      final custom = await addCustomIngredient(
+        item: CustomIngredientDto(
+          id: '',
+          householdId: h.id,
+          name: "nana's mix",
+        ),
+      );
+      final saved = await saveRecipe(
+        recipe: recipeFor(h.id, [
+          const IngredientLineDto(
+            originalText: '  1/2 cup Flour, sifted ',
+            name: 'Flour',
+            quantity: QuantityDto.exact(numer: 1, denom: 2),
+            unit: UnitDto.known(unit: 'cup'),
+            preparation: 'sifted',
+            optional: false,
+          ),
+          IngredientLineDto(
+            originalText: "2-3 handfuls nana's mix (optional)",
+            name: "nana's mix",
+            ingredient: IngredientRefDto.custom(id: custom.id),
+            quantity: const QuantityDto.range(
+              minNumer: 2,
+              minDenom: 1,
+              maxNumer: 3,
+              maxDenom: 1,
+            ),
+            unit: const UnitDto.other(text: 'handful'),
+            optional: true,
+          ),
+          const IngredientLineDto(
+            originalText: 'a splash of something',
+            name: 'something',
+            quantity: QuantityDto.unknown(),
+            unit: UnitDto.none(),
+            optional: false,
+          ),
+        ]),
+      );
+      expect(saved.id, isNotEmpty);
+      final loaded = await loadRecipe(householdId: h.id, recipeId: saved.id);
+      expect(loaded, isNotNull);
+      expect(loaded!.title, 'Pancakes');
+      expect(loaded.servings, 4);
+      expect(loaded.instructions, 'Mix. Fry.');
+      expect(loaded.provenance.kind, 'authored');
+      expect(loaded.lines.length, 3);
+      expect(loaded.lines[0].originalText, '  1/2 cup Flour, sifted ');
+      expect(
+        loaded.lines[0].quantity,
+        const QuantityDto.exact(numer: 1, denom: 2),
+      );
+      expect(loaded.lines[0].unit, const UnitDto.known(unit: 'cup'));
+      expect(loaded.lines[0].preparation, 'sifted');
+      expect(loaded.lines[0].optional, isFalse);
+      expect(
+        loaded.lines[1].ingredient,
+        IngredientRefDto.custom(id: custom.id),
+      );
+      expect(
+        loaded.lines[1].quantity,
+        const QuantityDto.range(
+          minNumer: 2,
+          minDenom: 1,
+          maxNumer: 3,
+          maxDenom: 1,
+        ),
+      );
+      expect(loaded.lines[1].unit, const UnitDto.other(text: 'handful'));
+      expect(loaded.lines[1].optional, isTrue);
+      expect(loaded.lines[2].quantity, const QuantityDto.unknown());
+      expect(loaded.lines[2].unit, const UnitDto.none());
+      expect(loaded.lines[2].ingredient, isNull);
+      final list = await listRecipes(householdId: h.id);
+      expect(list.single.id, saved.id);
+      expect(list.single.title, 'Pancakes');
+    },
+  );
+
+  test('a saved recipe survives reopening the same file', () async {
+    final path = await tempDb();
+    await openDatabase(dbPath: path);
+    final h = await bootstrapHousehold();
+    final saved = await saveRecipe(
+      recipe: recipeFor(h.id, const [
+        IngredientLineDto(
+          originalText: '2 eggs',
+          name: 'eggs',
+          quantity: QuantityDto.exact(numer: 2, denom: 1),
+          unit: UnitDto.known(unit: 'piece'),
+          optional: false,
+        ),
+      ]),
+    );
+    await openDatabase(dbPath: path);
+    final again = await loadRecipe(householdId: h.id, recipeId: saved.id);
+    expect(again, isNotNull);
+    expect(again!.lines.single.originalText, '2 eggs');
+    expect(again.lines.single.unit, const UnitDto.known(unit: 'piece'));
+  });
+
+  test('a blank title is a typed Recipe error in Dart', () async {
+    await openDatabase(dbPath: await tempDb());
+    final h = await bootstrapHousehold();
+    await expectLater(
+      () => saveRecipe(
+        recipe: RecipeDto(
+          id: '',
+          householdId: h.id,
+          title: '   ',
+          instructions: '',
+          lines: const [],
+          provenance: const RecipeProvenanceDto(kind: 'authored'),
+        ),
+      ),
+      throwsA(isA<KimattaError_Recipe>()),
+    );
+    expect(await listRecipes(householdId: h.id), isEmpty);
+  });
+
+  test('a recipe id from a different household is not found', () async {
+    await openDatabase(dbPath: await tempDb());
+    final h = await bootstrapHousehold();
+    final saved = await saveRecipe(recipe: recipeFor(h.id, const []));
+    expect(
+      await loadRecipe(householdId: 'not-${h.id}', recipeId: saved.id),
+      isNull,
+    );
+    expect(await listRecipes(householdId: 'not-${h.id}'), isEmpty);
+    expect(await loadRecipe(householdId: h.id, recipeId: saved.id), isNotNull);
+  });
+
+  test('custom ingredients list only for their household', () async {
+    await openDatabase(dbPath: await tempDb());
+    final h = await bootstrapHousehold();
+    await addCustomIngredient(
+      item: CustomIngredientDto(id: '', householdId: h.id, name: 'mix'),
+    );
+    expect((await listCustomIngredients(householdId: h.id)).single.name, 'mix');
+    expect(await listCustomIngredients(householdId: 'not-${h.id}'), isEmpty);
   });
 }

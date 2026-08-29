@@ -10,6 +10,7 @@ import 'api/error.dart';
 import 'api/health.dart';
 import 'api/household.dart';
 import 'api/planning.dart';
+import 'api/recipe.dart';
 
 import 'dart:async';
 import 'dart:convert';
@@ -30,6 +31,24 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   String dco_decode_String(dynamic raw);
 
   @protected
+  bool dco_decode_bool(dynamic raw);
+
+  @protected
+  CustomIngredientDto dco_decode_box_autoadd_custom_ingredient_dto(dynamic raw);
+
+  @protected
+  IngredientRefDto dco_decode_box_autoadd_ingredient_ref_dto(dynamic raw);
+
+  @protected
+  RecipeDto dco_decode_box_autoadd_recipe_dto(dynamic raw);
+
+  @protected
+  int dco_decode_box_autoadd_u_32(dynamic raw);
+
+  @protected
+  CustomIngredientDto dco_decode_custom_ingredient_dto(dynamic raw);
+
+  @protected
   HealthReport dco_decode_health_report(dynamic raw);
 
   @protected
@@ -39,10 +58,22 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   int dco_decode_i_32(dynamic raw);
 
   @protected
+  IngredientLineDto dco_decode_ingredient_line_dto(dynamic raw);
+
+  @protected
+  IngredientRefDto dco_decode_ingredient_ref_dto(dynamic raw);
+
+  @protected
   KimattaError dco_decode_kimatta_error(dynamic raw);
 
   @protected
   List<String> dco_decode_list_String(dynamic raw);
+
+  @protected
+  List<CustomIngredientDto> dco_decode_list_custom_ingredient_dto(dynamic raw);
+
+  @protected
+  List<IngredientLineDto> dco_decode_list_ingredient_line_dto(dynamic raw);
 
   @protected
   List<MealSlotDto> dco_decode_list_meal_slot_dto(dynamic raw);
@@ -54,6 +85,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   Uint8List dco_decode_list_prim_u_8_strict(dynamic raw);
 
   @protected
+  List<RecipeSummaryDto> dco_decode_list_recipe_summary_dto(dynamic raw);
+
+  @protected
   MealSlotDto dco_decode_meal_slot_dto(dynamic raw);
 
   @protected
@@ -63,7 +97,28 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   String? dco_decode_opt_String(dynamic raw);
 
   @protected
+  IngredientRefDto? dco_decode_opt_box_autoadd_ingredient_ref_dto(dynamic raw);
+
+  @protected
+  RecipeDto? dco_decode_opt_box_autoadd_recipe_dto(dynamic raw);
+
+  @protected
+  int? dco_decode_opt_box_autoadd_u_32(dynamic raw);
+
+  @protected
   PlanningCycleDto dco_decode_planning_cycle_dto(dynamic raw);
+
+  @protected
+  QuantityDto dco_decode_quantity_dto(dynamic raw);
+
+  @protected
+  RecipeDto dco_decode_recipe_dto(dynamic raw);
+
+  @protected
+  RecipeProvenanceDto dco_decode_recipe_provenance_dto(dynamic raw);
+
+  @protected
+  RecipeSummaryDto dco_decode_recipe_summary_dto(dynamic raw);
 
   @protected
   int dco_decode_u_32(dynamic raw);
@@ -75,7 +130,34 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void dco_decode_unit(dynamic raw);
 
   @protected
+  UnitDto dco_decode_unit_dto(dynamic raw);
+
+  @protected
   String sse_decode_String(SseDeserializer deserializer);
+
+  @protected
+  bool sse_decode_bool(SseDeserializer deserializer);
+
+  @protected
+  CustomIngredientDto sse_decode_box_autoadd_custom_ingredient_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  IngredientRefDto sse_decode_box_autoadd_ingredient_ref_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  RecipeDto sse_decode_box_autoadd_recipe_dto(SseDeserializer deserializer);
+
+  @protected
+  int sse_decode_box_autoadd_u_32(SseDeserializer deserializer);
+
+  @protected
+  CustomIngredientDto sse_decode_custom_ingredient_dto(
+    SseDeserializer deserializer,
+  );
 
   @protected
   HealthReport sse_decode_health_report(SseDeserializer deserializer);
@@ -87,10 +169,28 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   int sse_decode_i_32(SseDeserializer deserializer);
 
   @protected
+  IngredientLineDto sse_decode_ingredient_line_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  IngredientRefDto sse_decode_ingredient_ref_dto(SseDeserializer deserializer);
+
+  @protected
   KimattaError sse_decode_kimatta_error(SseDeserializer deserializer);
 
   @protected
   List<String> sse_decode_list_String(SseDeserializer deserializer);
+
+  @protected
+  List<CustomIngredientDto> sse_decode_list_custom_ingredient_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  List<IngredientLineDto> sse_decode_list_ingredient_line_dto(
+    SseDeserializer deserializer,
+  );
 
   @protected
   List<MealSlotDto> sse_decode_list_meal_slot_dto(SseDeserializer deserializer);
@@ -102,6 +202,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   Uint8List sse_decode_list_prim_u_8_strict(SseDeserializer deserializer);
 
   @protected
+  List<RecipeSummaryDto> sse_decode_list_recipe_summary_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   MealSlotDto sse_decode_meal_slot_dto(SseDeserializer deserializer);
 
   @protected
@@ -111,7 +216,34 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   String? sse_decode_opt_String(SseDeserializer deserializer);
 
   @protected
+  IngredientRefDto? sse_decode_opt_box_autoadd_ingredient_ref_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  RecipeDto? sse_decode_opt_box_autoadd_recipe_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  int? sse_decode_opt_box_autoadd_u_32(SseDeserializer deserializer);
+
+  @protected
   PlanningCycleDto sse_decode_planning_cycle_dto(SseDeserializer deserializer);
+
+  @protected
+  QuantityDto sse_decode_quantity_dto(SseDeserializer deserializer);
+
+  @protected
+  RecipeDto sse_decode_recipe_dto(SseDeserializer deserializer);
+
+  @protected
+  RecipeProvenanceDto sse_decode_recipe_provenance_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  RecipeSummaryDto sse_decode_recipe_summary_dto(SseDeserializer deserializer);
 
   @protected
   int sse_decode_u_32(SseDeserializer deserializer);
@@ -123,10 +255,40 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_decode_unit(SseDeserializer deserializer);
 
   @protected
-  bool sse_decode_bool(SseDeserializer deserializer);
+  UnitDto sse_decode_unit_dto(SseDeserializer deserializer);
 
   @protected
   void sse_encode_String(String self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bool(bool self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_box_autoadd_custom_ingredient_dto(
+    CustomIngredientDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_ingredient_ref_dto(
+    IngredientRefDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_recipe_dto(
+    RecipeDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_u_32(int self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_custom_ingredient_dto(
+    CustomIngredientDto self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_health_report(HealthReport self, SseSerializer serializer);
@@ -138,10 +300,34 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_i_32(int self, SseSerializer serializer);
 
   @protected
+  void sse_encode_ingredient_line_dto(
+    IngredientLineDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_ingredient_ref_dto(
+    IngredientRefDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_kimatta_error(KimattaError self, SseSerializer serializer);
 
   @protected
   void sse_encode_list_String(List<String> self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_custom_ingredient_dto(
+    List<CustomIngredientDto> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_ingredient_line_dto(
+    List<IngredientLineDto> self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_list_meal_slot_dto(
@@ -162,6 +348,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_list_recipe_summary_dto(
+    List<RecipeSummaryDto> self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_meal_slot_dto(MealSlotDto self, SseSerializer serializer);
 
   @protected
@@ -171,8 +363,41 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_opt_String(String? self, SseSerializer serializer);
 
   @protected
+  void sse_encode_opt_box_autoadd_ingredient_ref_dto(
+    IngredientRefDto? self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_opt_box_autoadd_recipe_dto(
+    RecipeDto? self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_opt_box_autoadd_u_32(int? self, SseSerializer serializer);
+
+  @protected
   void sse_encode_planning_cycle_dto(
     PlanningCycleDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_quantity_dto(QuantityDto self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_recipe_dto(RecipeDto self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_recipe_provenance_dto(
+    RecipeProvenanceDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_recipe_summary_dto(
+    RecipeSummaryDto self,
     SseSerializer serializer,
   );
 
@@ -186,7 +411,7 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_unit(void self, SseSerializer serializer);
 
   @protected
-  void sse_encode_bool(bool self, SseSerializer serializer);
+  void sse_encode_unit_dto(UnitDto self, SseSerializer serializer);
 }
 
 // Section: wire_class
