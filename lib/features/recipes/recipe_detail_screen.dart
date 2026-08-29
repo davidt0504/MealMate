@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import 'package:meal_mate/features/household/household_screen.dart';
+import 'package:meal_mate/features/pantry/pantry_copy.dart';
+import 'package:meal_mate/features/pantry/pantry_provider.dart';
 import 'package:meal_mate/features/recipes/recipe_fields.dart';
 import 'package:meal_mate/features/recipes/recipes_provider.dart';
 import 'package:meal_mate/features/recipes/restriction_warnings.dart';
@@ -19,6 +21,9 @@ class RecipeDetailScreen extends ConsumerStatefulWidget {
 
 class _RecipeDetailScreenState extends ConsumerState<RecipeDetailScreen> {
   bool _busy = false;
+  // Per-row, and separate from `_busy`: marking must not gate Delete/Restore, and one line's
+  // write must not freeze the others.
+  final Set<IngredientRefDto> _marking = {};
 
   /// "Delete" is archive (owner decision 2026-08-28), and the dialog says exactly what that
   /// means so the confirmation is informed rather than ritual.
@@ -49,6 +54,59 @@ class _RecipeDetailScreenState extends ConsumerState<RecipeDetailScreen> {
             .read(recipeLibraryProvider.notifier)
             .archive(r.householdId, r.id),
       );
+    }
+  }
+
+  /// One ingredient line, with a pantry control when — and only when — the line resolves to
+  /// an identity and the pantry is loaded. An unresolved line has nothing to mark, and
+  /// inventing an identity for it would break "identity matching is explicit". A pantry
+  /// failure costs the control and nothing else: the recipe is never blocked by pantry state
+  /// (AC-2), so the failure is not reported here either.
+  ///
+  /// Deliberately not routed through `_run`: that navigates to `/recipes` on *success*, which
+  /// would throw the reader off the recipe after a successful toggle, and its `_busy` gates
+  /// Delete/Restore. Marking keeps its own per-row busy state.
+  Widget _lineTile(String householdId, IngredientLineDto line) {
+    final plain = ListTile(title: Text(describeLine(line)));
+    final reference = line.ingredient;
+    if (reference == null) return plain;
+    final entries = ref.watch(pantryProvider).valueOrNull;
+    if (entries == null) return plain;
+    final marked = entries.any((e) => e.ingredient == reference && e.marked);
+    return ListTile(
+      title: Text(describeLine(line)),
+      trailing: Semantics(
+        label: pantryRowLabel(line.name, marked),
+        child: Switch(
+          value: marked,
+          onChanged: _marking.contains(reference)
+              ? null
+              : (next) => _mark(householdId, reference, next),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _mark(
+    String householdId,
+    IngredientRefDto ingredient,
+    bool marked,
+  ) async {
+    setState(() => _marking.add(ingredient));
+    try {
+      await ref
+          .read(pantryProvider.notifier)
+          .setMark(householdId, ingredient, marked);
+    } catch (e) {
+      // The switch renders from provider state, which a failed write never changed, so the
+      // row is already back at its stored value; the snackbar says why.
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(describeFailure(e, subject: 'Pantry'))),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _marking.remove(ingredient));
     }
   }
 
@@ -158,7 +216,7 @@ class _RecipeDetailScreenState extends ConsumerState<RecipeDetailScreen> {
       const SizedBox(height: 8),
       Text('Ingredients', style: Theme.of(context).textTheme.titleMedium),
       if (r.lines.isEmpty) const Text('No ingredients listed.'),
-      for (final line in r.lines) ListTile(title: Text(describeLine(line))),
+      for (final line in r.lines) _lineTile(r.householdId, line),
       const SizedBox(height: 8),
       Text('Instructions', style: Theme.of(context).textTheme.titleMedium),
       Text(r.instructions.isEmpty ? 'No instructions yet.' : r.instructions),

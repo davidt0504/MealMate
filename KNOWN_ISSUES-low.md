@@ -648,3 +648,22 @@ Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-orch-23-2026-
 - **Automation lock refusal asserts a lock state it never read** (`rust/crates/kimatta-storage/src/lib.rs:1753`) -- `set_planned_meal_lock` returns `LockedPlannedMeal` for every `Automation` call before opening a transaction, so the message "planned meal X is locked against automation" claims the row exists and is locked when neither was checked. The refusal is correct; only the wording is. Fix: a distinct `AutomationMayNotLock(String)` variant, leaving `LockedPlannedMeal` to lines 1686 and 1796 which do read `locked` first.
   Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-orch-23-2026-08-29T1512-79d5.md
   **Status:** OPEN
+
+---
+
+## orch/25 -- 2026-08-29
+
+Source: /home/davidlinux/.claude/reviews/impl-handoff-orch-25-2026-08-29T1621-1d84.md
+Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-orch-25-2026-08-29T1633-ef03.md
+
+### LOW
+
+- **The absent-household pantry read contract is untested** (`rust/crates/kimatta-storage/src/lib.rs:1033`) -- `list_pantry_entries`' doc states an absent household reads as the catalog with nothing marked, but nothing pins it, while the opposite write-path behaviour is pinned; a later "symmetry" edit adding `require_household` would break the contract `MVP-015`/`MVP-023` are told to rely on, with a green suite. Fix: one test asserting `list_pantry_entries(conn, &hid("ghost"))` returns the catalog with `marked == false` throughout.
+  Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-orch-25-2026-08-29T1633-ef03.md
+  **Status:** OPEN
+
+---
+
+- **Unreachable `householdId == null` guard disables every pantry row silently** (`lib/features/pantry/pantry_screen.dart:126`) -- `_body` runs only in `pantryProvider`'s `AsyncData` arm and `PantryNotifier.build` awaits the household id first, so the null arm cannot fire; if the provider graph ever changed it would make every switch inert with no message. Fix: drop the null arm, or render an explicit message instead of silently disabling the controls.
+  Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-orch-25-2026-08-29T1633-ef03.md
+  **Status:** OPEN

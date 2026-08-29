@@ -7,6 +7,7 @@ import 'package:meal_mate/app/theme.dart';
 import 'package:meal_mate/features/household/household_provider.dart';
 import 'package:meal_mate/features/household/household_screen.dart'
     show describeFailure;
+import 'package:meal_mate/features/pantry/pantry_provider.dart';
 import 'package:meal_mate/features/recipes/starter_provider.dart';
 
 class App extends ConsumerStatefulWidget {
@@ -111,7 +112,22 @@ class _AppState extends ConsumerState<App> {
   /// writing no rows, so this is cheap to run on every launch.
   Future<void> _installStarterContent(String householdId) async {
     try {
-      await ref.read(starterInstallProvider)(householdId);
+      final report = await ref.read(starterInstallProvider)(householdId);
+      // `catalogInstalled` is the size of the catalog the install *wrote*, not a count of new
+      // rows: `install_starter_content` reports `catalog.len()` whenever it takes its write
+      // branch and 0 when it short-circuits. So `> 0` reads as "the ingredient table was
+      // rewritten this run" — the condition under which `pantryProvider`'s once-per-launch
+      // list can be missing identities. Deliberately a superset: a launch that installs a new
+      // starter *recipe* rewrites the catalog too and costs one redundant read. Steady-state
+      // launches short-circuit and cost nothing, which is the case that matters.
+      //
+      // `mounted` because this future is deliberately unawaited — the element can be gone by
+      // the time the install lands, and `ref` would throw. The `catch` below dodges the same
+      // hazard with `_messengerKey.currentState?.`. `invalidate` rather than the notifier's
+      // `refresh()` precisely because it must not instantiate a provider nothing has read.
+      if (mounted && report.catalogInstalled > 0) {
+        ref.invalidate(pantryProvider);
+      }
     } catch (error) {
       _messengerKey.currentState?.showSnackBar(
         SnackBar(

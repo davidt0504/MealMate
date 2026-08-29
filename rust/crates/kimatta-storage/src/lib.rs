@@ -324,6 +324,33 @@ const MIGRATION_ARRAY: &[M] = &[
     ) STRICT;
     CREATE INDEX meal_component_recipe ON meal_component(recipe_id);",
     ),
+    // Optional binary pantry (MVP-014). A row means *this household marked this identity as one
+    // it has*; no row means no record, which is unknown — never "they do not have it"
+    // (invariant 6, card constraint, PRD §10). There is deliberately no `present` column: a
+    // stored `0` would be exactly the absence claim the model may not make, and every consumer
+    // (`MVP-015` subtraction, `MVP-023` pantry fit) acts identically on "no record". Identity is
+    // the existing `IngredientRef`: exactly one of the two columns, as `recipe_ingredient_line`
+    // allows at most one. The pair cannot be a PRIMARY KEY because either column is NULL half
+    // the time, so the two partial unique indexes are the real key. Both FKs carry no cascade,
+    // for the reason the line FKs give: deleting an ingredient must not silently drop a
+    // household's records. Each FK is indexed on its own because the household-leading unique
+    // indexes cannot serve the FK-parent-delete lookup.
+    M::up(
+        "CREATE TABLE pantry_item (
+        household_id TEXT NOT NULL REFERENCES household(id) ON DELETE CASCADE,
+        ingredient_id TEXT REFERENCES ingredient(id),
+        custom_ingredient_id TEXT REFERENCES custom_ingredient(id),
+        CHECK ((ingredient_id IS NULL) <> (custom_ingredient_id IS NULL))
+    ) STRICT;
+    CREATE UNIQUE INDEX pantry_item_catalog
+        ON pantry_item(household_id, ingredient_id) WHERE ingredient_id IS NOT NULL;
+    CREATE UNIQUE INDEX pantry_item_custom
+        ON pantry_item(household_id, custom_ingredient_id)
+        WHERE custom_ingredient_id IS NOT NULL;
+    CREATE INDEX pantry_item_ingredient ON pantry_item(ingredient_id);
+    CREATE INDEX pantry_item_custom_ingredient
+        ON pantry_item(custom_ingredient_id);",
+    ),
 ];
 pub const MIGRATIONS: Migrations<'static> = Migrations::from_slice(MIGRATION_ARRAY);
 
@@ -879,17 +906,23 @@ pub fn load_ingredient(
     let Some((canonical_name, store_category)) = row else {
         return Ok(None);
     };
+    Ok(Some(Ingredient::new(
+        id.clone(),
+        canonical_name,
+        load_aliases(conn, id)?,
+        store_category,
+    )?))
+}
+
+/// The catalog ingredient's alternative names in stored order. Shared by `load_ingredient`
+/// and `set_pantry_mark`, which reads the same names back for the entry it returns.
+fn load_aliases(conn: &Connection, id: &IngredientId) -> Result<Vec<String>, StorageError> {
     let mut stmt =
         conn.prepare("SELECT alias FROM ingredient_alias WHERE ingredient_id = ?1 ORDER BY alias")?;
     let aliases = stmt
         .query_map(params![id.as_str()], |r| r.get::<_, String>(0))?
         .collect::<Result<Vec<_>, _>>()?;
-    Ok(Some(Ingredient::new(
-        id.clone(),
-        canonical_name,
-        aliases,
-        store_category,
-    )?))
+    Ok(aliases)
 }
 
 /// Inserts or replaces a household's custom ingredient. `NoSuchHousehold` for an absent
@@ -966,6 +999,160 @@ pub fn list_custom_ingredients(
     items
 }
 
+/// One browsable identity with this household's mark. `marked` means *the household marked
+/// this as one it has*; `false` means **no record**, which is unknown — never a claim that the
+/// household lacks it (invariant 6, PRD §10). Named `marked` rather than `present` so no
+/// consumer reads `false` as evidence of absence. `aliases` are the catalog's own alternative
+/// names, so a search for "garbanzo beans" finds "chickpeas"; a custom ingredient has none.
+/// Lives here rather than in `food-domain` because it is a read projection over two tables, as
+/// `RecipeSummary` is.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PantryEntry {
+    pub ingredient: IngredientRef,
+    pub name: String,
+    pub aliases: Vec<String>,
+    pub marked: bool,
+}
+
+/// Every catalog alias, keyed by ingredient id, in one query rather than one per row — the
+/// "one restriction read per listing, not per recipe" shape the recipe listing uses.
+fn alias_index(conn: &Connection) -> Result<HashMap<String, Vec<String>>, StorageError> {
+    let mut stmt = conn.prepare(
+        "SELECT ingredient_id, alias FROM ingredient_alias ORDER BY ingredient_id, alias",
+    )?;
+    let rows = stmt
+        .query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)))?
+        .collect::<Result<Vec<_>, _>>()?;
+    let mut index: HashMap<String, Vec<String>> = HashMap::new();
+    for (id, alias) in rows {
+        index.entry(id).or_default().push(alias);
+    }
+    Ok(index)
+}
+
+/// Everything this household can mark: the whole catalog plus exactly its own custom
+/// ingredients, each carrying its current mark. An absent household reads as the catalog with
+/// nothing marked, the same "reads as empty" contract [`load_restrictions`] states — a
+/// household with no records has no records in exactly the same sense.
+///
+/// `COLLATE NOCASE` is load-bearing: BINARY collation would sort every capitalised custom
+/// name ahead of the entire lowercase catalog rather than interleaving them.
+pub fn list_pantry_entries(
+    conn: &Connection,
+    household: &HouseholdId,
+) -> Result<Vec<PantryEntry>, StorageError> {
+    let mut stmt = conn.prepare(
+        "SELECT 'catalog' AS kind, i.id AS id, i.canonical_name AS name,
+                EXISTS(SELECT 1 FROM pantry_item p
+                       WHERE p.household_id = ?1 AND p.ingredient_id = i.id) AS marked
+         FROM ingredient i
+         UNION ALL
+         SELECT 'custom', c.id, c.name,
+                EXISTS(SELECT 1 FROM pantry_item p
+                       WHERE p.household_id = ?1 AND p.custom_ingredient_id = c.id)
+         FROM custom_ingredient c WHERE c.household_id = ?1
+         ORDER BY name COLLATE NOCASE, kind, id",
+    )?;
+    let rows = stmt
+        .query_map(params![household.as_str()], |r| {
+            Ok((
+                r.get::<_, String>(0)?,
+                r.get::<_, String>(1)?,
+                r.get::<_, String>(2)?,
+                r.get::<_, bool>(3)?,
+            ))
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
+    let mut aliases = alias_index(conn)?;
+    rows.into_iter()
+        .map(|(kind, id, name, marked)| {
+            // Keyed on the kind, not the bare id: a custom ingredient whose id string happens
+            // to match a catalog one must not inherit that catalog entry's aliases.
+            let (ingredient, aliases) = if kind == "catalog" {
+                (
+                    IngredientRef::Catalog(IngredientId::new(&id)?),
+                    aliases.remove(&id).unwrap_or_default(),
+                )
+            } else {
+                (
+                    IngredientRef::Custom(CustomIngredientId::new(&id)?),
+                    Vec::new(),
+                )
+            };
+            Ok(PantryEntry {
+                ingredient,
+                name,
+                aliases,
+                marked,
+            })
+        })
+        .collect::<Result<Vec<_>, StorageError>>()
+}
+
+/// Marks or unmarks one identity for one household in one IMMEDIATE transaction, and returns
+/// the entry as stored — the same return-what-was-written contract [`save_restrictions`] and
+/// [`save_planning_cycle`] keep. IMMEDIATE because it reads (`require_household`, the identity
+/// check) before it writes. Idempotent in both directions: marking twice leaves one row and
+/// unmarking twice leaves none, so a repeated tap is never an error.
+///
+/// Storing a mark is never an assertion about quantity, and removing one restores *no record*
+/// rather than recording absence (invariant 6, PRD §10).
+pub fn set_pantry_mark(
+    conn: &mut Connection,
+    household: &HouseholdId,
+    ingredient: &IngredientRef,
+    marked: bool,
+) -> Result<PantryEntry, StorageError> {
+    let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    require_household(&tx, household)?;
+    check_ingredient_ref(&tx, household, ingredient)?;
+    let (catalog_id, custom_id) = match ingredient {
+        IngredientRef::Catalog(id) => (Some(id.as_str()), None),
+        IngredientRef::Custom(id) => (None, Some(id.as_str())),
+    };
+    if marked {
+        // Untargeted `DO NOTHING`: a targeted `ON CONFLICT(household_id, ingredient_id)` will
+        // not prepare against a partial index unless the index's WHERE clause is repeated.
+        // Untargeted still propagates the CHECK violation, which is the wanted behaviour.
+        tx.execute(
+            "INSERT INTO pantry_item (household_id, ingredient_id, custom_ingredient_id)
+             VALUES (?1, ?2, ?3) ON CONFLICT DO NOTHING",
+            params![household.as_str(), catalog_id, custom_id],
+        )?;
+    } else {
+        tx.execute(
+            "DELETE FROM pantry_item
+             WHERE household_id = ?1 AND ingredient_id IS ?2 AND custom_ingredient_id IS ?3",
+            params![household.as_str(), catalog_id, custom_id],
+        )?;
+    }
+    let (name, aliases) = match ingredient {
+        IngredientRef::Catalog(id) => (
+            tx.query_row(
+                "SELECT canonical_name FROM ingredient WHERE id = ?1",
+                params![id.as_str()],
+                |r| r.get::<_, String>(0),
+            )?,
+            load_aliases(&tx, id)?,
+        ),
+        IngredientRef::Custom(id) => (
+            tx.query_row(
+                "SELECT name FROM custom_ingredient WHERE id = ?1",
+                params![id.as_str()],
+                |r| r.get::<_, String>(0),
+            )?,
+            Vec::new(),
+        ),
+    };
+    tx.commit()?;
+    Ok(PantryEntry {
+        ingredient: ingredient.clone(),
+        name,
+        aliases,
+        marked,
+    })
+}
+
 /// `(id, title)` of a recipe plus its line names, for listing without loading whole recipes.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RecipeSummary {
@@ -992,42 +1179,55 @@ pub enum RecipeListing {
     Archived,
 }
 
+/// Every referenced ingredient must exist, and every custom one must belong to `household`.
+/// Shared by `check_line_refs` and `set_pantry_mark`, so a foreign or absent identity is
+/// rejected identically whichever way it arrives.
+fn check_ingredient_ref(
+    conn: &Connection,
+    household: &HouseholdId,
+    ingredient: &IngredientRef,
+) -> Result<(), StorageError> {
+    match ingredient {
+        IngredientRef::Catalog(id) => {
+            let exists: bool = conn.query_row(
+                "SELECT EXISTS(SELECT 1 FROM ingredient WHERE id = ?1)",
+                params![id.as_str()],
+                |r| r.get(0),
+            )?;
+            if !exists {
+                return Err(StorageError::NoSuchIngredient(id.as_str().to_owned()));
+            }
+        }
+        IngredientRef::Custom(id) => {
+            let owner: Option<String> = conn
+                .query_row(
+                    "SELECT household_id FROM custom_ingredient WHERE id = ?1",
+                    params![id.as_str()],
+                    |r| r.get(0),
+                )
+                .optional()?;
+            match owner {
+                None => return Err(StorageError::NoSuchIngredient(id.as_str().to_owned())),
+                Some(actual) if actual != household.as_str() => {
+                    return Err(StorageError::CustomIngredientHouseholdMismatch {
+                        ingredient: id.as_str().to_owned(),
+                        expected: household.as_str().to_owned(),
+                        actual,
+                    });
+                }
+                Some(_) => {}
+            }
+        }
+    }
+    Ok(())
+}
+
 /// Every referenced ingredient must exist, and every custom one must belong to the recipe's
 /// household. All probes run before any write, so a rejected save leaves no partial row.
 fn check_line_refs(conn: &Connection, recipe: &Recipe) -> Result<(), StorageError> {
     for line in recipe.lines() {
-        match line.ingredient() {
-            None => {}
-            Some(IngredientRef::Catalog(id)) => {
-                let exists: bool = conn.query_row(
-                    "SELECT EXISTS(SELECT 1 FROM ingredient WHERE id = ?1)",
-                    params![id.as_str()],
-                    |r| r.get(0),
-                )?;
-                if !exists {
-                    return Err(StorageError::NoSuchIngredient(id.as_str().to_owned()));
-                }
-            }
-            Some(IngredientRef::Custom(id)) => {
-                let owner: Option<String> = conn
-                    .query_row(
-                        "SELECT household_id FROM custom_ingredient WHERE id = ?1",
-                        params![id.as_str()],
-                        |r| r.get(0),
-                    )
-                    .optional()?;
-                match owner {
-                    None => return Err(StorageError::NoSuchIngredient(id.as_str().to_owned())),
-                    Some(actual) if actual != recipe.household_id().as_str() => {
-                        return Err(StorageError::CustomIngredientHouseholdMismatch {
-                            ingredient: id.as_str().to_owned(),
-                            expected: recipe.household_id().as_str().to_owned(),
-                            actual,
-                        });
-                    }
-                    Some(_) => {}
-                }
-            }
+        if let Some(r) = line.ingredient() {
+            check_ingredient_ref(conn, recipe.household_id(), r)?;
         }
     }
     Ok(())
@@ -2153,7 +2353,7 @@ mod tests {
     /// on-device v1→v2 migration (PRD §12: tested from representative prior versions); since
     /// v4 it proves v1→latest end to end.
     #[test]
-    fn an_existing_v1_database_migrates_to_v7_without_losing_data() {
+    fn an_existing_v1_database_migrates_to_v8_without_losing_data() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("kimatta.db");
         {
@@ -2168,7 +2368,7 @@ mod tests {
             .unwrap();
         }
         let conn = open(&path).unwrap();
-        assert_eq!(schema_version(&conn).unwrap(), 7);
+        assert_eq!(schema_version(&conn).unwrap(), 8);
         assert_eq!(count(&conn, "household"), 1);
         assert_eq!(count(&conn, "household_member"), 2);
         assert_eq!(count(&conn, "planning_cycle"), 0);
@@ -2382,16 +2582,16 @@ mod tests {
     }
 
     #[test]
-    fn empty_db_migrates_to_v7() {
+    fn empty_db_migrates_to_v8() {
         let conn = open(":memory:").unwrap();
-        assert_eq!(schema_version(&conn).unwrap(), 7);
+        assert_eq!(schema_version(&conn).unwrap(), 8);
     }
 
     // --- Step 4: schema v3 -----------------------------------------------------------------
 
     /// Test-level stand-in for the on-device v2→v3 migration, as the v1 test is for v1→v2.
     #[test]
-    fn an_existing_v2_database_migrates_to_v7_without_losing_data() {
+    fn an_existing_v2_database_migrates_to_v8_without_losing_data() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("kimatta.db");
         {
@@ -2412,7 +2612,7 @@ mod tests {
             .unwrap();
         }
         let conn = open(&path).unwrap();
-        assert_eq!(schema_version(&conn).unwrap(), 7);
+        assert_eq!(schema_version(&conn).unwrap(), 8);
         assert_eq!(count(&conn, "household"), 1);
         assert_eq!(count(&conn, "planning_cycle"), 1);
         assert_eq!(count(&conn, "planning_meal_slot"), 2);
@@ -2425,7 +2625,7 @@ mod tests {
     /// theirs. A recipe is saved at v3 so the migration is proved not to disturb the tables
     /// migration 3 introduced, not merely the household one it alters.
     #[test]
-    fn an_existing_v3_database_migrates_to_v7_without_losing_data() {
+    fn an_existing_v3_database_migrates_to_v8_without_losing_data() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("kimatta.db");
         {
@@ -2437,7 +2637,7 @@ mod tests {
             insert_pre_v6_recipe(&raw, "h", "r");
         }
         let conn = open(&path).unwrap();
-        assert_eq!(schema_version(&conn).unwrap(), 7);
+        assert_eq!(schema_version(&conn).unwrap(), 8);
         assert_eq!(count(&conn, "household"), 1);
         assert_eq!(count(&conn, "household_member"), 1);
         assert_eq!(count(&conn, "recipe"), 1);
@@ -2451,7 +2651,7 @@ mod tests {
     /// test: a recipe saved at v4 must survive the `ALTER TABLE`s that add `archived_at` (v5)
     /// and `prep_minutes`/the rights columns (v6).
     #[test]
-    fn an_existing_v4_database_migrates_to_v7_without_losing_data() {
+    fn an_existing_v4_database_migrates_to_v8_without_losing_data() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("kimatta.db");
         {
@@ -2463,7 +2663,7 @@ mod tests {
             insert_pre_v6_recipe(&raw, "h", "r");
         }
         let conn = open(&path).unwrap();
-        assert_eq!(schema_version(&conn).unwrap(), 7);
+        assert_eq!(schema_version(&conn).unwrap(), 8);
         assert_eq!(count(&conn, "household"), 1);
         assert_eq!(count(&conn, "recipe"), 1);
         assert_eq!(count(&conn, "household_restriction"), 0);
@@ -3813,7 +4013,7 @@ mod tests {
             insert_household(&mut conn, &household("h"), &[member("m", "h")]).unwrap();
         }
         let conn = open(&path).unwrap();
-        assert_eq!(schema_version(&conn).unwrap(), 7);
+        assert_eq!(schema_version(&conn).unwrap(), 8);
         assert_eq!(count(&conn, "household"), 1);
         assert_eq!(count(&conn, "household_member"), 1);
         let on: i32 = conn
@@ -4405,7 +4605,7 @@ mod tests {
     }
 
     #[test]
-    fn an_existing_v5_database_migrates_to_v7_without_losing_data() {
+    fn an_existing_v5_database_migrates_to_v8_without_losing_data() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("kimatta.db");
         {
@@ -4417,7 +4617,7 @@ mod tests {
             insert_pre_v6_recipe(&raw, "h", "r");
         }
         let conn = open(&path).unwrap();
-        assert_eq!(schema_version(&conn).unwrap(), 7);
+        assert_eq!(schema_version(&conn).unwrap(), 8);
         assert_eq!(count(&conn, "household"), 1);
         assert_eq!(count(&conn, "recipe"), 1);
         assert_eq!(load(&conn, "h", "r").unwrap().title(), "Recipe r");
@@ -4444,7 +4644,7 @@ mod tests {
     /// predecessors: a recipe saved at v6 must survive the two new tables, which touch nothing
     /// that exists.
     #[test]
-    fn an_existing_v6_database_migrates_to_v7_without_losing_data() {
+    fn an_existing_v6_database_migrates_to_v8_without_losing_data() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("kimatta.db");
         {
@@ -4456,7 +4656,7 @@ mod tests {
             save_recipe(&mut raw, &recipe("h", "r", vec![])).unwrap();
         }
         let conn = open(&path).unwrap();
-        assert_eq!(schema_version(&conn).unwrap(), 7);
+        assert_eq!(schema_version(&conn).unwrap(), 8);
         assert_eq!(count(&conn, "household"), 1);
         assert_eq!(count(&conn, "recipe"), 1);
         assert_eq!(load(&conn, "h", "r").unwrap().title(), "Recipe r");
@@ -5913,5 +6113,366 @@ mod tests {
             matches!(&err, StorageError::NoSuchHousehold(h) if h == "nope"),
             "{err:?}"
         );
+    }
+
+    // --- MVP-014 step 2: schema v8, the optional binary pantry ---------------------------
+
+    const RAW_PANTRY: &str = "INSERT INTO pantry_item
+        (household_id, ingredient_id, custom_ingredient_id) VALUES (?1, ?2, ?3)";
+
+    /// A household, one catalog ingredient and one custom ingredient of that household, so
+    /// the pantry constraints below are the only thing a raw insert can trip.
+    fn seed_for_pantry(conn: &mut Connection, household: &str) {
+        seed(conn, household);
+        upsert_ingredient(conn, &ingredient("flour", "flour", &["plain flour"])).unwrap();
+        upsert_custom_ingredient(conn, &custom(&format!("c-{household}"), household, "mix"))
+            .unwrap();
+    }
+
+    /// Test-level stand-in for the on-device v7→v8 migration, in the pattern of its
+    /// predecessors: everything saved at v7 must survive a migration that only adds a table.
+    #[test]
+    fn an_existing_v7_database_migrates_to_v8_without_losing_data() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("kimatta.db");
+        {
+            let mut raw = Connection::open(&path).unwrap();
+            MIGRATIONS.to_version(&mut raw, 7).unwrap();
+            assert_eq!(schema_version(&raw).unwrap(), 7);
+            raw.pragma_update(None, "foreign_keys", "ON").unwrap();
+            seed(&mut raw, "h");
+            save_recipe(&mut raw, &recipe("h", "r", vec![])).unwrap();
+        }
+        let conn = open(&path).unwrap();
+        assert_eq!(schema_version(&conn).unwrap(), 8);
+        assert_eq!(count(&conn, "household"), 1);
+        assert_eq!(count(&conn, "recipe"), 1);
+        assert_eq!(load(&conn, "h", "r").unwrap().title(), "Recipe r");
+        assert_eq!(count(&conn, "pantry_item"), 0);
+    }
+
+    /// Adversarial: the exactly-one-of CHECK is what keeps a pantry row a single identity.
+    /// It fires before FK enforcement, so a row naming two ids that do not exist still
+    /// reports the CHECK.
+    #[test]
+    fn a_pantry_row_naming_both_or_neither_ingredient_kinds_is_rejected() {
+        let mut conn = open(":memory:").unwrap();
+        seed_for_pantry(&mut conn, "h");
+        let both = conn
+            .execute(RAW_PANTRY, params!["h", "flour", "c-h"])
+            .unwrap_err();
+        assert!(
+            both.to_string().contains("CHECK constraint failed"),
+            "{both}"
+        );
+        let neither = conn
+            .execute(
+                RAW_PANTRY,
+                params!["h", Option::<String>::None, Option::<String>::None],
+            )
+            .unwrap_err();
+        assert!(
+            neither.to_string().contains("CHECK constraint failed"),
+            "{neither}"
+        );
+        assert_eq!(count(&conn, "pantry_item"), 0);
+    }
+
+    /// Adversarial: the two partial unique indexes are the table's real key, since either
+    /// column is NULL half the time and so no PRIMARY KEY can carry it. A silently
+    /// ineffective index would let the duplicates through; scoping the key to the household
+    /// wrongly would refuse the second household.
+    #[test]
+    fn the_pantry_identity_indexes_reject_a_duplicate_row() {
+        let mut conn = open(":memory:").unwrap();
+        seed_for_pantry(&mut conn, "h");
+        seed_for_pantry(&mut conn, "h2");
+        conn.execute(RAW_PANTRY, params!["h", "flour", Option::<String>::None])
+            .unwrap();
+        let dup = conn
+            .execute(RAW_PANTRY, params!["h", "flour", Option::<String>::None])
+            .unwrap_err();
+        assert!(
+            dup.to_string().contains("UNIQUE constraint failed"),
+            "{dup}"
+        );
+
+        conn.execute(RAW_PANTRY, params!["h", Option::<String>::None, "c-h"])
+            .unwrap();
+        let dup_custom = conn
+            .execute(RAW_PANTRY, params!["h", Option::<String>::None, "c-h"])
+            .unwrap_err();
+        assert!(
+            dup_custom.to_string().contains("UNIQUE constraint failed"),
+            "{dup_custom}"
+        );
+
+        conn.execute(RAW_PANTRY, params!["h2", "flour", Option::<String>::None])
+            .unwrap();
+        assert_eq!(count(&conn, "pantry_item"), 3);
+    }
+
+    /// Absent-at-7 then present-at-8, for the reason
+    /// `the_line_ingredient_foreign_keys_are_indexed` gives: the claim is that migration 8
+    /// ships the indexes, not that the latest schema has them. The household-leading unique
+    /// indexes cannot serve an FK-parent-delete lookup, so each FK is indexed on its own.
+    #[test]
+    fn the_pantry_foreign_keys_are_indexed() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        MIGRATIONS.to_version(&mut conn, 7).unwrap();
+        assert!(index_names(&conn, "pantry_item").is_empty());
+        MIGRATIONS.to_version(&mut conn, 8).unwrap();
+        let names = index_names(&conn, "pantry_item");
+        for expected in [
+            "pantry_item_catalog",
+            "pantry_item_custom",
+            "pantry_item_ingredient",
+            "pantry_item_custom_ingredient",
+        ] {
+            assert!(names.contains(&expected.to_owned()), "{expected} missing");
+        }
+    }
+
+    // --- MVP-014 step 4: the pantry read projection and the mark command -----------------
+
+    fn catalog_ref(id: &str) -> IngredientRef {
+        IngredientRef::Catalog(IngredientId::new(id).unwrap())
+    }
+
+    fn custom_ref(id: &str) -> IngredientRef {
+        IngredientRef::Custom(CustomIngredientId::new(id).unwrap())
+    }
+
+    fn pantry(conn: &Connection, household: &str) -> Vec<PantryEntry> {
+        list_pantry_entries(conn, &hid(household)).unwrap()
+    }
+
+    fn marked_names(entries: &[PantryEntry]) -> Vec<&str> {
+        entries
+            .iter()
+            .filter(|e| e.marked)
+            .map(|e| e.name.as_str())
+            .collect()
+    }
+
+    #[test]
+    fn marking_an_identity_persists_and_unmarking_removes_it() {
+        let mut conn = open(":memory:").unwrap();
+        seed_for_pantry(&mut conn, "h");
+        let stored = set_pantry_mark(&mut conn, &hid("h"), &catalog_ref("flour"), true).unwrap();
+        assert!(stored.marked);
+        assert_eq!(stored.name, "flour");
+        assert_eq!(count(&conn, "pantry_item"), 1);
+        assert_eq!(marked_names(&pantry(&conn, "h")), vec!["flour"]);
+
+        let custom_stored =
+            set_pantry_mark(&mut conn, &hid("h"), &custom_ref("c-h"), true).unwrap();
+        assert!(custom_stored.marked);
+        assert_eq!(custom_stored.name, "mix");
+        assert_eq!(count(&conn, "pantry_item"), 2);
+
+        let cleared = set_pantry_mark(&mut conn, &hid("h"), &catalog_ref("flour"), false).unwrap();
+        assert!(!cleared.marked);
+        assert_eq!(cleared.name, "flour");
+        assert_eq!(marked_names(&pantry(&conn, "h")), vec!["mix"]);
+
+        set_pantry_mark(&mut conn, &hid("h"), &custom_ref("c-h"), false).unwrap();
+        assert_eq!(count(&conn, "pantry_item"), 0);
+    }
+
+    /// Edge: the UI toggles one row at a time and may repeat a tap, so both directions must
+    /// be idempotent rather than raising on the second call.
+    #[test]
+    fn marking_and_unmarking_are_both_idempotent() {
+        let mut conn = open(":memory:").unwrap();
+        seed_for_pantry(&mut conn, "h");
+        for _ in 0..2 {
+            set_pantry_mark(&mut conn, &hid("h"), &catalog_ref("flour"), true).unwrap();
+        }
+        assert_eq!(count(&conn, "pantry_item"), 1);
+        for _ in 0..2 {
+            set_pantry_mark(&mut conn, &hid("h"), &catalog_ref("flour"), false).unwrap();
+        }
+        assert_eq!(count(&conn, "pantry_item"), 0);
+    }
+
+    /// AC-2: nothing marked is a listing of unmarked identities, never an empty screen and
+    /// never a claim the household is out of anything.
+    #[test]
+    fn an_empty_pantry_lists_every_identity_as_unmarked() {
+        let mut conn = open(":memory:").unwrap();
+        seed_for_pantry(&mut conn, "h");
+        let entries = pantry(&conn, "h");
+        assert_eq!(entries.len(), 2);
+        assert!(entries.iter().all(|e| !e.marked));
+    }
+
+    #[test]
+    fn list_pantry_entries_covers_the_catalog_and_only_this_households_custom_ingredients() {
+        let mut conn = open(":memory:").unwrap();
+        seed_for_pantry(&mut conn, "h");
+        seed_for_pantry(&mut conn, "h2");
+        let entries = pantry(&conn, "h");
+        let refs: Vec<&IngredientRef> = entries.iter().map(|e| &e.ingredient).collect();
+        assert_eq!(refs, vec![&catalog_ref("flour"), &custom_ref("c-h")]);
+    }
+
+    /// R1: `ORDER BY` on a TEXT column is BINARY-collated, so without `COLLATE NOCASE` every
+    /// capitalised custom name sorts ahead of the whole lowercase catalog.
+    #[test]
+    fn pantry_entries_are_ordered_case_insensitively() {
+        let mut conn = open(":memory:").unwrap();
+        seed(&mut conn, "h");
+        upsert_ingredient(&mut conn, &ingredient("i-black", "black pepper", &[])).unwrap();
+        upsert_custom_ingredient(&mut conn, &custom("c-bacon", "h", "Bacon")).unwrap();
+        let entries = pantry(&conn, "h");
+        let names: Vec<&str> = entries.iter().map(|e| e.name.as_str()).collect();
+        assert_eq!(names, vec!["Bacon", "black pepper"]);
+    }
+
+    #[test]
+    fn catalog_entries_carry_their_aliases_and_custom_entries_carry_none() {
+        let mut conn = open(":memory:").unwrap();
+        seed(&mut conn, "h");
+        upsert_ingredient(
+            &mut conn,
+            &ingredient("chickpeas", "chickpeas", &["garbanzo beans", "ceci"]),
+        )
+        .unwrap();
+        upsert_ingredient(&mut conn, &ingredient("shrimp", "shrimp", &["prawns"])).unwrap();
+        upsert_custom_ingredient(&mut conn, &custom("c-h", "h", "nana's mix")).unwrap();
+        let entries = pantry(&conn, "h");
+        let by_name = |n: &str| {
+            entries
+                .iter()
+                .find(|e| e.name == n)
+                .unwrap_or_else(|| panic!("{n} missing"))
+        };
+        assert_eq!(by_name("chickpeas").aliases, vec!["ceci", "garbanzo beans"]);
+        assert_eq!(by_name("shrimp").aliases, vec!["prawns"]);
+        assert!(by_name("nana's mix").aliases.is_empty());
+    }
+
+    /// Adversarial (AC-3): a mark is one household's record and no other household's read or
+    /// write may see or clear it.
+    #[test]
+    fn pantry_reads_and_writes_are_household_scoped() {
+        let mut conn = open(":memory:").unwrap();
+        seed_for_pantry(&mut conn, "h1");
+        seed_for_pantry(&mut conn, "h2");
+        set_pantry_mark(&mut conn, &hid("h1"), &catalog_ref("flour"), true).unwrap();
+        assert_eq!(marked_names(&pantry(&conn, "h1")), vec!["flour"]);
+        assert!(marked_names(&pantry(&conn, "h2")).is_empty());
+
+        set_pantry_mark(&mut conn, &hid("h2"), &catalog_ref("flour"), false).unwrap();
+        assert_eq!(
+            marked_names(&pantry(&conn, "h1")),
+            vec!["flour"],
+            "h2's unmark must not clear h1's row"
+        );
+        assert_eq!(count(&conn, "pantry_item"), 1);
+    }
+
+    /// Adversarial: the identity check is the same one `check_line_refs` applies, so a
+    /// foreign custom ingredient is refused by name of the requesting household.
+    #[test]
+    fn a_custom_ingredient_of_another_household_cannot_be_marked() {
+        let mut conn = open(":memory:").unwrap();
+        seed_for_pantry(&mut conn, "h1");
+        seed_for_pantry(&mut conn, "h2");
+        let err = set_pantry_mark(&mut conn, &hid("h1"), &custom_ref("c-h2"), true).unwrap_err();
+        assert!(
+            matches!(
+                &err,
+                StorageError::CustomIngredientHouseholdMismatch { ingredient, expected, actual }
+                    if ingredient == "c-h2" && expected == "h1" && actual == "h2"
+            ),
+            "{err:?}"
+        );
+        assert_eq!(count(&conn, "pantry_item"), 0);
+    }
+
+    #[test]
+    fn marking_an_absent_ingredient_is_rejected_and_writes_nothing() {
+        let mut conn = open(":memory:").unwrap();
+        seed_for_pantry(&mut conn, "h");
+        let err = set_pantry_mark(&mut conn, &hid("h"), &catalog_ref("ghost"), true).unwrap_err();
+        assert!(
+            matches!(&err, StorageError::NoSuchIngredient(i) if i == "ghost"),
+            "{err:?}"
+        );
+        assert_eq!(count(&conn, "pantry_item"), 0);
+    }
+
+    /// The read deliberately does *not* `require_household`: a consumer listing before
+    /// bootstrap gets the catalog with nothing marked, not `NoSuchHousehold`. The write
+    /// rejects the same household (below); the asymmetry is the documented contract, and
+    /// adding `require_household` here for symmetry would break it silently.
+    #[test]
+    fn an_absent_household_reads_as_the_catalog_with_nothing_marked() {
+        let mut conn = open(":memory:").unwrap();
+        seed_for_pantry(&mut conn, "h");
+        // Marked for `h`, so this proves the ghost read does not leak another household's
+        // marks rather than only that an empty table reads unmarked.
+        set_pantry_mark(&mut conn, &hid("h"), &catalog_ref("flour"), true).unwrap();
+        let entries = list_pantry_entries(&conn, &hid("ghost")).unwrap();
+        assert_eq!(
+            entries.iter().map(|e| &e.ingredient).collect::<Vec<_>>(),
+            vec![&catalog_ref("flour")],
+            "the catalog, and no other household's customs"
+        );
+        assert!(entries.iter().all(|e| !e.marked));
+    }
+
+    #[test]
+    fn marking_for_an_absent_household_is_rejected() {
+        let mut conn = open(":memory:").unwrap();
+        seed_for_pantry(&mut conn, "h");
+        let err =
+            set_pantry_mark(&mut conn, &hid("ghost"), &catalog_ref("flour"), true).unwrap_err();
+        assert!(
+            matches!(&err, StorageError::NoSuchHousehold(h) if h == "ghost"),
+            "{err:?}"
+        );
+        assert_eq!(count(&conn, "pantry_item"), 0);
+    }
+
+    /// AC-1: the mark is durable, not process state.
+    #[test]
+    fn pantry_state_persists_across_reopen() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("kimatta.db");
+        {
+            let mut conn = open(&path).unwrap();
+            seed_for_pantry(&mut conn, "h");
+            set_pantry_mark(&mut conn, &hid("h"), &catalog_ref("flour"), true).unwrap();
+        }
+        let conn = open(&path).unwrap();
+        assert_eq!(marked_names(&pantry(&conn, "h")), vec!["flour"]);
+    }
+
+    /// Expected to pass by analogy with
+    /// `deleting_a_household_cascades_recipes_lines_provenance_and_custom_ingredients`, and
+    /// written anyway because `pantry_item` is the first table that is simultaneously a
+    /// cascading child of `household` and a `NO ACTION` child of `custom_ingredient`, itself
+    /// a cascading child of `household`: one delete exercises both edges.
+    #[test]
+    fn deleting_a_household_cascades_to_its_pantry_items() {
+        let mut conn = open(":memory:").unwrap();
+        seed_for_pantry(&mut conn, "h");
+        seed_for_pantry(&mut conn, "h2");
+        conn.execute(RAW_PANTRY, params!["h", "flour", Option::<String>::None])
+            .unwrap();
+        conn.execute(RAW_PANTRY, params!["h", Option::<String>::None, "c-h"])
+            .unwrap();
+        conn.execute(RAW_PANTRY, params!["h2", "flour", Option::<String>::None])
+            .unwrap();
+        conn.execute("DELETE FROM household WHERE id = 'h'", [])
+            .unwrap();
+        assert_eq!(count(&conn, "pantry_item"), 1);
+        let survivor: String = conn
+            .query_row("SELECT household_id FROM pantry_item", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(survivor, "h2");
     }
 }
