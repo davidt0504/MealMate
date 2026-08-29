@@ -14,7 +14,7 @@ import 'package:meal_mate/src/rust/api/household.dart';
 import 'package:meal_mate/features/planning/planning_provider.dart';
 import 'package:meal_mate/src/rust/api/planning.dart';
 
-const okReport = HealthReport(dbPath: '/x/kimatta.db', schemaVersion: 2);
+const okReport = HealthReport(dbPath: '/x/kimatta.db', schemaVersion: 3);
 const okCycle = PlanningCycleDto(
   householdId: 'h-1',
   anchorDate: '2026-08-29',
@@ -208,7 +208,7 @@ void main() {
 
     await tester.tap(tab('Settings'));
     await tester.pumpAndSettle();
-    expect(find.textContaining('schema v2 at /x/kimatta.db'), findsOneWidget);
+    expect(find.textContaining('schema v3 at /x/kimatta.db'), findsOneWidget);
   });
 
   testWidgets('Settings reports a storage failure instead of the report', (
@@ -285,7 +285,7 @@ void main() {
 
     pending.complete(okReport);
     await tester.pumpAndSettle();
-    expect(find.textContaining('schema v2 at /x/kimatta.db'), findsOneWidget);
+    expect(find.textContaining('schema v3 at /x/kimatta.db'), findsOneWidget);
   });
 
   // AC-3's bounded UI/state inspection: the default arrives with no setup step.

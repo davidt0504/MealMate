@@ -7,6 +7,7 @@ import 'api/error.dart';
 import 'api/health.dart';
 import 'api/household.dart';
 import 'api/planning.dart';
+import 'api/recipe.dart';
 
 import 'dart:async';
 import 'dart:convert';
@@ -72,7 +73,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.13.0';
 
   @override
-  int get rustContentHash => -1168370520;
+  int get rustContentHash => 563915109;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -84,6 +85,10 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
 }
 
 abstract class RustLibApi extends BaseApi {
+  Future<CustomIngredientDto> crateApiRecipeAddCustomIngredient({
+    required CustomIngredientDto item,
+  });
+
   Future<HouseholdDto> crateApiHouseholdBootstrapHousehold();
 
   String crateApiHealthCoreVersion();
@@ -94,6 +99,19 @@ abstract class RustLibApi extends BaseApi {
   });
 
   Future<void> crateApiHealthInitApp();
+
+  Future<List<CustomIngredientDto>> crateApiRecipeListCustomIngredients({
+    required String householdId,
+  });
+
+  Future<List<RecipeSummaryDto>> crateApiRecipeListRecipes({
+    required String householdId,
+  });
+
+  Future<RecipeDto?> crateApiRecipeLoadRecipe({
+    required String householdId,
+    required String recipeId,
+  });
 
   Future<HealthReport> crateApiHealthOpenDatabase({required String dbPath});
 
@@ -108,6 +126,8 @@ abstract class RustLibApi extends BaseApi {
     required int lengthDays,
     required List<MealSlotDto> mealSlots,
   });
+
+  Future<RecipeDto> crateApiRecipeSaveRecipe({required RecipeDto recipe});
 }
 
 class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
@@ -119,6 +139,39 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   });
 
   @override
+  Future<CustomIngredientDto> crateApiRecipeAddCustomIngredient({
+    required CustomIngredientDto item,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_box_autoadd_custom_ingredient_dto(item, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 1,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_custom_ingredient_dto,
+          decodeErrorData: sse_decode_kimatta_error,
+        ),
+        constMeta: kCrateApiRecipeAddCustomIngredientConstMeta,
+        argValues: [item],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiRecipeAddCustomIngredientConstMeta =>
+      const TaskConstMeta(
+        debugName: "add_custom_ingredient",
+        argNames: ["item"],
+      );
+
+  @override
   Future<HouseholdDto> crateApiHouseholdBootstrapHousehold() {
     return handler.executeNormal(
       NormalTask(
@@ -127,7 +180,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 1,
+            funcId: 2,
             port: port_,
           );
         },
@@ -151,7 +204,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       SyncTask(
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 2)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 3)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_String,
@@ -181,7 +234,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 3,
+            funcId: 4,
             port: port_,
           );
         },
@@ -211,7 +264,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 4,
+            funcId: 5,
             port: port_,
           );
         },
@@ -230,6 +283,103 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       const TaskConstMeta(debugName: "init_app", argNames: []);
 
   @override
+  Future<List<CustomIngredientDto>> crateApiRecipeListCustomIngredients({
+    required String householdId,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(householdId, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 6,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_list_custom_ingredient_dto,
+          decodeErrorData: sse_decode_kimatta_error,
+        ),
+        constMeta: kCrateApiRecipeListCustomIngredientsConstMeta,
+        argValues: [householdId],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiRecipeListCustomIngredientsConstMeta =>
+      const TaskConstMeta(
+        debugName: "list_custom_ingredients",
+        argNames: ["householdId"],
+      );
+
+  @override
+  Future<List<RecipeSummaryDto>> crateApiRecipeListRecipes({
+    required String householdId,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(householdId, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 7,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_list_recipe_summary_dto,
+          decodeErrorData: sse_decode_kimatta_error,
+        ),
+        constMeta: kCrateApiRecipeListRecipesConstMeta,
+        argValues: [householdId],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiRecipeListRecipesConstMeta =>
+      const TaskConstMeta(debugName: "list_recipes", argNames: ["householdId"]);
+
+  @override
+  Future<RecipeDto?> crateApiRecipeLoadRecipe({
+    required String householdId,
+    required String recipeId,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(householdId, serializer);
+          sse_encode_String(recipeId, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 8,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_opt_box_autoadd_recipe_dto,
+          decodeErrorData: sse_decode_kimatta_error,
+        ),
+        constMeta: kCrateApiRecipeLoadRecipeConstMeta,
+        argValues: [householdId, recipeId],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiRecipeLoadRecipeConstMeta => const TaskConstMeta(
+    debugName: "load_recipe",
+    argNames: ["householdId", "recipeId"],
+  );
+
+  @override
   Future<HealthReport> crateApiHealthOpenDatabase({required String dbPath}) {
     return handler.executeNormal(
       NormalTask(
@@ -239,7 +389,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 5,
+            funcId: 9,
             port: port_,
           );
         },
@@ -271,7 +421,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 6,
+            funcId: 10,
             port: port_,
           );
         },
@@ -310,7 +460,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 7,
+            funcId: 11,
             port: port_,
           );
         },
@@ -331,10 +481,84 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         argNames: ["householdId", "anchorDate", "lengthDays", "mealSlots"],
       );
 
+  @override
+  Future<RecipeDto> crateApiRecipeSaveRecipe({required RecipeDto recipe}) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_box_autoadd_recipe_dto(recipe, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 12,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_recipe_dto,
+          decodeErrorData: sse_decode_kimatta_error,
+        ),
+        constMeta: kCrateApiRecipeSaveRecipeConstMeta,
+        argValues: [recipe],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiRecipeSaveRecipeConstMeta =>
+      const TaskConstMeta(debugName: "save_recipe", argNames: ["recipe"]);
+
   @protected
   String dco_decode_String(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw as String;
+  }
+
+  @protected
+  bool dco_decode_bool(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw as bool;
+  }
+
+  @protected
+  CustomIngredientDto dco_decode_box_autoadd_custom_ingredient_dto(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_custom_ingredient_dto(raw);
+  }
+
+  @protected
+  IngredientRefDto dco_decode_box_autoadd_ingredient_ref_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_ingredient_ref_dto(raw);
+  }
+
+  @protected
+  RecipeDto dco_decode_box_autoadd_recipe_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_recipe_dto(raw);
+  }
+
+  @protected
+  int dco_decode_box_autoadd_u_32(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw as int;
+  }
+
+  @protected
+  CustomIngredientDto dco_decode_custom_ingredient_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 4)
+      throw Exception('unexpected arr length: expect 4 but see ${arr.length}');
+    return CustomIngredientDto(
+      id: dco_decode_String(arr[0]),
+      householdId: dco_decode_String(arr[1]),
+      name: dco_decode_String(arr[2]),
+      storeCategory: dco_decode_opt_String(arr[3]),
+    );
   }
 
   @protected
@@ -369,6 +593,36 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  IngredientLineDto dco_decode_ingredient_line_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 7)
+      throw Exception('unexpected arr length: expect 7 but see ${arr.length}');
+    return IngredientLineDto(
+      originalText: dco_decode_String(arr[0]),
+      name: dco_decode_String(arr[1]),
+      ingredient: dco_decode_opt_box_autoadd_ingredient_ref_dto(arr[2]),
+      quantity: dco_decode_quantity_dto(arr[3]),
+      unit: dco_decode_unit_dto(arr[4]),
+      preparation: dco_decode_opt_String(arr[5]),
+      optional: dco_decode_bool(arr[6]),
+    );
+  }
+
+  @protected
+  IngredientRefDto dco_decode_ingredient_ref_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    switch (raw[0]) {
+      case 0:
+        return IngredientRefDto_Catalog(id: dco_decode_String(raw[1]));
+      case 1:
+        return IngredientRefDto_Custom(id: dco_decode_String(raw[1]));
+      default:
+        throw Exception("unreachable");
+    }
+  }
+
+  @protected
   KimattaError dco_decode_kimatta_error(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     switch (raw[0]) {
@@ -380,6 +634,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         return KimattaError_Storage(message: dco_decode_String(raw[1]));
       case 3:
         return KimattaError_Planning(message: dco_decode_String(raw[1]));
+      case 4:
+        return KimattaError_Recipe(message: dco_decode_String(raw[1]));
       default:
         throw Exception("unreachable");
     }
@@ -389,6 +645,20 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   List<String> dco_decode_list_String(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return (raw as List<dynamic>).map(dco_decode_String).toList();
+  }
+
+  @protected
+  List<CustomIngredientDto> dco_decode_list_custom_ingredient_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>)
+        .map(dco_decode_custom_ingredient_dto)
+        .toList();
+  }
+
+  @protected
+  List<IngredientLineDto> dco_decode_list_ingredient_line_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>).map(dco_decode_ingredient_line_dto).toList();
   }
 
   @protected
@@ -407,6 +677,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   Uint8List dco_decode_list_prim_u_8_strict(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw as Uint8List;
+  }
+
+  @protected
+  List<RecipeSummaryDto> dco_decode_list_recipe_summary_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>).map(dco_decode_recipe_summary_dto).toList();
   }
 
   @protected
@@ -434,6 +710,24 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  IngredientRefDto? dco_decode_opt_box_autoadd_ingredient_ref_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw == null ? null : dco_decode_box_autoadd_ingredient_ref_dto(raw);
+  }
+
+  @protected
+  RecipeDto? dco_decode_opt_box_autoadd_recipe_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw == null ? null : dco_decode_box_autoadd_recipe_dto(raw);
+  }
+
+  @protected
+  int? dco_decode_opt_box_autoadd_u_32(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw == null ? null : dco_decode_box_autoadd_u_32(raw);
+  }
+
+  @protected
   PlanningCycleDto dco_decode_planning_cycle_dto(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
@@ -445,6 +739,72 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       lengthDays: dco_decode_u_32(arr[2]),
       mealSlots: dco_decode_list_meal_slot_dto(arr[3]),
       dates: dco_decode_list_String(arr[4]),
+    );
+  }
+
+  @protected
+  QuantityDto dco_decode_quantity_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    switch (raw[0]) {
+      case 0:
+        return QuantityDto_Unknown();
+      case 1:
+        return QuantityDto_Exact(
+          numer: dco_decode_u_32(raw[1]),
+          denom: dco_decode_u_32(raw[2]),
+        );
+      case 2:
+        return QuantityDto_Range(
+          minNumer: dco_decode_u_32(raw[1]),
+          minDenom: dco_decode_u_32(raw[2]),
+          maxNumer: dco_decode_u_32(raw[3]),
+          maxDenom: dco_decode_u_32(raw[4]),
+        );
+      default:
+        throw Exception("unreachable");
+    }
+  }
+
+  @protected
+  RecipeDto dco_decode_recipe_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 7)
+      throw Exception('unexpected arr length: expect 7 but see ${arr.length}');
+    return RecipeDto(
+      id: dco_decode_String(arr[0]),
+      householdId: dco_decode_String(arr[1]),
+      title: dco_decode_String(arr[2]),
+      servings: dco_decode_opt_box_autoadd_u_32(arr[3]),
+      instructions: dco_decode_String(arr[4]),
+      lines: dco_decode_list_ingredient_line_dto(arr[5]),
+      provenance: dco_decode_recipe_provenance_dto(arr[6]),
+    );
+  }
+
+  @protected
+  RecipeProvenanceDto dco_decode_recipe_provenance_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 4)
+      throw Exception('unexpected arr length: expect 4 but see ${arr.length}');
+    return RecipeProvenanceDto(
+      kind: dco_decode_String(arr[0]),
+      sourceUrl: dco_decode_opt_String(arr[1]),
+      sourceName: dco_decode_opt_String(arr[2]),
+      sourceAuthor: dco_decode_opt_String(arr[3]),
+    );
+  }
+
+  @protected
+  RecipeSummaryDto dco_decode_recipe_summary_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 2)
+      throw Exception('unexpected arr length: expect 2 but see ${arr.length}');
+    return RecipeSummaryDto(
+      id: dco_decode_String(arr[0]),
+      title: dco_decode_String(arr[1]),
     );
   }
 
@@ -467,10 +827,76 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  UnitDto dco_decode_unit_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    switch (raw[0]) {
+      case 0:
+        return UnitDto_None();
+      case 1:
+        return UnitDto_Known(unit: dco_decode_String(raw[1]));
+      case 2:
+        return UnitDto_Other(text: dco_decode_String(raw[1]));
+      default:
+        throw Exception("unreachable");
+    }
+  }
+
+  @protected
   String sse_decode_String(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var inner = sse_decode_list_prim_u_8_strict(deserializer);
     return utf8.decoder.convert(inner);
+  }
+
+  @protected
+  bool sse_decode_bool(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return deserializer.buffer.getUint8() != 0;
+  }
+
+  @protected
+  CustomIngredientDto sse_decode_box_autoadd_custom_ingredient_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_custom_ingredient_dto(deserializer));
+  }
+
+  @protected
+  IngredientRefDto sse_decode_box_autoadd_ingredient_ref_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_ingredient_ref_dto(deserializer));
+  }
+
+  @protected
+  RecipeDto sse_decode_box_autoadd_recipe_dto(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_recipe_dto(deserializer));
+  }
+
+  @protected
+  int sse_decode_box_autoadd_u_32(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_u_32(deserializer));
+  }
+
+  @protected
+  CustomIngredientDto sse_decode_custom_ingredient_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_id = sse_decode_String(deserializer);
+    var var_householdId = sse_decode_String(deserializer);
+    var var_name = sse_decode_String(deserializer);
+    var var_storeCategory = sse_decode_opt_String(deserializer);
+    return CustomIngredientDto(
+      id: var_id,
+      householdId: var_householdId,
+      name: var_name,
+      storeCategory: var_storeCategory,
+    );
   }
 
   @protected
@@ -497,6 +923,48 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  IngredientLineDto sse_decode_ingredient_line_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_originalText = sse_decode_String(deserializer);
+    var var_name = sse_decode_String(deserializer);
+    var var_ingredient = sse_decode_opt_box_autoadd_ingredient_ref_dto(
+      deserializer,
+    );
+    var var_quantity = sse_decode_quantity_dto(deserializer);
+    var var_unit = sse_decode_unit_dto(deserializer);
+    var var_preparation = sse_decode_opt_String(deserializer);
+    var var_optional = sse_decode_bool(deserializer);
+    return IngredientLineDto(
+      originalText: var_originalText,
+      name: var_name,
+      ingredient: var_ingredient,
+      quantity: var_quantity,
+      unit: var_unit,
+      preparation: var_preparation,
+      optional: var_optional,
+    );
+  }
+
+  @protected
+  IngredientRefDto sse_decode_ingredient_ref_dto(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var tag_ = sse_decode_i_32(deserializer);
+    switch (tag_) {
+      case 0:
+        var var_id = sse_decode_String(deserializer);
+        return IngredientRefDto_Catalog(id: var_id);
+      case 1:
+        var var_id = sse_decode_String(deserializer);
+        return IngredientRefDto_Custom(id: var_id);
+      default:
+        throw UnimplementedError('');
+    }
+  }
+
+  @protected
   KimattaError sse_decode_kimatta_error(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
 
@@ -512,6 +980,9 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       case 3:
         var var_message = sse_decode_String(deserializer);
         return KimattaError_Planning(message: var_message);
+      case 4:
+        var var_message = sse_decode_String(deserializer);
+        return KimattaError_Recipe(message: var_message);
       default:
         throw UnimplementedError('');
     }
@@ -525,6 +996,34 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var ans_ = <String>[];
     for (var idx_ = 0; idx_ < len_; ++idx_) {
       ans_.add(sse_decode_String(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
+  List<CustomIngredientDto> sse_decode_list_custom_ingredient_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <CustomIngredientDto>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_custom_ingredient_dto(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
+  List<IngredientLineDto> sse_decode_list_ingredient_line_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <IngredientLineDto>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_ingredient_line_dto(deserializer));
     }
     return ans_;
   }
@@ -563,6 +1062,20 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  List<RecipeSummaryDto> sse_decode_list_recipe_summary_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <RecipeSummaryDto>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_recipe_summary_dto(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
   MealSlotDto sse_decode_meal_slot_dto(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var inner = sse_decode_i_32(deserializer);
@@ -589,6 +1102,43 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  IngredientRefDto? sse_decode_opt_box_autoadd_ingredient_ref_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    if (sse_decode_bool(deserializer)) {
+      return (sse_decode_box_autoadd_ingredient_ref_dto(deserializer));
+    } else {
+      return null;
+    }
+  }
+
+  @protected
+  RecipeDto? sse_decode_opt_box_autoadd_recipe_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    if (sse_decode_bool(deserializer)) {
+      return (sse_decode_box_autoadd_recipe_dto(deserializer));
+    } else {
+      return null;
+    }
+  }
+
+  @protected
+  int? sse_decode_opt_box_autoadd_u_32(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    if (sse_decode_bool(deserializer)) {
+      return (sse_decode_box_autoadd_u_32(deserializer));
+    } else {
+      return null;
+    }
+  }
+
+  @protected
   PlanningCycleDto sse_decode_planning_cycle_dto(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var var_householdId = sse_decode_String(deserializer);
@@ -603,6 +1153,80 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       mealSlots: var_mealSlots,
       dates: var_dates,
     );
+  }
+
+  @protected
+  QuantityDto sse_decode_quantity_dto(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var tag_ = sse_decode_i_32(deserializer);
+    switch (tag_) {
+      case 0:
+        return QuantityDto_Unknown();
+      case 1:
+        var var_numer = sse_decode_u_32(deserializer);
+        var var_denom = sse_decode_u_32(deserializer);
+        return QuantityDto_Exact(numer: var_numer, denom: var_denom);
+      case 2:
+        var var_minNumer = sse_decode_u_32(deserializer);
+        var var_minDenom = sse_decode_u_32(deserializer);
+        var var_maxNumer = sse_decode_u_32(deserializer);
+        var var_maxDenom = sse_decode_u_32(deserializer);
+        return QuantityDto_Range(
+          minNumer: var_minNumer,
+          minDenom: var_minDenom,
+          maxNumer: var_maxNumer,
+          maxDenom: var_maxDenom,
+        );
+      default:
+        throw UnimplementedError('');
+    }
+  }
+
+  @protected
+  RecipeDto sse_decode_recipe_dto(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_id = sse_decode_String(deserializer);
+    var var_householdId = sse_decode_String(deserializer);
+    var var_title = sse_decode_String(deserializer);
+    var var_servings = sse_decode_opt_box_autoadd_u_32(deserializer);
+    var var_instructions = sse_decode_String(deserializer);
+    var var_lines = sse_decode_list_ingredient_line_dto(deserializer);
+    var var_provenance = sse_decode_recipe_provenance_dto(deserializer);
+    return RecipeDto(
+      id: var_id,
+      householdId: var_householdId,
+      title: var_title,
+      servings: var_servings,
+      instructions: var_instructions,
+      lines: var_lines,
+      provenance: var_provenance,
+    );
+  }
+
+  @protected
+  RecipeProvenanceDto sse_decode_recipe_provenance_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_kind = sse_decode_String(deserializer);
+    var var_sourceUrl = sse_decode_opt_String(deserializer);
+    var var_sourceName = sse_decode_opt_String(deserializer);
+    var var_sourceAuthor = sse_decode_opt_String(deserializer);
+    return RecipeProvenanceDto(
+      kind: var_kind,
+      sourceUrl: var_sourceUrl,
+      sourceName: var_sourceName,
+      sourceAuthor: var_sourceAuthor,
+    );
+  }
+
+  @protected
+  RecipeSummaryDto sse_decode_recipe_summary_dto(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_id = sse_decode_String(deserializer);
+    var var_title = sse_decode_String(deserializer);
+    return RecipeSummaryDto(id: var_id, title: var_title);
   }
 
   @protected
@@ -623,15 +1247,79 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  bool sse_decode_bool(SseDeserializer deserializer) {
+  UnitDto sse_decode_unit_dto(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
-    return deserializer.buffer.getUint8() != 0;
+
+    var tag_ = sse_decode_i_32(deserializer);
+    switch (tag_) {
+      case 0:
+        return UnitDto_None();
+      case 1:
+        var var_unit = sse_decode_String(deserializer);
+        return UnitDto_Known(unit: var_unit);
+      case 2:
+        var var_text = sse_decode_String(deserializer);
+        return UnitDto_Other(text: var_text);
+      default:
+        throw UnimplementedError('');
+    }
   }
 
   @protected
   void sse_encode_String(String self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_list_prim_u_8_strict(utf8.encoder.convert(self), serializer);
+  }
+
+  @protected
+  void sse_encode_bool(bool self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    serializer.buffer.putUint8(self ? 1 : 0);
+  }
+
+  @protected
+  void sse_encode_box_autoadd_custom_ingredient_dto(
+    CustomIngredientDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_custom_ingredient_dto(self, serializer);
+  }
+
+  @protected
+  void sse_encode_box_autoadd_ingredient_ref_dto(
+    IngredientRefDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_ingredient_ref_dto(self, serializer);
+  }
+
+  @protected
+  void sse_encode_box_autoadd_recipe_dto(
+    RecipeDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_recipe_dto(self, serializer);
+  }
+
+  @protected
+  void sse_encode_box_autoadd_u_32(int self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_u_32(self, serializer);
+  }
+
+  @protected
+  void sse_encode_custom_ingredient_dto(
+    CustomIngredientDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.id, serializer);
+    sse_encode_String(self.householdId, serializer);
+    sse_encode_String(self.name, serializer);
+    sse_encode_opt_String(self.storeCategory, serializer);
   }
 
   @protected
@@ -656,6 +1344,37 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_ingredient_line_dto(
+    IngredientLineDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.originalText, serializer);
+    sse_encode_String(self.name, serializer);
+    sse_encode_opt_box_autoadd_ingredient_ref_dto(self.ingredient, serializer);
+    sse_encode_quantity_dto(self.quantity, serializer);
+    sse_encode_unit_dto(self.unit, serializer);
+    sse_encode_opt_String(self.preparation, serializer);
+    sse_encode_bool(self.optional, serializer);
+  }
+
+  @protected
+  void sse_encode_ingredient_ref_dto(
+    IngredientRefDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    switch (self) {
+      case IngredientRefDto_Catalog(id: final id):
+        sse_encode_i_32(0, serializer);
+        sse_encode_String(id, serializer);
+      case IngredientRefDto_Custom(id: final id):
+        sse_encode_i_32(1, serializer);
+        sse_encode_String(id, serializer);
+    }
+  }
+
+  @protected
   void sse_encode_kimatta_error(KimattaError self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     switch (self) {
@@ -669,6 +1388,9 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       case KimattaError_Planning(message: final message):
         sse_encode_i_32(3, serializer);
         sse_encode_String(message, serializer);
+      case KimattaError_Recipe(message: final message):
+        sse_encode_i_32(4, serializer);
+        sse_encode_String(message, serializer);
     }
   }
 
@@ -678,6 +1400,30 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_i_32(self.length, serializer);
     for (final item in self) {
       sse_encode_String(item, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_list_custom_ingredient_dto(
+    List<CustomIngredientDto> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_custom_ingredient_dto(item, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_list_ingredient_line_dto(
+    List<IngredientLineDto> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_ingredient_line_dto(item, serializer);
     }
   }
 
@@ -716,6 +1462,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_list_recipe_summary_dto(
+    List<RecipeSummaryDto> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_recipe_summary_dto(item, serializer);
+    }
+  }
+
+  @protected
   void sse_encode_meal_slot_dto(MealSlotDto self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_i_32(self.index, serializer);
@@ -739,6 +1497,42 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_opt_box_autoadd_ingredient_ref_dto(
+    IngredientRefDto? self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    sse_encode_bool(self != null, serializer);
+    if (self != null) {
+      sse_encode_box_autoadd_ingredient_ref_dto(self, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_opt_box_autoadd_recipe_dto(
+    RecipeDto? self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    sse_encode_bool(self != null, serializer);
+    if (self != null) {
+      sse_encode_box_autoadd_recipe_dto(self, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_opt_box_autoadd_u_32(int? self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    sse_encode_bool(self != null, serializer);
+    if (self != null) {
+      sse_encode_box_autoadd_u_32(self, serializer);
+    }
+  }
+
+  @protected
   void sse_encode_planning_cycle_dto(
     PlanningCycleDto self,
     SseSerializer serializer,
@@ -749,6 +1543,64 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_u_32(self.lengthDays, serializer);
     sse_encode_list_meal_slot_dto(self.mealSlots, serializer);
     sse_encode_list_String(self.dates, serializer);
+  }
+
+  @protected
+  void sse_encode_quantity_dto(QuantityDto self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    switch (self) {
+      case QuantityDto_Unknown():
+        sse_encode_i_32(0, serializer);
+      case QuantityDto_Exact(numer: final numer, denom: final denom):
+        sse_encode_i_32(1, serializer);
+        sse_encode_u_32(numer, serializer);
+        sse_encode_u_32(denom, serializer);
+      case QuantityDto_Range(
+        minNumer: final minNumer,
+        minDenom: final minDenom,
+        maxNumer: final maxNumer,
+        maxDenom: final maxDenom,
+      ):
+        sse_encode_i_32(2, serializer);
+        sse_encode_u_32(minNumer, serializer);
+        sse_encode_u_32(minDenom, serializer);
+        sse_encode_u_32(maxNumer, serializer);
+        sse_encode_u_32(maxDenom, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_recipe_dto(RecipeDto self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.id, serializer);
+    sse_encode_String(self.householdId, serializer);
+    sse_encode_String(self.title, serializer);
+    sse_encode_opt_box_autoadd_u_32(self.servings, serializer);
+    sse_encode_String(self.instructions, serializer);
+    sse_encode_list_ingredient_line_dto(self.lines, serializer);
+    sse_encode_recipe_provenance_dto(self.provenance, serializer);
+  }
+
+  @protected
+  void sse_encode_recipe_provenance_dto(
+    RecipeProvenanceDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.kind, serializer);
+    sse_encode_opt_String(self.sourceUrl, serializer);
+    sse_encode_opt_String(self.sourceName, serializer);
+    sse_encode_opt_String(self.sourceAuthor, serializer);
+  }
+
+  @protected
+  void sse_encode_recipe_summary_dto(
+    RecipeSummaryDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.id, serializer);
+    sse_encode_String(self.title, serializer);
   }
 
   @protected
@@ -769,8 +1621,17 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  void sse_encode_bool(bool self, SseSerializer serializer) {
+  void sse_encode_unit_dto(UnitDto self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
-    serializer.buffer.putUint8(self ? 1 : 0);
+    switch (self) {
+      case UnitDto_None():
+        sse_encode_i_32(0, serializer);
+      case UnitDto_Known(unit: final unit):
+        sse_encode_i_32(1, serializer);
+        sse_encode_String(unit, serializer);
+      case UnitDto_Other(text: final text):
+        sse_encode_i_32(2, serializer);
+        sse_encode_String(text, serializer);
+    }
   }
 }

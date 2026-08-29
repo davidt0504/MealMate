@@ -4,8 +4,10 @@
 use std::path::Path;
 
 pub use food_domain::{
-    format_civil_date, parse_civil_date, CivilDate, MealScope, MealSlot, PlanningCycle,
-    PlanningError, DEFAULT_CYCLE_DAYS, MAX_CYCLE_DAYS, MIN_CYCLE_DAYS,
+    format_civil_date, parse_civil_date, CivilDate, CustomIngredient, CustomIngredientId,
+    Ingredient, IngredientId, IngredientLine, IngredientRef, MealScope, MealSlot, PlanningCycle,
+    PlanningError, ProvenanceKind, Quantity, QuantityRange, Rational, Recipe, RecipeError,
+    RecipeId, RecipeProvenance, Unit, UnitKind, DEFAULT_CYCLE_DAYS, MAX_CYCLE_DAYS, MIN_CYCLE_DAYS,
 };
 pub use household_core::{Household, HouseholdId, HouseholdMember, IdError, MemberId};
 pub use rusqlite::Connection;
@@ -33,6 +35,47 @@ pub enum StorageError {
     Planning(#[from] PlanningError),
     #[error("planning cycle for household {0} has no meal slots")]
     CorruptMealScope(String),
+    #[error(transparent)]
+    Recipe(#[from] RecipeError),
+    #[error("custom ingredient {ingredient} belongs to household {actual}, not {expected}")]
+    CustomIngredientHouseholdMismatch {
+        ingredient: String,
+        expected: String,
+        actual: String,
+    },
+    #[error("no recipe {recipe} in household {household}")]
+    NoSuchRecipe { recipe: String, household: String },
+    #[error("recipe {0} has a line with both a catalog and a custom ingredient")]
+    CorruptIngredientRef(String),
+    #[error("recipe {0} has no provenance row")]
+    CorruptProvenance(String),
+    #[error("no ingredient {0}")]
+    NoSuchIngredient(String),
+    #[error(
+        "recipe {recipe} line {position} has quantity_kind {kind:?} \
+         with min ({min_numer:?}, {min_denom:?}) and max ({max_numer:?}, {max_denom:?})"
+    )]
+    CorruptQuantity {
+        recipe: String,
+        position: usize,
+        kind: String,
+        min_numer: Option<u32>,
+        min_denom: Option<u32>,
+        max_numer: Option<u32>,
+        max_denom: Option<u32>,
+    },
+    #[error("recipe {recipe} line {position} has unit_kind {kind:?} with unit_text {text:?}")]
+    CorruptUnit {
+        recipe: String,
+        position: usize,
+        kind: String,
+        text: Option<String>,
+    },
+    #[error("no custom ingredient {ingredient} in household {household}")]
+    NoSuchCustomIngredient {
+        ingredient: String,
+        household: String,
+    },
 }
 
 // Two consts: `M` has drop glue, so an inline `&[M::up(..)]` argument is not promoted
@@ -63,6 +106,71 @@ const MIGRATION_ARRAY: &[M] = &[
         slot TEXT NOT NULL,
         PRIMARY KEY (household_id, slot)
     ) STRICT;",
+    ),
+    // CHECKs only on stable invariants (servings ≥ 1, boolean, ref exclusivity); the
+    // `kind`/`quantity_kind`/`unit_kind` vocabularies grow and are validated by parse on
+    // read and write. The two ingredient FKs deliberately carry no `ON DELETE CASCADE`:
+    // deleting an ingredient must not silently drop recipe lines (PRD §12), so the default
+    // `NO ACTION` makes such a delete fail — and both are indexed so proving no child row
+    // references the parent is a lookup, not a scan of every line of every recipe.
+    // `ingredient` has no `household_id`: it is the global catalog; only `custom_ingredient`
+    // is household-owned.
+    M::up(
+        "CREATE TABLE ingredient (
+        id TEXT PRIMARY KEY NOT NULL,
+        canonical_name TEXT NOT NULL,
+        store_category TEXT
+    ) STRICT;
+    CREATE TABLE ingredient_alias (
+        ingredient_id TEXT NOT NULL REFERENCES ingredient(id) ON DELETE CASCADE,
+        alias TEXT NOT NULL,
+        PRIMARY KEY (ingredient_id, alias)
+    ) STRICT;
+    CREATE TABLE custom_ingredient (
+        id TEXT PRIMARY KEY NOT NULL,
+        household_id TEXT NOT NULL REFERENCES household(id) ON DELETE CASCADE,
+        name TEXT NOT NULL,
+        store_category TEXT
+    ) STRICT;
+    CREATE INDEX custom_ingredient_household ON custom_ingredient(household_id);
+    CREATE TABLE recipe (
+        id TEXT PRIMARY KEY NOT NULL,
+        household_id TEXT NOT NULL REFERENCES household(id) ON DELETE CASCADE,
+        title TEXT NOT NULL,
+        servings INTEGER CHECK (servings IS NULL OR servings >= 1),
+        instructions TEXT NOT NULL
+    ) STRICT;
+    CREATE INDEX recipe_household ON recipe(household_id);
+    CREATE TABLE recipe_provenance (
+        recipe_id TEXT PRIMARY KEY NOT NULL REFERENCES recipe(id) ON DELETE CASCADE,
+        kind TEXT NOT NULL,
+        source_url TEXT,
+        source_name TEXT,
+        source_author TEXT
+    ) STRICT;
+    CREATE TABLE recipe_ingredient_line (
+        recipe_id TEXT NOT NULL REFERENCES recipe(id) ON DELETE CASCADE,
+        position INTEGER NOT NULL,
+        original_text TEXT NOT NULL,
+        name TEXT NOT NULL,
+        ingredient_id TEXT REFERENCES ingredient(id),
+        custom_ingredient_id TEXT REFERENCES custom_ingredient(id),
+        quantity_kind TEXT NOT NULL,
+        min_numer INTEGER,
+        min_denom INTEGER,
+        max_numer INTEGER,
+        max_denom INTEGER,
+        unit_kind TEXT NOT NULL,
+        unit_text TEXT,
+        preparation TEXT,
+        optional INTEGER NOT NULL CHECK (optional IN (0, 1)),
+        PRIMARY KEY (recipe_id, position),
+        CHECK (ingredient_id IS NULL OR custom_ingredient_id IS NULL)
+    ) STRICT;
+    CREATE INDEX recipe_ingredient_line_ingredient
+        ON recipe_ingredient_line(ingredient_id);
+    CREATE INDEX recipe_ingredient_line_custom_ingredient
+        ON recipe_ingredient_line(custom_ingredient_id);",
     ),
 ];
 pub const MIGRATIONS: Migrations<'static> = Migrations::from_slice(MIGRATION_ARRAY);
@@ -348,6 +456,489 @@ pub fn load_planning_cycle(
     )?))
 }
 
+/// Inserts or replaces a catalog ingredient and its whole alias set (MVP-011 seeding path).
+/// Aliases arrive sorted and deduplicated from `Ingredient::new`, so the alias PK cannot trip.
+pub fn upsert_ingredient(
+    conn: &mut Connection,
+    ingredient: &Ingredient,
+) -> Result<(), StorageError> {
+    let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    let id = ingredient.id().as_str();
+    tx.execute(
+        "INSERT INTO ingredient (id, canonical_name, store_category) VALUES (?1, ?2, ?3)
+         ON CONFLICT(id) DO UPDATE SET
+             canonical_name = excluded.canonical_name,
+             store_category = excluded.store_category",
+        params![id, ingredient.canonical_name(), ingredient.store_category()],
+    )?;
+    tx.execute(
+        "DELETE FROM ingredient_alias WHERE ingredient_id = ?1",
+        params![id],
+    )?;
+    for alias in ingredient.aliases() {
+        tx.execute(
+            "INSERT INTO ingredient_alias (ingredient_id, alias) VALUES (?1, ?2)",
+            params![id, alias],
+        )?;
+    }
+    tx.commit()?;
+    Ok(())
+}
+
+/// The catalog ingredient `id`, or `None`. Rows go back through `Ingredient::new`, so a
+/// corrupt row surfaces as `StorageError::Recipe`.
+pub fn load_ingredient(
+    conn: &Connection,
+    id: &IngredientId,
+) -> Result<Option<Ingredient>, StorageError> {
+    let row = conn
+        .query_row(
+            "SELECT canonical_name, store_category FROM ingredient WHERE id = ?1",
+            params![id.as_str()],
+            |r| Ok((r.get::<_, String>(0)?, r.get::<_, Option<String>>(1)?)),
+        )
+        .optional()?;
+    let Some((canonical_name, store_category)) = row else {
+        return Ok(None);
+    };
+    let mut stmt =
+        conn.prepare("SELECT alias FROM ingredient_alias WHERE ingredient_id = ?1 ORDER BY alias")?;
+    let aliases = stmt
+        .query_map(params![id.as_str()], |r| r.get::<_, String>(0))?
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(Some(Ingredient::new(
+        id.clone(),
+        canonical_name,
+        aliases,
+        store_category,
+    )?))
+}
+
+/// Inserts or replaces a household's custom ingredient. `NoSuchHousehold` for an absent
+/// parent. As `save_recipe` does for a recipe id, the current owner is probed inside the
+/// transaction: an id already owned by another household is `NoSuchCustomIngredient` naming
+/// only the *requesting* household, never a raw UNIQUE-constraint error confirming the id
+/// exists somewhere.
+pub fn upsert_custom_ingredient(
+    conn: &mut Connection,
+    item: &CustomIngredient,
+) -> Result<(), StorageError> {
+    let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    require_household(&tx, item.household_id())?;
+    let id = item.id().as_str();
+    let owner: Option<String> = tx
+        .query_row(
+            "SELECT household_id FROM custom_ingredient WHERE id = ?1",
+            params![id],
+            |r| r.get(0),
+        )
+        .optional()?;
+    if owner.is_some_and(|o| o != item.household_id().as_str()) {
+        return Err(StorageError::NoSuchCustomIngredient {
+            ingredient: id.to_owned(),
+            household: item.household_id().as_str().to_owned(),
+        });
+    }
+    // `household_id` is not in the DO UPDATE list: the probe above already established the
+    // row is this household's, so an upsert can never move a row between households.
+    tx.execute(
+        "INSERT INTO custom_ingredient (id, household_id, name, store_category)
+         VALUES (?1, ?2, ?3, ?4)
+         ON CONFLICT(id) DO UPDATE SET
+             name = excluded.name,
+             store_category = excluded.store_category",
+        params![
+            id,
+            item.household_id().as_str(),
+            item.name(),
+            item.store_category(),
+        ],
+    )?;
+    tx.commit()?;
+    Ok(())
+}
+
+/// Every custom ingredient of exactly `household`, ordered by name then id.
+pub fn list_custom_ingredients(
+    conn: &Connection,
+    household: &HouseholdId,
+) -> Result<Vec<CustomIngredient>, StorageError> {
+    let mut stmt = conn.prepare(
+        "SELECT id, name, store_category FROM custom_ingredient
+         WHERE household_id = ?1 ORDER BY name, id",
+    )?;
+    let items = stmt
+        .query_map(params![household.as_str()], |r| {
+            Ok((
+                r.get::<_, String>(0)?,
+                r.get::<_, String>(1)?,
+                r.get::<_, Option<String>>(2)?,
+            ))
+        })?
+        .map(|row| {
+            let (id, name, store_category) = row?;
+            Ok(CustomIngredient::new(
+                CustomIngredientId::new(id)?,
+                household.clone(),
+                name,
+                store_category,
+            )?)
+        })
+        .collect();
+    items
+}
+
+/// `(id, title)` of a recipe, for listing without loading its lines.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RecipeSummary {
+    pub id: RecipeId,
+    pub title: String,
+}
+
+/// Every referenced ingredient must exist, and every custom one must belong to the recipe's
+/// household. All probes run before any write, so a rejected save leaves no partial row.
+fn check_line_refs(conn: &Connection, recipe: &Recipe) -> Result<(), StorageError> {
+    for line in recipe.lines() {
+        match line.ingredient() {
+            None => {}
+            Some(IngredientRef::Catalog(id)) => {
+                let exists: bool = conn.query_row(
+                    "SELECT EXISTS(SELECT 1 FROM ingredient WHERE id = ?1)",
+                    params![id.as_str()],
+                    |r| r.get(0),
+                )?;
+                if !exists {
+                    return Err(StorageError::NoSuchIngredient(id.as_str().to_owned()));
+                }
+            }
+            Some(IngredientRef::Custom(id)) => {
+                let owner: Option<String> = conn
+                    .query_row(
+                        "SELECT household_id FROM custom_ingredient WHERE id = ?1",
+                        params![id.as_str()],
+                        |r| r.get(0),
+                    )
+                    .optional()?;
+                match owner {
+                    None => return Err(StorageError::NoSuchIngredient(id.as_str().to_owned())),
+                    Some(actual) if actual != recipe.household_id().as_str() => {
+                        return Err(StorageError::CustomIngredientHouseholdMismatch {
+                            ingredient: id.as_str().to_owned(),
+                            expected: recipe.household_id().as_str().to_owned(),
+                            actual,
+                        });
+                    }
+                    Some(_) => {}
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Inserts or wholly replaces the recipe, its provenance row and its whole line set in one
+/// IMMEDIATE transaction. Every custom-ingredient reference must belong to
+/// `recipe.household_id()`; a mismatch is rejected before any row is written. An existing
+/// recipe id owned by another household is `NoSuchRecipe`, never hijacked.
+pub fn save_recipe(conn: &mut Connection, recipe: &Recipe) -> Result<(), StorageError> {
+    let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    require_household(&tx, recipe.household_id())?;
+    check_line_refs(&tx, recipe)?;
+    let id = recipe.id().as_str();
+    let owner: Option<String> = tx
+        .query_row(
+            "SELECT household_id FROM recipe WHERE id = ?1",
+            params![id],
+            |r| r.get(0),
+        )
+        .optional()?;
+    if owner.is_some_and(|o| o != recipe.household_id().as_str()) {
+        return Err(StorageError::NoSuchRecipe {
+            recipe: id.to_owned(),
+            household: recipe.household_id().as_str().to_owned(),
+        });
+    }
+    tx.execute(
+        "INSERT INTO recipe (id, household_id, title, servings, instructions)
+         VALUES (?1, ?2, ?3, ?4, ?5)
+         ON CONFLICT(id) DO UPDATE SET
+             title = excluded.title,
+             servings = excluded.servings,
+             instructions = excluded.instructions",
+        params![
+            id,
+            recipe.household_id().as_str(),
+            recipe.title(),
+            recipe.servings(),
+            recipe.instructions(),
+        ],
+    )?;
+    let p = recipe.provenance();
+    tx.execute(
+        "INSERT INTO recipe_provenance (recipe_id, kind, source_url, source_name, source_author)
+         VALUES (?1, ?2, ?3, ?4, ?5)
+         ON CONFLICT(recipe_id) DO UPDATE SET
+             kind = excluded.kind,
+             source_url = excluded.source_url,
+             source_name = excluded.source_name,
+             source_author = excluded.source_author",
+        params![
+            id,
+            p.kind().as_str(),
+            p.source_url(),
+            p.source_name(),
+            p.source_author(),
+        ],
+    )?;
+    tx.execute(
+        "DELETE FROM recipe_ingredient_line WHERE recipe_id = ?1",
+        params![id],
+    )?;
+    for (position, line) in recipe.lines().iter().enumerate() {
+        let (ingredient_id, custom_ingredient_id) = match line.ingredient() {
+            None => (None, None),
+            Some(IngredientRef::Catalog(i)) => (Some(i.as_str()), None),
+            Some(IngredientRef::Custom(c)) => (None, Some(c.as_str())),
+        };
+        // `Unknown` → all NULL; `Exact` → min only; `Range` → both bounds.
+        let (min, max) = match line.quantity() {
+            Quantity::Unknown => (None, None),
+            Quantity::Exact(r) => (Some(r), None),
+            Quantity::Range(range) => (Some(range.min()), Some(range.max())),
+        };
+        let (unit_kind, unit_text) = match line.unit() {
+            Unit::None => ("none", None),
+            Unit::Known(kind) => ("known", Some(kind.as_str())),
+            Unit::Other(text) => ("other", Some(text.as_str())),
+        };
+        tx.execute(
+            "INSERT INTO recipe_ingredient_line
+             (recipe_id, position, original_text, name, ingredient_id, custom_ingredient_id,
+              quantity_kind, min_numer, min_denom, max_numer, max_denom,
+              unit_kind, unit_text, preparation, optional)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
+            params![
+                id,
+                position as u32,
+                line.original_text(),
+                line.name(),
+                ingredient_id,
+                custom_ingredient_id,
+                line.quantity().kind_str(),
+                min.map(Rational::numer),
+                min.map(Rational::denom),
+                max.map(Rational::numer),
+                max.map(Rational::denom),
+                unit_kind,
+                unit_text,
+                line.preparation(),
+                line.optional(),
+            ],
+        )?;
+    }
+    tx.commit()?;
+    Ok(())
+}
+
+/// One stored line, before it goes back through the domain constructors.
+struct LineRow {
+    original_text: String,
+    name: String,
+    ingredient_id: Option<String>,
+    custom_ingredient_id: Option<String>,
+    quantity_kind: String,
+    min: (Option<u32>, Option<u32>),
+    max: (Option<u32>, Option<u32>),
+    unit_kind: String,
+    unit_text: Option<String>,
+    preparation: Option<String>,
+    optional: bool,
+}
+
+/// A bound is present only when both of its columns are; a half-present bound is treated as
+/// absent and then caught by the kind check below as `CorruptQuantity`, which names the
+/// columns — the kind is not the fault when a valid kind meets inconsistent bounds.
+fn bound(numer: Option<u32>, denom: Option<u32>) -> Result<Option<Rational>, RecipeError> {
+    match (numer, denom) {
+        (Some(n), Some(d)) => Ok(Some(Rational::new(n, d)?)),
+        _ => Ok(None),
+    }
+}
+
+/// `position` is the line's index within the recipe. `load_recipe` reads lines `ORDER BY
+/// position` over a set `save_recipe` rewrites whole with gap-free `enumerate()` positions,
+/// so the enumeration index equals the stored column; a future change that can leave gaps
+/// must select `position` instead of counting.
+fn line_from_row(
+    recipe_id: &str,
+    position: usize,
+    row: LineRow,
+) -> Result<IngredientLine, StorageError> {
+    let ingredient = match (row.ingredient_id, row.custom_ingredient_id) {
+        (None, None) => None,
+        (Some(i), None) => Some(IngredientRef::Catalog(IngredientId::new(i)?)),
+        (None, Some(c)) => Some(IngredientRef::Custom(CustomIngredientId::new(c)?)),
+        // Unreachable under the CHECK, but never resolved by picking one.
+        (Some(_), Some(_)) => {
+            return Err(StorageError::CorruptIngredientRef(recipe_id.to_owned()));
+        }
+    };
+    let min = bound(row.min.0, row.min.1)?;
+    let max = bound(row.max.0, row.max.1)?;
+    // Split, so each error names the column actually at fault: a kind from the known
+    // vocabulary meeting bounds that do not match it is a bounds fault, and reporting it as
+    // `unknown quantity kind "exact"` sends a maintainer to grep a vocabulary that is fine.
+    let quantity = match (row.quantity_kind.as_str(), min, max) {
+        ("unknown", None, None) => Quantity::Unknown,
+        ("exact", Some(r), None) => Quantity::Exact(r),
+        ("range", Some(lo), Some(hi)) => Quantity::Range(QuantityRange::new(lo, hi)?),
+        ("unknown" | "exact" | "range", _, _) => {
+            return Err(StorageError::CorruptQuantity {
+                recipe: recipe_id.to_owned(),
+                position,
+                kind: row.quantity_kind,
+                min_numer: row.min.0,
+                min_denom: row.min.1,
+                max_numer: row.max.0,
+                max_denom: row.max.1,
+            });
+        }
+        (kind, _, _) => return Err(RecipeError::UnknownQuantityKind(kind.to_owned()).into()),
+    };
+    // Not split, unlike quantity above: `RecipeError::UnknownUnit` is `UnitKind::parse`'s
+    // error and carries a unit string, so feeding it a `unit_kind` discriminant would put two
+    // vocabularies in one variant. Both faults report the columns instead.
+    let unit = match (row.unit_kind.as_str(), row.unit_text.as_deref()) {
+        ("none", None) => Unit::None,
+        ("known", Some(text)) => Unit::Known(UnitKind::parse(text)?),
+        ("other", Some(text)) => Unit::Other(text.to_owned()),
+        (kind, text) => {
+            return Err(StorageError::CorruptUnit {
+                recipe: recipe_id.to_owned(),
+                position,
+                kind: kind.to_owned(),
+                text: text.map(str::to_owned),
+            });
+        }
+    };
+    Ok(IngredientLine::new(
+        row.original_text,
+        row.name,
+        ingredient,
+        quantity,
+        unit,
+        row.preparation,
+        row.optional,
+    )?)
+}
+
+/// The recipe `id` **in `household`**, or `None` — another household's recipe is `None`,
+/// never the row. Every stored value goes back through the domain constructors, so a row
+/// that violates an invariant surfaces as `StorageError::Recipe`, never as an invalid value.
+pub fn load_recipe(
+    conn: &Connection,
+    household: &HouseholdId,
+    id: &RecipeId,
+) -> Result<Option<Recipe>, StorageError> {
+    let row = conn
+        .query_row(
+            "SELECT title, servings, instructions FROM recipe
+             WHERE id = ?1 AND household_id = ?2",
+            params![id.as_str(), household.as_str()],
+            |r| {
+                Ok((
+                    r.get::<_, String>(0)?,
+                    r.get::<_, Option<u32>>(1)?,
+                    r.get::<_, String>(2)?,
+                ))
+            },
+        )
+        .optional()?;
+    let Some((title, servings, instructions)) = row else {
+        return Ok(None);
+    };
+    let provenance = conn
+        .query_row(
+            "SELECT kind, source_url, source_name, source_author FROM recipe_provenance
+             WHERE recipe_id = ?1",
+            params![id.as_str()],
+            |r| {
+                Ok((
+                    r.get::<_, String>(0)?,
+                    r.get::<_, Option<String>>(1)?,
+                    r.get::<_, Option<String>>(2)?,
+                    r.get::<_, Option<String>>(3)?,
+                ))
+            },
+        )
+        .optional()?;
+    let Some((kind, source_url, source_name, source_author)) = provenance else {
+        return Err(StorageError::CorruptProvenance(id.as_str().to_owned()));
+    };
+    let provenance = RecipeProvenance::new(
+        ProvenanceKind::parse(&kind)?,
+        source_url,
+        source_name,
+        source_author,
+    )?;
+    let mut stmt = conn.prepare(
+        "SELECT original_text, name, ingredient_id, custom_ingredient_id, quantity_kind,
+                min_numer, min_denom, max_numer, max_denom, unit_kind, unit_text,
+                preparation, optional
+         FROM recipe_ingredient_line WHERE recipe_id = ?1 ORDER BY position",
+    )?;
+    let lines = stmt
+        .query_map(params![id.as_str()], |r| {
+            Ok(LineRow {
+                original_text: r.get(0)?,
+                name: r.get(1)?,
+                ingredient_id: r.get(2)?,
+                custom_ingredient_id: r.get(3)?,
+                quantity_kind: r.get(4)?,
+                min: (r.get(5)?, r.get(6)?),
+                max: (r.get(7)?, r.get(8)?),
+                unit_kind: r.get(9)?,
+                unit_text: r.get(10)?,
+                preparation: r.get(11)?,
+                optional: r.get(12)?,
+            })
+        })?
+        .enumerate()
+        .map(|(position, row)| line_from_row(id.as_str(), position, row?))
+        .collect::<Result<Vec<_>, StorageError>>()?;
+    Ok(Some(Recipe::new(
+        id.clone(),
+        household.clone(),
+        title,
+        servings,
+        instructions,
+        lines,
+        provenance,
+    )?))
+}
+
+/// `(id, title)` of every recipe in `household`, ordered by title then id.
+pub fn list_recipes(
+    conn: &Connection,
+    household: &HouseholdId,
+) -> Result<Vec<RecipeSummary>, StorageError> {
+    let mut stmt =
+        conn.prepare("SELECT id, title FROM recipe WHERE household_id = ?1 ORDER BY title, id")?;
+    let summaries = stmt
+        .query_map(params![household.as_str()], |r| {
+            Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?))
+        })?
+        .map(|row| {
+            let (id, title) = row?;
+            Ok(RecipeSummary {
+                id: RecipeId::new(id)?,
+                title,
+            })
+        })
+        .collect();
+    summaries
+}
+
 #[cfg(test)]
 mod tests {
     use household_core::{HouseholdId, MemberId};
@@ -520,9 +1111,10 @@ mod tests {
 
     /// `open()` always migrates to latest, so v1 is unreachable through the public API once v2
     /// exists — hence the raw connection and `to_version`. Test-level stand-in for the
-    /// on-device v1→v2 migration (PRD §12: tested from representative prior versions).
+    /// on-device v1→v2 migration (PRD §12: tested from representative prior versions); since
+    /// v3 it proves v1→v3 end to end.
     #[test]
-    fn an_existing_v1_database_migrates_to_v2_without_losing_data() {
+    fn an_existing_v1_database_migrates_to_v3_without_losing_data() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("kimatta.db");
         {
@@ -537,10 +1129,11 @@ mod tests {
             .unwrap();
         }
         let conn = open(&path).unwrap();
-        assert_eq!(schema_version(&conn).unwrap(), 2);
+        assert_eq!(schema_version(&conn).unwrap(), 3);
         assert_eq!(count(&conn, "household"), 1);
         assert_eq!(count(&conn, "household_member"), 2);
         assert_eq!(count(&conn, "planning_cycle"), 0);
+        assert_eq!(count(&conn, "recipe"), 0);
     }
 
     /// Pins the two-level cascade: household → planning_cycle → planning_meal_slot.
@@ -750,14 +1343,969 @@ mod tests {
     }
 
     #[test]
-    fn empty_db_migrates_to_v2() {
+    fn empty_db_migrates_to_v3() {
         let conn = open(":memory:").unwrap();
-        assert_eq!(schema_version(&conn).unwrap(), 2);
+        assert_eq!(schema_version(&conn).unwrap(), 3);
+    }
+
+    // --- Step 4: schema v3 -----------------------------------------------------------------
+
+    /// Test-level stand-in for the on-device v2→v3 migration, as the v1 test is for v1→v2.
+    #[test]
+    fn an_existing_v2_database_migrates_to_v3_without_losing_data() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("kimatta.db");
+        {
+            let mut raw = Connection::open(&path).unwrap();
+            MIGRATIONS.to_version(&mut raw, 2).unwrap();
+            assert_eq!(schema_version(&raw).unwrap(), 2);
+            raw.pragma_update(None, "foreign_keys", "ON").unwrap();
+            seed(&mut raw, "h");
+            save_planning_cycle(
+                &mut raw,
+                &cycle(
+                    "h",
+                    "2026-08-29",
+                    7,
+                    &[MealSlot::Breakfast, MealSlot::Dinner],
+                ),
+            )
+            .unwrap();
+        }
+        let conn = open(&path).unwrap();
+        assert_eq!(schema_version(&conn).unwrap(), 3);
+        assert_eq!(count(&conn, "household"), 1);
+        assert_eq!(count(&conn, "planning_cycle"), 1);
+        assert_eq!(count(&conn, "planning_meal_slot"), 2);
+        assert_eq!(count(&conn, "recipe"), 0);
+    }
+
+    fn assert_constraint_violation(err: rusqlite::Error) {
+        assert!(
+            matches!(err, rusqlite::Error::SqliteFailure(e, _)
+                if e.code == rusqlite::ErrorCode::ConstraintViolation),
+            "expected a constraint violation, got {err:?}"
+        );
+    }
+
+    /// A recipe row plus its provenance, inserted raw so the line-level constraints below
+    /// are the only thing under test.
+    fn raw_recipe(conn: &Connection, household: &str, id: &str) {
+        conn.execute(
+            "INSERT INTO recipe (id, household_id, title, servings, instructions)
+             VALUES (?1, ?2, 'T', 2, '')",
+            params![id, household],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO recipe_provenance (recipe_id, kind) VALUES (?1, 'authored')",
+            params![id],
+        )
+        .unwrap();
+    }
+
+    const RAW_LINE: &str = "INSERT INTO recipe_ingredient_line
+        (recipe_id, position, original_text, name, ingredient_id, custom_ingredient_id,
+         quantity_kind, unit_kind, optional)
+        VALUES (?1, ?2, 'x', 'x', ?3, ?4, 'unknown', 'none', 0)";
+
+    #[test]
+    fn foreign_keys_on_lines_reject_absent_ingredients() {
+        let mut conn = open(":memory:").unwrap();
+        seed(&mut conn, "h");
+        raw_recipe(&conn, "h", "r");
+        let err = conn
+            .execute(RAW_LINE, params!["r", 0, "ghost", Option::<String>::None])
+            .unwrap_err();
+        assert_constraint_violation(err);
+        let err = conn
+            .execute(RAW_LINE, params!["r", 0, Option::<String>::None, "ghost"])
+            .unwrap_err();
+        assert_constraint_violation(err);
+        assert_eq!(count(&conn, "recipe_ingredient_line"), 0);
+    }
+
+    #[test]
+    fn a_line_with_both_refs_is_rejected_by_the_check() {
+        let mut conn = open(":memory:").unwrap();
+        seed(&mut conn, "h");
+        raw_recipe(&conn, "h", "r");
+        conn.execute(
+            "INSERT INTO ingredient (id, canonical_name) VALUES ('i', 'flour')",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO custom_ingredient (id, household_id, name) VALUES ('c', 'h', 'mix')",
+            [],
+        )
+        .unwrap();
+        // Both parents exist, so only the exclusivity CHECK can be what rejects this.
+        let err = conn
+            .execute(RAW_LINE, params!["r", 0, "i", "c"])
+            .unwrap_err();
+        assert_constraint_violation(err);
+        conn.execute(RAW_LINE, params!["r", 0, "i", Option::<String>::None])
+            .unwrap();
+        conn.execute(RAW_LINE, params!["r", 1, Option::<String>::None, "c"])
+            .unwrap();
+        assert_eq!(count(&conn, "recipe_ingredient_line"), 2);
+    }
+
+    #[test]
+    fn deleting_a_household_cascades_recipes_lines_provenance_and_custom_ingredients() {
+        let mut conn = open(":memory:").unwrap();
+        seed(&mut conn, "h");
+        raw_recipe(&conn, "h", "r");
+        conn.execute(
+            "INSERT INTO custom_ingredient (id, household_id, name) VALUES ('c', 'h', 'mix')",
+            [],
+        )
+        .unwrap();
+        conn.execute(RAW_LINE, params!["r", 0, Option::<String>::None, "c"])
+            .unwrap();
+        for table in [
+            "recipe",
+            "recipe_provenance",
+            "recipe_ingredient_line",
+            "custom_ingredient",
+        ] {
+            assert_eq!(count(&conn, table), 1, "{table} must be seeded");
+        }
+        conn.execute("DELETE FROM household WHERE id = 'h'", [])
+            .unwrap();
+        for table in [
+            "household",
+            "recipe",
+            "recipe_provenance",
+            "recipe_ingredient_line",
+            "custom_ingredient",
+        ] {
+            assert_eq!(count(&conn, table), 0, "{table} must be empty");
+        }
+    }
+
+    /// The deliberate `NO ACTION`: deleting an ingredient must never silently drop recipe
+    /// lines (PRD §12).
+    #[test]
+    fn deleting_a_catalog_ingredient_referenced_by_a_line_is_refused() {
+        let mut conn = open(":memory:").unwrap();
+        seed(&mut conn, "h");
+        raw_recipe(&conn, "h", "r");
+        conn.execute(
+            "INSERT INTO ingredient (id, canonical_name) VALUES ('i', 'flour')",
+            [],
+        )
+        .unwrap();
+        conn.execute(RAW_LINE, params!["r", 0, "i", Option::<String>::None])
+            .unwrap();
+        let err = conn
+            .execute("DELETE FROM ingredient WHERE id = 'i'", [])
+            .unwrap_err();
+        assert_constraint_violation(err);
+        assert_eq!(count(&conn, "ingredient"), 1);
+        assert_eq!(count(&conn, "recipe_ingredient_line"), 1);
+    }
+
+    #[test]
+    fn zero_servings_is_rejected_by_the_check() {
+        let mut conn = open(":memory:").unwrap();
+        seed(&mut conn, "h");
+        let err = conn
+            .execute(
+                "INSERT INTO recipe (id, household_id, title, servings, instructions)
+                 VALUES ('r', 'h', 'T', 0, '')",
+                [],
+            )
+            .unwrap_err();
+        assert_constraint_violation(err);
+        // NULL servings is the honest "unknown" and must still insert.
+        conn.execute(
+            "INSERT INTO recipe (id, household_id, title, servings, instructions)
+             VALUES ('r', 'h', 'T', NULL, '')",
+            [],
+        )
+        .unwrap();
+        assert_eq!(count(&conn, "recipe"), 1);
     }
 
     #[test]
     fn migrations_validate() {
         MIGRATIONS.validate().unwrap();
+    }
+
+    // --- Step 5: ingredient and custom-ingredient repository -----------------------------
+
+    fn ingredient(id: &str, name: &str, aliases: &[&str]) -> Ingredient {
+        Ingredient::new(
+            IngredientId::new(id).unwrap(),
+            name,
+            aliases.iter().map(|a| (*a).to_owned()).collect(),
+            Some("aisle".to_owned()),
+        )
+        .unwrap()
+    }
+
+    fn custom(id: &str, household: &str, name: &str) -> CustomIngredient {
+        CustomIngredient::new(
+            CustomIngredientId::new(id).unwrap(),
+            HouseholdId::new(household).unwrap(),
+            name,
+            None,
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn ingredient_round_trips_with_aliases() {
+        let mut conn = open(":memory:").unwrap();
+        let i = ingredient("flour", "flour", &["plain flour", "AP flour"]);
+        upsert_ingredient(&mut conn, &i).unwrap();
+        let id = IngredientId::new("flour").unwrap();
+        assert_eq!(load_ingredient(&conn, &id).unwrap(), Some(i));
+        assert_eq!(count(&conn, "ingredient_alias"), 2);
+        assert_eq!(
+            load_ingredient(&conn, &IngredientId::new("absent").unwrap()).unwrap(),
+            None
+        );
+    }
+
+    #[test]
+    fn upsert_replaces_the_alias_set() {
+        let mut conn = open(":memory:").unwrap();
+        upsert_ingredient(&mut conn, &ingredient("flour", "flour", &["a", "b", "c"])).unwrap();
+        let replacement = ingredient("flour", "wheat flour", &["b"]);
+        upsert_ingredient(&mut conn, &replacement).unwrap();
+        let id = IngredientId::new("flour").unwrap();
+        assert_eq!(load_ingredient(&conn, &id).unwrap(), Some(replacement));
+        assert_eq!(count(&conn, "ingredient"), 1);
+        assert_eq!(count(&conn, "ingredient_alias"), 1);
+    }
+
+    #[test]
+    fn custom_ingredient_round_trips() {
+        let mut conn = open(":memory:").unwrap();
+        seed(&mut conn, "h");
+        let c = custom("c", "h", "nana's mix");
+        upsert_custom_ingredient(&mut conn, &c).unwrap();
+        let id = HouseholdId::new("h").unwrap();
+        assert_eq!(list_custom_ingredients(&conn, &id).unwrap(), vec![c]);
+    }
+
+    #[test]
+    fn custom_ingredient_for_an_absent_household_is_rejected() {
+        let mut conn = open(":memory:").unwrap();
+        let err = upsert_custom_ingredient(&mut conn, &custom("c", "ghost", "x")).unwrap_err();
+        assert!(matches!(err, StorageError::NoSuchHousehold(h) if h == "ghost"));
+        assert_eq!(count(&conn, "custom_ingredient"), 0);
+    }
+
+    #[test]
+    fn custom_ingredients_are_household_scoped() {
+        let mut conn = open(":memory:").unwrap();
+        seed(&mut conn, "h1");
+        seed(&mut conn, "h2");
+        let c1 = custom("c1", "h1", "zed");
+        let c1b = custom("c1b", "h1", "alpha");
+        let c2 = custom("c2", "h2", "beta");
+        for c in [&c1, &c1b, &c2] {
+            upsert_custom_ingredient(&mut conn, c).unwrap();
+        }
+        let h1 = HouseholdId::new("h1").unwrap();
+        let h2 = HouseholdId::new("h2").unwrap();
+        assert_eq!(list_custom_ingredients(&conn, &h1).unwrap(), vec![c1b, c1]);
+        assert_eq!(list_custom_ingredients(&conn, &h2).unwrap(), vec![c2]);
+        let h3 = HouseholdId::new("h3").unwrap();
+        assert_eq!(list_custom_ingredients(&conn, &h3).unwrap(), vec![]);
+    }
+
+    // --- Step 6: recipe repository -------------------------------------------------------
+
+    fn rat(numer: u32, denom: u32) -> Rational {
+        Rational::new(numer, denom).unwrap()
+    }
+
+    fn line(original: &str, name: &str, quantity: Quantity, unit: Unit) -> IngredientLine {
+        IngredientLine::new(original, name, None, quantity, unit, None, false).unwrap()
+    }
+
+    fn full_line(
+        original: &str,
+        name: &str,
+        ingredient: Option<IngredientRef>,
+        quantity: Quantity,
+        unit: Unit,
+        preparation: Option<&str>,
+        optional: bool,
+    ) -> IngredientLine {
+        IngredientLine::new(
+            original,
+            name,
+            ingredient,
+            quantity,
+            unit,
+            preparation.map(str::to_owned),
+            optional,
+        )
+        .unwrap()
+    }
+
+    fn authored() -> RecipeProvenance {
+        RecipeProvenance::new(ProvenanceKind::Authored, None, None, None).unwrap()
+    }
+
+    fn recipe(household: &str, id: &str, lines: Vec<IngredientLine>) -> Recipe {
+        Recipe::new(
+            RecipeId::new(id).unwrap(),
+            HouseholdId::new(household).unwrap(),
+            format!("Recipe {id}"),
+            Some(4),
+            "Cook it.",
+            lines,
+            authored(),
+        )
+        .unwrap()
+    }
+
+    /// AC-1's three-line fixture: a resolved catalog line with an exact fraction and a
+    /// preparation, a resolved custom line with a range that is optional, and an unresolved
+    /// line that knows nothing but its text.
+    fn three_lines() -> Vec<IngredientLine> {
+        vec![
+            full_line(
+                "1/2 cup flour, sifted",
+                "flour",
+                Some(IngredientRef::Catalog(IngredientId::new("flour").unwrap())),
+                Quantity::Exact(rat(1, 2)),
+                Unit::Known(UnitKind::Cup),
+                Some("sifted"),
+                false,
+            ),
+            full_line(
+                "2-3 pieces nana's mix (optional)",
+                "nana's mix",
+                Some(IngredientRef::Custom(CustomIngredientId::new("c").unwrap())),
+                Quantity::Range(QuantityRange::new(rat(2, 1), rat(3, 1)).unwrap()),
+                Unit::Known(UnitKind::Piece),
+                None,
+                true,
+            ),
+            line(
+                "a splash of something",
+                "something",
+                Quantity::Unknown,
+                Unit::None,
+            ),
+        ]
+    }
+
+    /// Household `h` with the catalog and custom ingredients the fixture lines reference.
+    fn seed_for_recipes(conn: &mut Connection, household: &str) {
+        seed(conn, household);
+        upsert_ingredient(conn, &ingredient("flour", "flour", &[])).unwrap();
+        upsert_custom_ingredient(conn, &custom("c", household, "nana's mix")).unwrap();
+    }
+
+    fn load(conn: &Connection, household: &str, id: &str) -> Option<Recipe> {
+        load_recipe(
+            conn,
+            &HouseholdId::new(household).unwrap(),
+            &RecipeId::new(id).unwrap(),
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn recipe_round_trips_with_structured_and_original_lines() {
+        let mut conn = open(":memory:").unwrap();
+        seed_for_recipes(&mut conn, "h");
+        let r = recipe("h", "r", three_lines());
+        save_recipe(&mut conn, &r).unwrap();
+        assert_eq!(load(&conn, "h", "r"), Some(r));
+        assert_eq!(count(&conn, "recipe_ingredient_line"), 3);
+    }
+
+    #[test]
+    fn save_replaces_the_whole_line_set() {
+        let mut conn = open(":memory:").unwrap();
+        seed_for_recipes(&mut conn, "h");
+        save_recipe(&mut conn, &recipe("h", "r", three_lines())).unwrap();
+        assert_eq!(count(&conn, "recipe_ingredient_line"), 3);
+        let one = recipe(
+            "h",
+            "r",
+            vec![line("1 egg", "egg", Quantity::Exact(rat(1, 1)), Unit::None)],
+        );
+        save_recipe(&mut conn, &one).unwrap();
+        assert_eq!(load(&conn, "h", "r"), Some(one));
+        assert_eq!(count(&conn, "recipe_ingredient_line"), 1);
+        assert_eq!(count(&conn, "recipe"), 1);
+        assert_eq!(count(&conn, "recipe_provenance"), 1);
+    }
+
+    #[test]
+    fn list_returns_the_household_summaries_in_title_order() {
+        let mut conn = open(":memory:").unwrap();
+        seed(&mut conn, "h");
+        for (id, title) in [
+            ("r1", "Zucchini bake"),
+            ("r2", "Apple pie"),
+            ("r3", "Apple pie"),
+        ] {
+            let r = Recipe::new(
+                RecipeId::new(id).unwrap(),
+                HouseholdId::new("h").unwrap(),
+                title,
+                None,
+                "",
+                vec![],
+                authored(),
+            )
+            .unwrap();
+            save_recipe(&mut conn, &r).unwrap();
+        }
+        let summaries = list_recipes(&conn, &HouseholdId::new("h").unwrap()).unwrap();
+        assert_eq!(
+            summaries,
+            vec![
+                RecipeSummary {
+                    id: RecipeId::new("r2").unwrap(),
+                    title: "Apple pie".to_owned(),
+                },
+                RecipeSummary {
+                    id: RecipeId::new("r3").unwrap(),
+                    title: "Apple pie".to_owned(),
+                },
+                RecipeSummary {
+                    id: RecipeId::new("r1").unwrap(),
+                    title: "Zucchini bake".to_owned(),
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn recipe_persists_across_reopen() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("kimatta.db");
+        let r = recipe("h", "r", three_lines());
+        {
+            let mut conn = open(&path).unwrap();
+            seed_for_recipes(&mut conn, "h");
+            save_recipe(&mut conn, &r).unwrap();
+        }
+        let conn = open(&path).unwrap();
+        assert_eq!(load(&conn, "h", "r"), Some(r));
+    }
+
+    #[test]
+    fn unknown_quantity_and_unit_survive_a_round_trip_as_unknown() {
+        let mut conn = open(":memory:").unwrap();
+        seed(&mut conn, "h");
+        let r = recipe(
+            "h",
+            "r",
+            vec![line("some salt", "salt", Quantity::Unknown, Unit::None)],
+        );
+        save_recipe(&mut conn, &r).unwrap();
+        let loaded = load(&conn, "h", "r").unwrap();
+        assert_eq!(loaded.lines()[0].quantity(), Quantity::Unknown);
+        assert_eq!(loaded.lines()[0].unit(), &Unit::None);
+        // The columns really are NULL, not zero or empty string.
+        let (kind, numer, unit_kind, unit_text): (String, Option<u32>, String, Option<String>) =
+            conn.query_row(
+                "SELECT quantity_kind, min_numer, unit_kind, unit_text
+                 FROM recipe_ingredient_line WHERE recipe_id = 'r'",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+            )
+            .unwrap();
+        assert_eq!((kind.as_str(), numer), ("unknown", None));
+        assert_eq!((unit_kind.as_str(), unit_text), ("none", None));
+    }
+
+    #[test]
+    fn other_unit_text_survives_verbatim() {
+        let mut conn = open(":memory:").unwrap();
+        seed(&mut conn, "h");
+        let r = recipe(
+            "h",
+            "r",
+            vec![line(
+                "1 handful  Spinach",
+                "Spinach",
+                Quantity::Exact(rat(1, 1)),
+                Unit::Other(" handful ".to_owned()),
+            )],
+        );
+        save_recipe(&mut conn, &r).unwrap();
+        let loaded = load(&conn, "h", "r").unwrap();
+        assert_eq!(
+            loaded.lines()[0].unit(),
+            &Unit::Other(" handful ".to_owned())
+        );
+        assert_eq!(loaded.lines()[0].original_text(), "1 handful  Spinach");
+    }
+
+    #[test]
+    fn range_and_mixed_fraction_survive_exactly() {
+        let mut conn = open(":memory:").unwrap();
+        seed(&mut conn, "h");
+        let range = QuantityRange::new(rat(2, 1), rat(3, 1)).unwrap();
+        let r = recipe(
+            "h",
+            "r",
+            vec![
+                line(
+                    "1 1/2 cups milk",
+                    "milk",
+                    Quantity::Exact(rat(3, 2)),
+                    Unit::Known(UnitKind::Cup),
+                ),
+                line(
+                    "2-3 cloves",
+                    "garlic",
+                    Quantity::Range(range),
+                    Unit::Known(UnitKind::Piece),
+                ),
+            ],
+        );
+        save_recipe(&mut conn, &r).unwrap();
+        let loaded = load(&conn, "h", "r").unwrap();
+        assert_eq!(loaded.lines()[0].quantity(), Quantity::Exact(rat(3, 2)));
+        assert_eq!(loaded.lines()[1].quantity(), Quantity::Range(range));
+        assert_eq!(loaded, r);
+    }
+
+    #[test]
+    fn optional_flag_and_preparation_survive() {
+        let mut conn = open(":memory:").unwrap();
+        seed(&mut conn, "h");
+        let r = recipe(
+            "h",
+            "r",
+            vec![
+                full_line(
+                    "1 onion, diced (optional)",
+                    "onion",
+                    None,
+                    Quantity::Exact(rat(1, 1)),
+                    Unit::None,
+                    Some(" diced "),
+                    true,
+                ),
+                full_line(
+                    "1 onion",
+                    "onion",
+                    None,
+                    Quantity::Exact(rat(1, 1)),
+                    Unit::None,
+                    None,
+                    false,
+                ),
+            ],
+        );
+        save_recipe(&mut conn, &r).unwrap();
+        let loaded = load(&conn, "h", "r").unwrap();
+        assert_eq!(loaded.lines()[0].preparation(), Some(" diced "));
+        assert!(loaded.lines()[0].optional());
+        assert_eq!(loaded.lines()[1].preparation(), None);
+        assert!(!loaded.lines()[1].optional());
+    }
+
+    #[test]
+    fn a_stub_recipe_with_no_lines_round_trips() {
+        let mut conn = open(":memory:").unwrap();
+        seed(&mut conn, "h");
+        let r = Recipe::new(
+            RecipeId::new("r").unwrap(),
+            HouseholdId::new("h").unwrap(),
+            "Tuesday thing",
+            None,
+            "",
+            vec![],
+            authored(),
+        )
+        .unwrap();
+        save_recipe(&mut conn, &r).unwrap();
+        assert_eq!(load(&conn, "h", "r"), Some(r));
+    }
+
+    #[test]
+    fn provenance_round_trips_for_every_kind() {
+        let mut conn = open(":memory:").unwrap();
+        seed(&mut conn, "h");
+        assert!(!ProvenanceKind::ALL.is_empty());
+        for (i, kind) in ProvenanceKind::ALL.into_iter().enumerate() {
+            let id = format!("r{i}");
+            let p = RecipeProvenance::new(
+                kind,
+                Some(format!("https://example.com/{i}")),
+                Some("Example".to_owned()),
+                Some("A. Cook".to_owned()),
+            )
+            .unwrap();
+            let r = Recipe::new(
+                RecipeId::new(id.as_str()).unwrap(),
+                HouseholdId::new("h").unwrap(),
+                "T",
+                None,
+                "",
+                vec![],
+                p.clone(),
+            )
+            .unwrap();
+            save_recipe(&mut conn, &r).unwrap();
+            assert_eq!(load(&conn, "h", &id).unwrap().provenance(), &p);
+        }
+    }
+
+    #[test]
+    fn load_of_another_households_recipe_is_none() {
+        let mut conn = open(":memory:").unwrap();
+        seed(&mut conn, "h1");
+        seed(&mut conn, "h2");
+        save_recipe(&mut conn, &recipe("h1", "r", vec![])).unwrap();
+        assert_eq!(load(&conn, "h2", "r"), None);
+        assert!(load(&conn, "h1", "r").is_some());
+    }
+
+    #[test]
+    fn list_never_returns_another_households_recipes() {
+        let mut conn = open(":memory:").unwrap();
+        seed(&mut conn, "h1");
+        seed(&mut conn, "h2");
+        save_recipe(&mut conn, &recipe("h1", "r1", vec![])).unwrap();
+        save_recipe(&mut conn, &recipe("h2", "r2", vec![])).unwrap();
+        let h1 = list_recipes(&conn, &HouseholdId::new("h1").unwrap()).unwrap();
+        let h2 = list_recipes(&conn, &HouseholdId::new("h2").unwrap()).unwrap();
+        assert_eq!(h1.len(), 1);
+        assert_eq!(h1[0].id.as_str(), "r1");
+        assert_eq!(h2.len(), 1);
+        assert_eq!(h2[0].id.as_str(), "r2");
+    }
+
+    #[test]
+    fn a_line_referencing_another_households_custom_ingredient_is_rejected_before_any_write() {
+        let mut conn = open(":memory:").unwrap();
+        seed(&mut conn, "h1");
+        seed_for_recipes(&mut conn, "h2"); // owns custom ingredient `c`
+        let r = recipe("h1", "r", three_lines());
+        let err = save_recipe(&mut conn, &r).unwrap_err();
+        assert!(
+            matches!(
+                &err,
+                StorageError::CustomIngredientHouseholdMismatch { ingredient, expected, actual }
+                    if ingredient == "c" && expected == "h1" && actual == "h2"
+            ),
+            "got {err:?}"
+        );
+        assert_eq!(count(&conn, "recipe"), 0);
+        assert_eq!(count(&conn, "recipe_provenance"), 0);
+        assert_eq!(count(&conn, "recipe_ingredient_line"), 0);
+    }
+
+    #[test]
+    fn saving_over_another_households_recipe_id_is_rejected() {
+        let mut conn = open(":memory:").unwrap();
+        seed(&mut conn, "h1");
+        seed(&mut conn, "h2");
+        let original = recipe(
+            "h1",
+            "r",
+            vec![line("1 egg", "egg", Quantity::Unknown, Unit::None)],
+        );
+        save_recipe(&mut conn, &original).unwrap();
+        let hijack = recipe("h2", "r", vec![]);
+        let err = save_recipe(&mut conn, &hijack).unwrap_err();
+        assert!(
+            matches!(
+                &err,
+                StorageError::NoSuchRecipe { recipe, household } if recipe == "r" && household == "h2"
+            ),
+            "got {err:?}"
+        );
+        assert_eq!(load(&conn, "h1", "r"), Some(original));
+        assert_eq!(load(&conn, "h2", "r"), None);
+        assert_eq!(count(&conn, "recipe"), 1);
+        assert_eq!(count(&conn, "recipe_ingredient_line"), 1);
+    }
+
+    #[test]
+    fn recipe_for_an_absent_household_is_rejected() {
+        let mut conn = open(":memory:").unwrap();
+        let err = save_recipe(&mut conn, &recipe("ghost", "r", vec![])).unwrap_err();
+        assert!(matches!(err, StorageError::NoSuchHousehold(h) if h == "ghost"));
+        assert_eq!(count(&conn, "recipe"), 0);
+    }
+
+    #[test]
+    fn a_line_naming_an_absent_ingredient_is_rejected_typed() {
+        let mut conn = open(":memory:").unwrap();
+        seed(&mut conn, "h");
+        let refs = [
+            IngredientRef::Catalog(IngredientId::new("ghost-i").unwrap()),
+            IngredientRef::Custom(CustomIngredientId::new("ghost-c").unwrap()),
+        ];
+        for (r, expected) in refs.into_iter().zip(["ghost-i", "ghost-c"]) {
+            let l = full_line(
+                "x",
+                "x",
+                Some(r),
+                Quantity::Unknown,
+                Unit::None,
+                None,
+                false,
+            );
+            let err = save_recipe(&mut conn, &recipe("h", "r", vec![l])).unwrap_err();
+            assert!(
+                matches!(&err, StorageError::NoSuchIngredient(id) if id == expected),
+                "got {err:?}"
+            );
+        }
+        assert_eq!(count(&conn, "recipe"), 0);
+        assert_eq!(count(&conn, "recipe_provenance"), 0);
+        assert_eq!(count(&conn, "recipe_ingredient_line"), 0);
+    }
+
+    #[test]
+    fn a_corrupt_quantity_row_is_rejected_on_read() {
+        let mut conn = open(":memory:").unwrap();
+        seed(&mut conn, "h");
+        let r = recipe(
+            "h",
+            "r",
+            vec![line("1/2 cup", "x", Quantity::Exact(rat(1, 2)), Unit::None)],
+        );
+        save_recipe(&mut conn, &r).unwrap();
+        conn.execute("UPDATE recipe_ingredient_line SET min_denom = 0", [])
+            .unwrap();
+        let err = load_recipe(
+            &conn,
+            &HouseholdId::new("h").unwrap(),
+            &RecipeId::new("r").unwrap(),
+        )
+        .unwrap_err();
+        assert!(
+            matches!(err, StorageError::Recipe(RecipeError::ZeroDenominator)),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn an_unknown_unit_text_row_is_rejected_on_read() {
+        let mut conn = open(":memory:").unwrap();
+        seed(&mut conn, "h");
+        let r = recipe(
+            "h",
+            "r",
+            vec![line(
+                "1 cup",
+                "x",
+                Quantity::Exact(rat(1, 1)),
+                Unit::Known(UnitKind::Cup),
+            )],
+        );
+        save_recipe(&mut conn, &r).unwrap();
+        conn.execute("UPDATE recipe_ingredient_line SET unit_text = 'cups'", [])
+            .unwrap();
+        let err = load_recipe(
+            &conn,
+            &HouseholdId::new("h").unwrap(),
+            &RecipeId::new("r").unwrap(),
+        )
+        .unwrap_err();
+        assert!(
+            matches!(&err, StorageError::Recipe(RecipeError::UnknownUnit(u)) if u == "cups"),
+            "got {err:?}"
+        );
+    }
+
+    /// Saves a one-line recipe, applies `mutation` directly to the stored row, and returns
+    /// the error `load_recipe` then raises. The line is `Exact(1/2)` in `cup` so either the
+    /// quantity or the unit columns can be corrupted from the same fixture.
+    fn corrupt_line_and_load(mutation: &str) -> StorageError {
+        let mut conn = open(":memory:").unwrap();
+        seed(&mut conn, "h");
+        let r = recipe(
+            "h",
+            "r",
+            vec![line(
+                "1/2 cup",
+                "x",
+                Quantity::Exact(rat(1, 2)),
+                Unit::Known(UnitKind::Cup),
+            )],
+        );
+        save_recipe(&mut conn, &r).unwrap();
+        conn.execute(mutation, []).unwrap();
+        load_recipe(
+            &conn,
+            &HouseholdId::new("h").unwrap(),
+            &RecipeId::new("r").unwrap(),
+        )
+        .unwrap_err()
+    }
+
+    #[test]
+    fn a_valid_quantity_kind_with_a_half_present_bound_is_reported_with_its_columns() {
+        let err = corrupt_line_and_load("UPDATE recipe_ingredient_line SET min_denom = NULL");
+        assert!(
+            matches!(
+                &err,
+                StorageError::CorruptQuantity {
+                    recipe,
+                    position: 0,
+                    kind,
+                    min_numer: Some(1),
+                    min_denom: None,
+                    max_numer: None,
+                    max_denom: None,
+                } if recipe == "r" && kind == "exact"
+            ),
+            "got {err:?}"
+        );
+        // The message must send a maintainer to the bound columns, not to the kind
+        // vocabulary — `exact` is valid everywhere and is not the fault here.
+        let message = err.to_string();
+        assert!(message.contains("line 0"), "{message}");
+        assert!(message.contains(r#"quantity_kind "exact""#), "{message}");
+        assert!(message.contains("min (Some(1), None)"), "{message}");
+    }
+
+    #[test]
+    fn an_unknown_quantity_kind_row_is_reported_as_unknown_kind() {
+        let err = corrupt_line_and_load(
+            "UPDATE recipe_ingredient_line SET quantity_kind = 'approximately'",
+        );
+        assert!(
+            matches!(
+                &err,
+                StorageError::Recipe(RecipeError::UnknownQuantityKind(k)) if k == "approximately"
+            ),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn a_corrupt_unit_kind_row_is_reported_with_its_columns() {
+        let err = corrupt_line_and_load("UPDATE recipe_ingredient_line SET unit_kind = 'metric'");
+        assert!(
+            matches!(
+                &err,
+                StorageError::CorruptUnit { recipe, position: 0, kind, text }
+                    if recipe == "r" && kind == "metric" && text.as_deref() == Some("cup")
+            ),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn a_known_unit_kind_with_no_unit_text_is_reported_as_corrupt() {
+        let err = corrupt_line_and_load("UPDATE recipe_ingredient_line SET unit_text = NULL");
+        assert!(
+            matches!(
+                &err,
+                StorageError::CorruptUnit { position: 0, kind, text: None, .. }
+                    if kind == "known"
+            ),
+            "got {err:?}"
+        );
+    }
+
+    #[test]
+    fn the_line_ingredient_foreign_keys_are_indexed() {
+        let conn = open(":memory:").unwrap();
+        // Pinned to v3: the indexes must ship inside migration 3, not a later one.
+        assert_eq!(schema_version(&conn).unwrap(), 3);
+        let mut stmt = conn
+            .prepare(
+                "SELECT name FROM sqlite_master
+                 WHERE type = 'index' AND tbl_name = 'recipe_ingredient_line'",
+            )
+            .unwrap();
+        let names: Vec<String> = stmt
+            .query_map([], |r| r.get::<_, String>(0))
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap();
+        for expected in [
+            "recipe_ingredient_line_ingredient",
+            "recipe_ingredient_line_custom_ingredient",
+        ] {
+            assert!(
+                names.iter().any(|n| n == expected),
+                "{expected} missing from {names:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn re_adding_a_custom_ingredient_id_in_the_same_household_updates_it() {
+        let mut conn = open(":memory:").unwrap();
+        seed(&mut conn, "h");
+        upsert_custom_ingredient(&mut conn, &custom("c", "h", "mix")).unwrap();
+        let renamed = CustomIngredient::new(
+            CustomIngredientId::new("c").unwrap(),
+            HouseholdId::new("h").unwrap(),
+            "nana's mix",
+            Some("spices".to_owned()),
+        )
+        .unwrap();
+        upsert_custom_ingredient(&mut conn, &renamed).unwrap();
+        let stored = list_custom_ingredients(&conn, &HouseholdId::new("h").unwrap()).unwrap();
+        assert_eq!(stored, vec![renamed]);
+        assert_eq!(count(&conn, "custom_ingredient"), 1);
+    }
+
+    #[test]
+    fn a_custom_ingredient_id_owned_by_another_household_is_rejected_typed() {
+        let mut conn = open(":memory:").unwrap();
+        seed(&mut conn, "h1");
+        seed(&mut conn, "h2");
+        let mine = custom("c", "h1", "mix");
+        upsert_custom_ingredient(&mut conn, &mine).unwrap();
+        let err = upsert_custom_ingredient(&mut conn, &custom("c", "h2", "theirs")).unwrap_err();
+        assert!(
+            matches!(
+                &err,
+                StorageError::NoSuchCustomIngredient { ingredient, household }
+                    if ingredient == "c" && household == "h2"
+            ),
+            "got {err:?}"
+        );
+        // The message names only the requesting household, and never SQLite's own text —
+        // the same non-disclosure `save_recipe`'s owner probe exists to provide.
+        let message = err.to_string();
+        assert!(!message.contains("h1"), "{message}");
+        assert!(!message.contains("UNIQUE"), "{message}");
+        assert_eq!(
+            list_custom_ingredients(&conn, &HouseholdId::new("h1").unwrap()).unwrap(),
+            vec![mine]
+        );
+        assert!(
+            list_custom_ingredients(&conn, &HouseholdId::new("h2").unwrap())
+                .unwrap()
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn a_recipe_with_no_provenance_row_is_reported_as_corrupt() {
+        let mut conn = open(":memory:").unwrap();
+        seed(&mut conn, "h");
+        save_recipe(&mut conn, &recipe("h", "r", vec![])).unwrap();
+        conn.execute("DELETE FROM recipe_provenance", []).unwrap();
+        let err = load_recipe(
+            &conn,
+            &HouseholdId::new("h").unwrap(),
+            &RecipeId::new("r").unwrap(),
+        )
+        .unwrap_err();
+        assert!(
+            matches!(&err, StorageError::CorruptProvenance(id) if id == "r"),
+            "got {err:?}"
+        );
     }
 
     #[test]
@@ -840,7 +2388,7 @@ mod tests {
             insert_household(&mut conn, &household("h"), &[member("m", "h")]).unwrap();
         }
         let conn = open(&path).unwrap();
-        assert_eq!(schema_version(&conn).unwrap(), 2);
+        assert_eq!(schema_version(&conn).unwrap(), 3);
         assert_eq!(count(&conn, "household"), 1);
         assert_eq!(count(&conn, "household_member"), 1);
         let on: i32 = conn
