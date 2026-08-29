@@ -5,6 +5,9 @@ import 'package:go_router/go_router.dart';
 import 'package:meal_mate/app/router.dart';
 import 'package:meal_mate/app/theme.dart';
 import 'package:meal_mate/features/household/household_provider.dart';
+import 'package:meal_mate/features/household/household_screen.dart'
+    show describeFailure;
+import 'package:meal_mate/features/recipes/starter_provider.dart';
 
 class App extends ConsumerStatefulWidget {
   const App({super.key, this.initialLocation = homeLocation});
@@ -19,6 +22,17 @@ class App extends ConsumerStatefulWidget {
 
 class _AppState extends ConsumerState<App> {
   bool _gated = false;
+
+  /// Sibling of `_gated`, and needed for the same reason: `HouseholdNotifier.rename` and
+  /// `.completeOnboarding` both publish `AsyncData`, so the listener fires several times per
+  /// launch. Without this, every Save-name in Settings would re-run the install.
+  bool _installStarted = false;
+
+  /// `_AppState`'s own context sits *above* `MaterialApp.router`, so
+  /// `ScaffoldMessenger.of(context)` there throws `No ScaffoldMessenger widget found` — every
+  /// other `describeFailure` snackbar in the app is raised from a screen below it. The key is
+  /// how a failure raised at this level reaches a surface at all.
+  final _messengerKey = GlobalKey<ScaffoldMessengerState>();
 
   late final GoRouter _router = buildRouter(
     initialLocation: widget.initialLocation,
@@ -61,19 +75,49 @@ class _AppState extends ConsumerState<App> {
     // DTO arrives and then goes to Welcome. An error deliberately does not route
     // here — `complete_onboarding` would fail too, and Settings is where the
     // failure is explained.
+    // The starter install runs here rather than at onboarding, and the distinction is
+    // load-bearing: `welcomeLocation` is reachable only while `onboarded == false`, so an
+    // install wired to Welcome is a one-shot that no already-onboarded device — the owner's
+    // emulator, every dev and beta build — could ever reach again. Those devices would never
+    // get the ingredient catalog, and a cook review recorded later could never install
+    // anywhere. (`WelcomeScreen._finish` is also the single handler behind *both* Welcome
+    // buttons, so "the Get started handler" is not even a well-defined site.)
+    //
+    // It is latched separately from `_gated` so neither gate can swallow the other.
     ref.listen(householdProvider, (_, next) {
-      if (_gated) return;
       final value = next.valueOrNull;
       if (value == null) return;
+      if (!_installStarted) {
+        _installStarted = true;
+        _installStarterContent(value.id);
+      }
+      if (_gated) return;
       _gated = true;
       if (!value.onboarded) _router.go(welcomeLocation);
     });
     return MaterialApp.router(
       title: 'MealMate (dev)',
       restorationScopeId: 'app',
+      scaffoldMessengerKey: _messengerKey,
       theme: lightTheme,
       darkTheme: darkTheme,
       routerConfig: _router,
     );
+  }
+
+  /// Non-blocking and never gates navigation — the shape MVP-006 pinned with "a failed
+  /// completion still lets the user in". Step 6's read-only short-circuit makes the
+  /// steady-state call one `SELECT` for the household and two more for the ids and slugs,
+  /// writing no rows, so this is cheap to run on every launch.
+  Future<void> _installStarterContent(String householdId) async {
+    try {
+      await ref.read(starterInstallProvider)(householdId);
+    } catch (error) {
+      _messengerKey.currentState?.showSnackBar(
+        SnackBar(
+          content: Text(describeFailure(error, subject: 'Starter recipes')),
+        ),
+      );
+    }
   }
 }

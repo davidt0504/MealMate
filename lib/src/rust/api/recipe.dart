@@ -215,6 +215,11 @@ class RecipeDto {
   final String householdId;
   final String title;
   final int? servings;
+
+  /// Ordinary user-editable data, **not** output-only: it round-trips both ways. The five
+  /// rights scalars on `provenance` are the output-only fields, alongside `archived_at` and
+  /// `assessment`. `None` means no estimate was given and is never rendered as a number.
+  final int? prepMinutes;
   final String instructions;
   final List<IngredientLineDto> lines;
   final RecipeProvenanceDto provenance;
@@ -232,6 +237,7 @@ class RecipeDto {
     required this.householdId,
     required this.title,
     this.servings,
+    this.prepMinutes,
     required this.instructions,
     required this.lines,
     required this.provenance,
@@ -245,6 +251,7 @@ class RecipeDto {
       householdId.hashCode ^
       title.hashCode ^
       servings.hashCode ^
+      prepMinutes.hashCode ^
       instructions.hashCode ^
       lines.hashCode ^
       provenance.hashCode ^
@@ -260,6 +267,7 @@ class RecipeDto {
           householdId == other.householdId &&
           title == other.title &&
           servings == other.servings &&
+          prepMinutes == other.prepMinutes &&
           instructions == other.instructions &&
           lines == other.lines &&
           provenance == other.provenance &&
@@ -274,11 +282,28 @@ class RecipeProvenanceDto {
   final String? sourceName;
   final String? sourceAuthor;
 
+  /// The five rights scalars are **output only**: `save_recipe` drops them, so a Dart caller
+  /// cannot forge a rights basis onto a recipe. They are flat `Option<String>` rather than a
+  /// nested struct for the same reason `RestrictionDto::Known` carries a token string.
+  /// `rights_basis` is one of `original`, `us_federal_public_domain`, `cc0`.
+  final String? rightsBasis;
+  final String? attribution;
+  final String? modifications;
+
+  /// ISO civil date.
+  final String? verifiedOn;
+  final String? starterSlug;
+
   const RecipeProvenanceDto({
     required this.kind,
     this.sourceUrl,
     this.sourceName,
     this.sourceAuthor,
+    this.rightsBasis,
+    this.attribution,
+    this.modifications,
+    this.verifiedOn,
+    this.starterSlug,
   });
 
   @override
@@ -286,7 +311,12 @@ class RecipeProvenanceDto {
       kind.hashCode ^
       sourceUrl.hashCode ^
       sourceName.hashCode ^
-      sourceAuthor.hashCode;
+      sourceAuthor.hashCode ^
+      rightsBasis.hashCode ^
+      attribution.hashCode ^
+      modifications.hashCode ^
+      verifiedOn.hashCode ^
+      starterSlug.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -296,7 +326,12 @@ class RecipeProvenanceDto {
           kind == other.kind &&
           sourceUrl == other.sourceUrl &&
           sourceName == other.sourceName &&
-          sourceAuthor == other.sourceAuthor;
+          sourceAuthor == other.sourceAuthor &&
+          rightsBasis == other.rightsBasis &&
+          attribution == other.attribution &&
+          modifications == other.modifications &&
+          verifiedOn == other.verifiedOn &&
+          starterSlug == other.starterSlug;
 }
 
 class RecipeSummaryDto {

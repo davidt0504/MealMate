@@ -7,6 +7,8 @@ use std::fmt;
 use household_core::{HouseholdId, IdError};
 use thiserror::Error;
 
+use crate::{parse_civil_date, CivilDate};
+
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum RecipeError {
     #[error("{field} must not be empty or whitespace")]
@@ -25,6 +27,12 @@ pub enum RecipeError {
     UnknownProvenanceKind(String),
     #[error("unknown quantity kind {0:?}")]
     UnknownQuantityKind(String),
+    #[error("unknown rights basis {0:?}")]
+    UnknownRightsBasis(String),
+    #[error("{0:?} is not a civil date in YYYY-MM-DD form")]
+    InvalidVerifiedOn(String),
+    #[error("prep minutes must be at least 1")]
+    ZeroPrepMinutes,
 }
 
 // Own copy of `household-core`'s macro: it is private there, and exporting a macro across
@@ -197,9 +205,13 @@ pub struct RecipeProvenance {
     source_url: Option<String>,
     source_name: Option<String>,
     source_author: Option<String>,
+    rights: Option<RecipeRights>,
+    starter_slug: Option<String>,
 }
 
 impl RecipeProvenance {
+    /// Carries no rights and no starter slug: this is the shape every user-authored recipe
+    /// takes, and the edit path cannot supply rights it was never shown.
     pub fn new(
         kind: ProvenanceKind,
         source_url: Option<String>,
@@ -215,6 +227,27 @@ impl RecipeProvenance {
             source_author: source_author
                 .map(|s| non_blank(s, "source_author"))
                 .transpose()?,
+            rights: None,
+            starter_slug: None,
+        })
+    }
+
+    /// The MVP-011 seeding shape: the same four source fields plus the rights record and the
+    /// content slug that makes a re-install idempotent.
+    pub fn with_rights(
+        kind: ProvenanceKind,
+        source_url: Option<String>,
+        source_name: Option<String>,
+        source_author: Option<String>,
+        rights: Option<RecipeRights>,
+        starter_slug: Option<String>,
+    ) -> Result<Self, RecipeError> {
+        Ok(Self {
+            rights,
+            starter_slug: starter_slug
+                .map(|s| non_blank(s, "starter_slug"))
+                .transpose()?,
+            ..Self::new(kind, source_url, source_name, source_author)?
         })
     }
 
@@ -232,6 +265,93 @@ impl RecipeProvenance {
 
     pub fn source_author(&self) -> Option<&str> {
         self.source_author.as_deref()
+    }
+
+    pub fn rights(&self) -> Option<&RecipeRights> {
+        self.rights.as_ref()
+    }
+
+    pub fn starter_slug(&self) -> Option<&str> {
+        self.starter_slug.as_deref()
+    }
+}
+
+/// The rights bases this project will ship. `CcBy` is deliberately absent: MVP-011 admits it only
+/// if attribution survives every relevant surface, and that surface is MVP-020's unbuilt work.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RightsBasis {
+    Original,
+    UsFederalPublicDomain,
+    Cc0,
+}
+
+impl RightsBasis {
+    pub const ALL: [Self; 3] = [Self::Original, Self::UsFederalPublicDomain, Self::Cc0];
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Original => "original",
+            Self::UsFederalPublicDomain => "us_federal_public_domain",
+            Self::Cc0 => "cc0",
+        }
+    }
+
+    /// Matches exactly and does not trim, as `ProvenanceKind::parse` does.
+    pub fn parse(raw: &str) -> Result<Self, RecipeError> {
+        Self::ALL
+            .into_iter()
+            .find(|basis| basis.as_str() == raw)
+            .ok_or_else(|| RecipeError::UnknownRightsBasis(raw.to_owned()))
+    }
+}
+
+/// The rights record MVP-011's manifest carries and MVP-020 will read: what allows this text to
+/// ship, who must be credited, what was changed, and when that was checked.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RecipeRights {
+    basis: RightsBasis,
+    attribution: Option<String>,
+    modifications: Option<String>,
+    verified_on: CivilDate,
+}
+
+impl RecipeRights {
+    /// `parse_civil_date` returns `PlanningError`, which this module has no `From` impl for, so
+    /// the failure is mapped into `recipe.rs`'s own error vocabulary rather than importing a
+    /// second one.
+    pub fn new(
+        basis: RightsBasis,
+        attribution: Option<String>,
+        modifications: Option<String>,
+        verified_on: &str,
+    ) -> Result<Self, RecipeError> {
+        Ok(Self {
+            basis,
+            attribution: attribution
+                .map(|a| non_blank(a, "attribution"))
+                .transpose()?,
+            modifications: modifications
+                .map(|m| non_blank(m, "modifications"))
+                .transpose()?,
+            verified_on: parse_civil_date(verified_on)
+                .map_err(|_| RecipeError::InvalidVerifiedOn(verified_on.to_owned()))?,
+        })
+    }
+
+    pub fn basis(&self) -> RightsBasis {
+        self.basis
+    }
+
+    pub fn attribution(&self) -> Option<&str> {
+        self.attribution.as_deref()
+    }
+
+    pub fn modifications(&self) -> Option<&str> {
+        self.modifications.as_deref()
+    }
+
+    pub fn verified_on(&self) -> CivilDate {
+        self.verified_on
     }
 }
 
@@ -494,6 +614,7 @@ pub struct Recipe {
     household_id: HouseholdId,
     title: String,
     servings: Option<u32>,
+    prep_minutes: Option<u32>,
     instructions: String,
     lines: Vec<IngredientLine>,
     provenance: RecipeProvenance,
@@ -501,12 +622,23 @@ pub struct Recipe {
 
 impl Recipe {
     /// `instructions` may be empty and `lines` may be empty: a stub recipe is legitimate.
-    /// Any "at least one line" rule belongs to a UI, not the store.
+    /// Any "at least one line" rule belongs to a UI, not the store. `prep_minutes` is
+    /// `None` when no estimate was given — never `Some(0)`, which is fabricated certainty
+    /// rather than an absent estimate, exactly as `servings` treats zero.
+    ///
+    /// Eight arguments, one per field. The lint wants a builder or a params struct, but this
+    /// is a whole-aggregate constructor whose parameter list *is* the struct: every field is
+    /// required, none has a sensible default, and a params struct would just be `Recipe` with
+    /// the validation removed — which is the invariant the private fields exist to hold. This
+    /// is the crate's first `allow`; grouping the fields is a refactor for whoever next adds
+    /// one, not a change this card should make across 11 call sites.
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         id: RecipeId,
         household_id: HouseholdId,
         title: impl Into<String>,
         servings: Option<u32>,
+        prep_minutes: Option<u32>,
         instructions: impl Into<String>,
         lines: Vec<IngredientLine>,
         provenance: RecipeProvenance,
@@ -514,11 +646,15 @@ impl Recipe {
         if servings == Some(0) {
             return Err(RecipeError::ZeroServings);
         }
+        if prep_minutes == Some(0) {
+            return Err(RecipeError::ZeroPrepMinutes);
+        }
         Ok(Self {
             id,
             household_id,
             title: non_blank(title.into(), "title")?,
             servings,
+            prep_minutes,
             instructions: instructions.into(),
             lines,
             provenance,
@@ -539,6 +675,10 @@ impl Recipe {
 
     pub fn servings(&self) -> Option<u32> {
         self.servings
+    }
+
+    pub fn prep_minutes(&self) -> Option<u32> {
+        self.prep_minutes
     }
 
     pub fn instructions(&self) -> &str {
@@ -787,6 +927,7 @@ mod tests {
             hid("h"),
             "Pancakes",
             Some(4),
+            None,
             "Mix. Fry.",
             lines.clone(),
             provenance(),
@@ -834,6 +975,7 @@ mod tests {
             hid("h"),
             "Garlic thing",
             Some(2),
+            Some(25),
             "Cook.",
             vec![l.clone()],
             p.clone(),
@@ -843,6 +985,7 @@ mod tests {
         assert_eq!(recipe.household_id().as_str(), "h");
         assert_eq!(recipe.title(), "Garlic thing");
         assert_eq!(recipe.servings(), Some(2));
+        assert_eq!(recipe.prep_minutes(), Some(25));
         assert_eq!(recipe.instructions(), "Cook.");
         assert_eq!(recipe.lines(), &[l]);
         assert_eq!(recipe.provenance(), &p);
@@ -854,6 +997,7 @@ mod tests {
             RecipeId::new("r").unwrap(),
             hid("h"),
             "Tuesday thing",
+            None,
             None,
             "",
             vec![],
@@ -929,6 +1073,7 @@ mod tests {
                     RecipeId::new("r").unwrap(),
                     hid("h"),
                     blank,
+                    None,
                     None,
                     "",
                     vec![],
@@ -1050,6 +1195,7 @@ mod tests {
                 hid("h"),
                 "Nothing",
                 Some(0),
+                None,
                 "",
                 vec![],
                 provenance(),
@@ -1075,5 +1221,172 @@ mod tests {
         assert_eq!(l.original_text(), raw);
         assert_eq!(l.name(), " Flour ");
         assert_eq!(l.preparation(), Some(" sifted "));
+    }
+
+    // --- MVP-011 step 2: rights on provenance -------------------------------------------
+
+    #[test]
+    fn rights_basis_strings_round_trip() {
+        // Hard-coded rather than read off `RightsBasis::ALL`: a fourth basis added without a
+        // rights review must break this test, not be mirrored by it.
+        for raw in ["original", "us_federal_public_domain", "cc0"] {
+            assert_eq!(RightsBasis::parse(raw).unwrap().as_str(), raw);
+        }
+        assert_eq!(RightsBasis::ALL.len(), 3);
+    }
+
+    #[test]
+    fn unknown_rights_basis_is_rejected() {
+        for raw in ["cc_by", "cc_by_sa", "scraped", "Original", " original", ""] {
+            assert_eq!(
+                RightsBasis::parse(raw).unwrap_err(),
+                RecipeError::UnknownRightsBasis(raw.to_owned()),
+                "{raw:?} must not parse"
+            );
+        }
+    }
+
+    #[test]
+    fn a_non_civil_verified_on_is_rejected() {
+        for raw in ["2026-13-45", "20260829", "2026-08-29T00:00:00Z", ""] {
+            assert_eq!(
+                RecipeRights::new(RightsBasis::Original, None, None, raw).unwrap_err(),
+                RecipeError::InvalidVerifiedOn(raw.to_owned()),
+                "{raw:?} must not parse"
+            );
+        }
+    }
+
+    #[test]
+    fn blank_attribution_and_modifications_are_rejected() {
+        for blank in ["", " ", "\t\n"] {
+            assert_eq!(
+                RecipeRights::new(RightsBasis::Cc0, Some(blank.to_owned()), None, "2026-08-29")
+                    .unwrap_err(),
+                RecipeError::Empty {
+                    field: "attribution"
+                },
+                "{blank:?} attribution"
+            );
+            assert_eq!(
+                RecipeRights::new(RightsBasis::Cc0, None, Some(blank.to_owned()), "2026-08-29")
+                    .unwrap_err(),
+                RecipeError::Empty {
+                    field: "modifications"
+                },
+                "{blank:?} modifications"
+            );
+        }
+    }
+
+    #[test]
+    fn blank_starter_slug_is_rejected() {
+        for blank in ["", " ", "\t\n"] {
+            assert_eq!(
+                RecipeProvenance::with_rights(
+                    ProvenanceKind::Starter,
+                    None,
+                    None,
+                    None,
+                    None,
+                    Some(blank.to_owned()),
+                )
+                .unwrap_err(),
+                RecipeError::Empty {
+                    field: "starter_slug"
+                },
+                "{blank:?} starter_slug"
+            );
+        }
+    }
+
+    #[test]
+    fn provenance_new_carries_no_rights_or_slug() {
+        let p = RecipeProvenance::new(ProvenanceKind::Authored, None, None, None).unwrap();
+        assert_eq!(p.rights(), None);
+        assert_eq!(p.starter_slug(), None);
+    }
+
+    #[test]
+    fn with_rights_carries_both() {
+        let rights = RecipeRights::new(
+            RightsBasis::UsFederalPublicDomain,
+            Some("USDA".to_owned()),
+            Some("halved the salt".to_owned()),
+            "2026-08-29",
+        )
+        .unwrap();
+        let p = RecipeProvenance::with_rights(
+            ProvenanceKind::Starter,
+            Some("https://example.gov/r".to_owned()),
+            Some("Example".to_owned()),
+            Some("Kimatta".to_owned()),
+            Some(rights),
+            Some("beans-and-rice".to_owned()),
+        )
+        .unwrap();
+        assert_eq!(p.kind(), ProvenanceKind::Starter);
+        assert_eq!(p.source_url(), Some("https://example.gov/r"));
+        assert_eq!(p.source_name(), Some("Example"));
+        assert_eq!(p.source_author(), Some("Kimatta"));
+        assert_eq!(p.starter_slug(), Some("beans-and-rice"));
+        let stored = p.rights().unwrap();
+        assert_eq!(stored.basis(), RightsBasis::UsFederalPublicDomain);
+        assert_eq!(stored.attribution(), Some("USDA"));
+        assert_eq!(stored.modifications(), Some("halved the salt"));
+        assert_eq!(stored.verified_on().to_string(), "2026-08-29");
+    }
+
+    // --- MVP-011 step 3: prep_minutes ---------------------------------------------------
+
+    #[test]
+    fn zero_prep_minutes_is_rejected() {
+        assert_eq!(
+            Recipe::new(
+                RecipeId::new("r").unwrap(),
+                hid("h"),
+                "Nothing",
+                None,
+                Some(0),
+                "",
+                vec![],
+                provenance(),
+            )
+            .unwrap_err(),
+            RecipeError::ZeroPrepMinutes
+        );
+    }
+
+    #[test]
+    fn prep_minutes_round_trips_through_new() {
+        let recipe = Recipe::new(
+            RecipeId::new("r").unwrap(),
+            hid("h"),
+            "Soup",
+            Some(4),
+            Some(1),
+            "",
+            vec![],
+            provenance(),
+        )
+        .unwrap();
+        assert_eq!(recipe.prep_minutes(), Some(1));
+    }
+
+    #[test]
+    fn a_recipe_with_no_prep_estimate_is_legal() {
+        // PRD §10: absence stays absent. Nothing defaults an unknown prep time to a number.
+        let recipe = Recipe::new(
+            RecipeId::new("r").unwrap(),
+            hid("h"),
+            "Soup",
+            None,
+            None,
+            "",
+            vec![],
+            provenance(),
+        )
+        .unwrap();
+        assert_eq!(recipe.prep_minutes(), None);
     }
 }

@@ -1,21 +1,25 @@
 //! Rust-owned SQLite (PRD v3 §12): foreign keys on, explicit migrations, transactions.
 #![forbid(unsafe_code)]
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
+pub use food_domain::starter::{
+    all_starter_content, shipped_starter_content, CookReview, StarterContent, StarterError,
+    StarterRecipe,
+};
 pub use food_domain::{
     assess, format_civil_date, parse_civil_date, CivilDate, Conflict, CustomIngredient,
     CustomIngredientId, HouseholdRestrictions, Ingredient, IngredientId, IngredientLine,
     IngredientRef, MealScope, MealSlot, MemberPreference, MemberPreferences, PlanningCycle,
     PlanningError, PreferenceError, ProvenanceKind, Quantity, QuantityRange, Rational, Recipe,
-    RecipeError, RecipeId, RecipeProvenance, Restriction, RestrictionAssessment, RestrictionError,
-    RestrictionKind, Sentiment, Unit, UnitKind, DEFAULT_CYCLE_DAYS, MAX_CYCLE_DAYS, MIN_CYCLE_DAYS,
-    RULE_VERSION,
+    RecipeError, RecipeId, RecipeProvenance, RecipeRights, Restriction, RestrictionAssessment,
+    RestrictionError, RestrictionKind, RightsBasis, Sentiment, Unit, UnitKind, DEFAULT_CYCLE_DAYS,
+    MAX_CYCLE_DAYS, MIN_CYCLE_DAYS, RULE_VERSION,
 };
 pub use household_core::{Household, HouseholdId, HouseholdMember, IdError, MemberId};
 pub use rusqlite::Connection;
-use rusqlite::{params, OptionalExtension, TransactionBehavior};
+use rusqlite::{params, OptionalExtension, Transaction, TransactionBehavior};
 use rusqlite_migration::{Migrations, M};
 use thiserror::Error;
 
@@ -53,6 +57,10 @@ pub enum StorageError {
     CorruptIngredientRef(String),
     #[error("recipe {0} has no provenance row")]
     CorruptProvenance(String),
+    #[error("recipe {recipe} has an unreadable rights record: {detail}")]
+    CorruptRights { recipe: String, detail: String },
+    #[error("starter recipe {0:?} carries no starter slug")]
+    MissingStarterSlug(String),
     #[error("no ingredient {0}")]
     NoSuchIngredient(String),
     #[error(
@@ -221,6 +229,23 @@ const MIGRATION_ARRAY: &[M] = &[
         "ALTER TABLE recipe ADD COLUMN archived_at TEXT
         CHECK (archived_at IS NULL
             OR archived_at GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]');",
+    ),
+    // Prep time and the rights columns MVP-007 AC-4 deferred here. All nullable and not
+    // backfilled: an authored recipe must not acquire a fabricated rights row, and a recipe
+    // written before this migration genuinely has no prep estimate. The `rights_basis`/
+    // `verified_on` pairing is not expressible through `ALTER TABLE ADD COLUMN`, so it is
+    // enforced on the read path, where migration 5 already puts date correctness.
+    M::up(
+        "ALTER TABLE recipe ADD COLUMN prep_minutes INTEGER
+            CHECK (prep_minutes IS NULL OR prep_minutes >= 1);
+        ALTER TABLE recipe_provenance ADD COLUMN rights_basis TEXT;
+        ALTER TABLE recipe_provenance ADD COLUMN attribution TEXT;
+        ALTER TABLE recipe_provenance ADD COLUMN modifications TEXT;
+        ALTER TABLE recipe_provenance ADD COLUMN verified_on TEXT
+            CHECK (verified_on IS NULL
+                OR verified_on GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]');
+        ALTER TABLE recipe_provenance ADD COLUMN starter_slug TEXT;
+        CREATE INDEX recipe_provenance_starter_slug ON recipe_provenance(starter_slug);",
     ),
 ];
 pub const MIGRATIONS: Migrations<'static> = Migrations::from_slice(MIGRATION_ARRAY);
@@ -728,6 +753,18 @@ pub fn upsert_ingredient(
     ingredient: &Ingredient,
 ) -> Result<(), StorageError> {
     let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    upsert_ingredient_rows(&tx, ingredient)?;
+    tx.commit()?;
+    Ok(())
+}
+
+/// The row half of `upsert_ingredient`, for callers that already hold a transaction:
+/// `rusqlite` rejects a nested `transaction_with_behavior`, so `install_starter_content`
+/// cannot call `upsert_ingredient` itself.
+fn upsert_ingredient_rows(
+    tx: &Transaction<'_>,
+    ingredient: &Ingredient,
+) -> Result<(), StorageError> {
     let id = ingredient.id().as_str();
     tx.execute(
         "INSERT INTO ingredient (id, canonical_name, store_category) VALUES (?1, ?2, ?3)
@@ -746,7 +783,6 @@ pub fn upsert_ingredient(
             params![id, alias],
         )?;
     }
-    tx.commit()?;
     Ok(())
 }
 
@@ -928,6 +964,22 @@ pub fn save_recipe(conn: &mut Connection, recipe: &Recipe) -> Result<(), Storage
     let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
     require_household(&tx, recipe.household_id())?;
     check_line_refs(&tx, recipe)?;
+    write_recipe(&tx, recipe)?;
+    tx.commit()?;
+    Ok(())
+}
+
+/// Ownership probe + the recipe/provenance/line writes. Callers own `require_household` and
+/// `check_line_refs`, so a multi-recipe caller runs the household check once, not per recipe;
+/// the ownership probe stays here because it is per-recipe.
+///
+/// The four rights columns move as **one group**, never per-column: when the row already
+/// exists and the incoming provenance carries no rights, all four are left untouched — that is
+/// the MVP-008 edit path, which cannot supply them (`RecipeDto`'s rights scalars are
+/// output-only). When the incoming provenance does carry rights, all four are overwritten from
+/// it, so an incoming absent attribution clears the stored one rather than silently retaining
+/// a credit the caller did not give. `starter_slug` follows the same rule independently.
+fn write_recipe(tx: &Transaction<'_>, recipe: &Recipe) -> Result<(), StorageError> {
     let id = recipe.id().as_str();
     let owner: Option<String> = tx
         .query_row(
@@ -943,35 +995,52 @@ pub fn save_recipe(conn: &mut Connection, recipe: &Recipe) -> Result<(), Storage
         });
     }
     tx.execute(
-        "INSERT INTO recipe (id, household_id, title, servings, instructions)
-         VALUES (?1, ?2, ?3, ?4, ?5)
+        "INSERT INTO recipe (id, household_id, title, servings, prep_minutes, instructions)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6)
          ON CONFLICT(id) DO UPDATE SET
              title = excluded.title,
              servings = excluded.servings,
+             prep_minutes = excluded.prep_minutes,
              instructions = excluded.instructions",
         params![
             id,
             recipe.household_id().as_str(),
             recipe.title(),
             recipe.servings(),
+            recipe.prep_minutes(),
             recipe.instructions(),
         ],
     )?;
     let p = recipe.provenance();
+    let rights = p.rights();
+    let has_rights = rights.is_some();
     tx.execute(
-        "INSERT INTO recipe_provenance (recipe_id, kind, source_url, source_name, source_author)
-         VALUES (?1, ?2, ?3, ?4, ?5)
+        "INSERT INTO recipe_provenance
+             (recipe_id, kind, source_url, source_name, source_author,
+              rights_basis, attribution, modifications, verified_on, starter_slug)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
          ON CONFLICT(recipe_id) DO UPDATE SET
              kind = excluded.kind,
              source_url = excluded.source_url,
              source_name = excluded.source_name,
-             source_author = excluded.source_author",
+             source_author = excluded.source_author,
+             rights_basis = CASE WHEN ?11 THEN excluded.rights_basis ELSE rights_basis END,
+             attribution = CASE WHEN ?11 THEN excluded.attribution ELSE attribution END,
+             modifications = CASE WHEN ?11 THEN excluded.modifications ELSE modifications END,
+             verified_on = CASE WHEN ?11 THEN excluded.verified_on ELSE verified_on END,
+             starter_slug = COALESCE(excluded.starter_slug, starter_slug)",
         params![
             id,
             p.kind().as_str(),
             p.source_url(),
             p.source_name(),
             p.source_author(),
+            rights.map(|r| r.basis().as_str()),
+            rights.and_then(RecipeRights::attribution),
+            rights.and_then(RecipeRights::modifications),
+            rights.map(|r| format_civil_date(r.verified_on())),
+            p.starter_slug(),
+            has_rights,
         ],
     )?;
     tx.execute(
@@ -1020,8 +1089,94 @@ pub fn save_recipe(conn: &mut Connection, recipe: &Recipe) -> Result<(), Storage
             ],
         )?;
     }
-    tx.commit()?;
     Ok(())
+}
+
+/// What one `install_starter_content` call actually wrote. `installed: 0` with
+/// `catalog_installed > 0` is the empty-by-design case, not a swallowed failure.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct StarterInstallReport {
+    /// Recipes written this call.
+    pub installed: usize,
+    /// Slugs this household already holds, archived ones included.
+    pub skipped: usize,
+    /// Catalog rows written this call.
+    pub catalog_installed: usize,
+}
+
+/// Seeds the global catalog and any starter recipe whose slug this household does not already
+/// hold, in one transaction. Idempotent and re-runnable: a slug already present — including on
+/// an archived recipe — is skipped, so archiving a starter recipe is never undone.
+///
+/// **Install-once by design.** A revised recipe does not overwrite an installed row, and once
+/// every catalog id and slug is present the call short-circuits before opening a transaction,
+/// so a catalog correction carrying no new id never lands either. Correcting installed content
+/// is a later card's work; see the MVP-011 handoff row.
+///
+/// Idempotency is code-enforced, not schema-enforced: `recipe_provenance` has no
+/// `household_id`, so a partial unique index on `(household_id, starter_slug)` is not
+/// expressible without touching `recipe`. The single process-wide connection mutex in the
+/// bridge crate makes a concurrent second install unreachable, and the slug check shares one
+/// transaction with the writes.
+pub fn install_starter_content(
+    conn: &mut Connection,
+    household: &HouseholdId,
+    catalog: &[Ingredient],
+    recipes: &[Recipe],
+) -> Result<StarterInstallReport, StorageError> {
+    // First, and outside the short-circuit: with an empty shipped set every launch after the
+    // first takes the short-circuit path, so a household check living in the write branch
+    // would never run in production.
+    require_household(conn, household)?;
+    let held_ids: HashSet<String> = conn
+        .prepare("SELECT id FROM ingredient")?
+        .query_map([], |r| r.get::<_, String>(0))?
+        .collect::<Result<_, _>>()?;
+    let held_slugs: HashSet<String> = conn
+        .prepare(
+            "SELECT p.starter_slug FROM recipe_provenance p
+             JOIN recipe r ON r.id = p.recipe_id
+             WHERE r.household_id = ?1 AND p.starter_slug IS NOT NULL",
+        )?
+        .query_map(params![household.as_str()], |r| r.get::<_, String>(0))?
+        .collect::<Result<_, _>>()?;
+    let mut pending = Vec::new();
+    for recipe in recipes {
+        let slug = recipe
+            .provenance()
+            .starter_slug()
+            .ok_or_else(|| StorageError::MissingStarterSlug(recipe.title().to_owned()))?;
+        if !held_slugs.contains(slug) {
+            pending.push(recipe);
+        }
+    }
+    let missing_catalog = catalog.iter().any(|i| !held_ids.contains(i.id().as_str()));
+    if pending.is_empty() && !missing_catalog {
+        return Ok(StarterInstallReport {
+            installed: 0,
+            skipped: recipes.len(),
+            catalog_installed: 0,
+        });
+    }
+    let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    // The whole catalog, not only the missing ids: `upsert_ingredient_rows` has replace-whole
+    // semantics, so upserting only new ids would strand a corrected canonical name, store
+    // category or alias set on a device that reaches this branch. It only reaches it when a new
+    // id or a new slug is pending — see the install-once note on this fn: a correction carrying
+    // neither never gets here at all.
+    for ingredient in catalog {
+        upsert_ingredient_rows(&tx, ingredient)?;
+    }
+    for recipe in &pending {
+        check_line_refs(&tx, recipe)?;
+        write_recipe(&tx, recipe)?;
+    }
+    tx.commit()?;
+    Ok(StarterInstallReport {
+        installed: pending.len(),
+        skipped: recipes.len() - pending.len(),
+        catalog_installed: catalog.len(),
+    })
 }
 
 /// One stored line, before it goes back through the domain constructors.
@@ -1116,6 +1271,44 @@ fn line_from_row(
     )?)
 }
 
+/// The four stored rights columns, before the read rule below decides what they mean.
+struct RightsRow {
+    basis: Option<String>,
+    attribution: Option<String>,
+    modifications: Option<String>,
+    verified_on: Option<String>,
+}
+
+/// Rights are present **iff** `rights_basis` and `verified_on` are both non-NULL. Every other
+/// shape is `CorruptRights`, never coercion: half a rights record silently read as "no rights"
+/// would drop an attribution the row still carries, which is exactly the invariant-12 leak the
+/// rights columns exist to prevent. `starter_slug` is independent of this rule.
+fn rights_from_row(recipe: &str, row: RightsRow) -> Result<Option<RecipeRights>, StorageError> {
+    let corrupt = |detail: &str| StorageError::CorruptRights {
+        recipe: recipe.to_owned(),
+        detail: detail.to_owned(),
+    };
+    let (basis, verified_on) = match (row.basis, row.verified_on) {
+        (Some(basis), Some(verified_on)) => (basis, verified_on),
+        (Some(_), None) => return Err(corrupt("rights_basis is set but verified_on is NULL")),
+        (None, Some(_)) => return Err(corrupt("verified_on is set but rights_basis is NULL")),
+        (None, None) => {
+            return match (row.attribution, row.modifications) {
+                (None, None) => Ok(None),
+                _ => Err(corrupt(
+                    "attribution or modifications without a rights basis",
+                )),
+            };
+        }
+    };
+    let basis = RightsBasis::parse(&basis)
+        .map_err(|e| corrupt(&format!("unreadable rights_basis: {e}")))?;
+    // The column CHECK only proves the GLOB shape, so `2026-13-45` reaches here.
+    RecipeRights::new(basis, row.attribution, row.modifications, &verified_on)
+        .map(Some)
+        .map_err(|e| corrupt(&format!("unreadable rights record: {e}")))
+}
+
 /// The recipe `id` **in `household`**, or `None` — another household's recipe is `None`,
 /// never the row. Every stored value goes back through the domain constructors, so a row
 /// that violates an invariant surfaces as `StorageError::Recipe`, never as an invalid value.
@@ -1128,27 +1321,29 @@ pub fn load_recipe(
 ) -> Result<Option<RecipeRecord>, StorageError> {
     let row = conn
         .query_row(
-            "SELECT title, servings, instructions, archived_at FROM recipe
+            "SELECT title, servings, prep_minutes, instructions, archived_at FROM recipe
              WHERE id = ?1 AND household_id = ?2",
             params![id.as_str(), household.as_str()],
             |r| {
                 Ok((
                     r.get::<_, String>(0)?,
                     r.get::<_, Option<u32>>(1)?,
-                    r.get::<_, String>(2)?,
-                    r.get::<_, Option<String>>(3)?,
+                    r.get::<_, Option<u32>>(2)?,
+                    r.get::<_, String>(3)?,
+                    r.get::<_, Option<String>>(4)?,
                 ))
             },
         )
         .optional()?;
-    let Some((title, servings, instructions, archived_at)) = row else {
+    let Some((title, servings, prep_minutes, instructions, archived_at)) = row else {
         return Ok(None);
     };
     let archived_at = archived_at.as_deref().map(parse_civil_date).transpose()?;
     let provenance = conn
         .query_row(
-            "SELECT kind, source_url, source_name, source_author FROM recipe_provenance
-             WHERE recipe_id = ?1",
+            "SELECT kind, source_url, source_name, source_author,
+                    rights_basis, attribution, modifications, verified_on, starter_slug
+             FROM recipe_provenance WHERE recipe_id = ?1",
             params![id.as_str()],
             |r| {
                 Ok((
@@ -1156,18 +1351,28 @@ pub fn load_recipe(
                     r.get::<_, Option<String>>(1)?,
                     r.get::<_, Option<String>>(2)?,
                     r.get::<_, Option<String>>(3)?,
+                    RightsRow {
+                        basis: r.get(4)?,
+                        attribution: r.get(5)?,
+                        modifications: r.get(6)?,
+                        verified_on: r.get(7)?,
+                    },
+                    r.get::<_, Option<String>>(8)?,
                 ))
             },
         )
         .optional()?;
-    let Some((kind, source_url, source_name, source_author)) = provenance else {
+    let Some((kind, source_url, source_name, source_author, rights_row, starter_slug)) = provenance
+    else {
         return Err(StorageError::CorruptProvenance(id.as_str().to_owned()));
     };
-    let provenance = RecipeProvenance::new(
+    let provenance = RecipeProvenance::with_rights(
         ProvenanceKind::parse(&kind)?,
         source_url,
         source_name,
         source_author,
+        rights_from_row(id.as_str(), rights_row)?,
+        starter_slug,
     )?;
     let mut stmt = conn.prepare(
         "SELECT original_text, name, ingredient_id, custom_ingredient_id, quantity_kind,
@@ -1200,6 +1405,7 @@ pub fn load_recipe(
             household.clone(),
             title,
             servings,
+            prep_minutes,
             instructions,
             lines,
             provenance,
@@ -1502,7 +1708,7 @@ mod tests {
     /// on-device v1→v2 migration (PRD §12: tested from representative prior versions); since
     /// v4 it proves v1→latest end to end.
     #[test]
-    fn an_existing_v1_database_migrates_to_v5_without_losing_data() {
+    fn an_existing_v1_database_migrates_to_v6_without_losing_data() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("kimatta.db");
         {
@@ -1517,7 +1723,7 @@ mod tests {
             .unwrap();
         }
         let conn = open(&path).unwrap();
-        assert_eq!(schema_version(&conn).unwrap(), 5);
+        assert_eq!(schema_version(&conn).unwrap(), 6);
         assert_eq!(count(&conn, "household"), 1);
         assert_eq!(count(&conn, "household_member"), 2);
         assert_eq!(count(&conn, "planning_cycle"), 0);
@@ -1731,16 +1937,16 @@ mod tests {
     }
 
     #[test]
-    fn empty_db_migrates_to_v5() {
+    fn empty_db_migrates_to_v6() {
         let conn = open(":memory:").unwrap();
-        assert_eq!(schema_version(&conn).unwrap(), 5);
+        assert_eq!(schema_version(&conn).unwrap(), 6);
     }
 
     // --- Step 4: schema v3 -----------------------------------------------------------------
 
     /// Test-level stand-in for the on-device v2→v3 migration, as the v1 test is for v1→v2.
     #[test]
-    fn an_existing_v2_database_migrates_to_v5_without_losing_data() {
+    fn an_existing_v2_database_migrates_to_v6_without_losing_data() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("kimatta.db");
         {
@@ -1761,7 +1967,7 @@ mod tests {
             .unwrap();
         }
         let conn = open(&path).unwrap();
-        assert_eq!(schema_version(&conn).unwrap(), 5);
+        assert_eq!(schema_version(&conn).unwrap(), 6);
         assert_eq!(count(&conn, "household"), 1);
         assert_eq!(count(&conn, "planning_cycle"), 1);
         assert_eq!(count(&conn, "planning_meal_slot"), 2);
@@ -1774,7 +1980,7 @@ mod tests {
     /// theirs. A recipe is saved at v3 so the migration is proved not to disturb the tables
     /// migration 3 introduced, not merely the household one it alters.
     #[test]
-    fn an_existing_v3_database_migrates_to_v5_without_losing_data() {
+    fn an_existing_v3_database_migrates_to_v6_without_losing_data() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("kimatta.db");
         {
@@ -1783,10 +1989,10 @@ mod tests {
             assert_eq!(schema_version(&raw).unwrap(), 3);
             raw.pragma_update(None, "foreign_keys", "ON").unwrap();
             seed(&mut raw, "h");
-            save_recipe(&mut raw, &recipe("h", "r", vec![])).unwrap();
+            insert_pre_v6_recipe(&raw, "h", "r");
         }
         let conn = open(&path).unwrap();
-        assert_eq!(schema_version(&conn).unwrap(), 5);
+        assert_eq!(schema_version(&conn).unwrap(), 6);
         assert_eq!(count(&conn, "household"), 1);
         assert_eq!(count(&conn, "household_member"), 1);
         assert_eq!(count(&conn, "recipe"), 1);
@@ -1796,10 +2002,11 @@ mod tests {
 
     // --- schema v5 -------------------------------------------------------------------------
 
-    /// Test-level stand-in for the on-device v4→v5 migration, in the pattern of the v3→v4
-    /// test: a recipe saved at v4 must survive the `ALTER TABLE` that adds `archived_at`.
+    /// Test-level stand-in for the on-device v4→latest migration, in the pattern of the v3→v4
+    /// test: a recipe saved at v4 must survive the `ALTER TABLE`s that add `archived_at` (v5)
+    /// and `prep_minutes`/the rights columns (v6).
     #[test]
-    fn an_existing_v4_database_migrates_to_v5_without_losing_data() {
+    fn an_existing_v4_database_migrates_to_v6_without_losing_data() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("kimatta.db");
         {
@@ -1808,10 +2015,10 @@ mod tests {
             assert_eq!(schema_version(&raw).unwrap(), 4);
             raw.pragma_update(None, "foreign_keys", "ON").unwrap();
             seed(&mut raw, "h");
-            save_recipe(&mut raw, &recipe("h", "r", vec![])).unwrap();
+            insert_pre_v6_recipe(&raw, "h", "r");
         }
         let conn = open(&path).unwrap();
-        assert_eq!(schema_version(&conn).unwrap(), 5);
+        assert_eq!(schema_version(&conn).unwrap(), 6);
         assert_eq!(count(&conn, "household"), 1);
         assert_eq!(count(&conn, "recipe"), 1);
         assert_eq!(count(&conn, "household_restriction"), 0);
@@ -1828,7 +2035,7 @@ mod tests {
             MIGRATIONS.to_version(&mut raw, 4).unwrap();
             raw.pragma_update(None, "foreign_keys", "ON").unwrap();
             seed(&mut raw, "h");
-            save_recipe(&mut raw, &recipe("h", "r", vec![])).unwrap();
+            insert_pre_v6_recipe(&raw, "h", "r");
         }
         let conn = open(&path).unwrap();
         assert_eq!(archived_at_raw(&conn, "r"), None);
@@ -2139,12 +2346,30 @@ mod tests {
         RecipeProvenance::new(ProvenanceKind::Authored, None, None, None).unwrap()
     }
 
+    /// Writes a minimal recipe with the columns a **pre-v6** `recipe` table has. `save_recipe`
+    /// is a latest-schema writer — it writes `prep_minutes` — so a migration test that stands
+    /// a database up at v3/v4 cannot use it to place the row it is about to migrate.
+    fn insert_pre_v6_recipe(conn: &Connection, household: &str, id: &str) {
+        conn.execute(
+            "INSERT INTO recipe (id, household_id, title, servings, instructions)
+             VALUES (?1, ?2, ?3, 4, 'Cook it.')",
+            params![id, household, format!("Recipe {id}")],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO recipe_provenance (recipe_id, kind) VALUES (?1, 'authored')",
+            params![id],
+        )
+        .unwrap();
+    }
+
     fn recipe(household: &str, id: &str, lines: Vec<IngredientLine>) -> Recipe {
         Recipe::new(
             RecipeId::new(id).unwrap(),
             HouseholdId::new(household).unwrap(),
             format!("Recipe {id}"),
             Some(4),
+            None,
             "Cook it.",
             lines,
             authored(),
@@ -2294,6 +2519,7 @@ mod tests {
                 RecipeId::new(id).unwrap(),
                 HouseholdId::new("h").unwrap(),
                 title,
+                None,
                 None,
                 "",
                 vec![],
@@ -2532,6 +2758,7 @@ mod tests {
             HouseholdId::new("h").unwrap(),
             "Tuesday thing",
             None,
+            None,
             "",
             vec![],
             authored(),
@@ -2559,6 +2786,7 @@ mod tests {
                 RecipeId::new(id.as_str()).unwrap(),
                 HouseholdId::new("h").unwrap(),
                 "T",
+                None,
                 None,
                 "",
                 vec![],
@@ -3140,7 +3368,7 @@ mod tests {
             insert_household(&mut conn, &household("h"), &[member("m", "h")]).unwrap();
         }
         let conn = open(&path).unwrap();
-        assert_eq!(schema_version(&conn).unwrap(), 5);
+        assert_eq!(schema_version(&conn).unwrap(), 6);
         assert_eq!(count(&conn, "household"), 1);
         assert_eq!(count(&conn, "household_member"), 1);
         let on: i32 = conn
@@ -3641,6 +3869,593 @@ mod tests {
         assert_eq!(
             load_member_preferences(&conn, &hid("h"), &mid("m1")).unwrap(),
             set
+        );
+    }
+
+    // --- MVP-011 steps 4-6: schema v6, rights persistence, starter install ---------------
+
+    fn load_record_err(conn: &Connection, household: &str, id: &str) -> StorageError {
+        load_recipe(
+            conn,
+            &HouseholdId::new(household).unwrap(),
+            &RecipeId::new(id).unwrap(),
+        )
+        .unwrap_err()
+    }
+
+    fn rights(basis: RightsBasis, attribution: Option<&str>) -> RecipeRights {
+        RecipeRights::new(
+            basis,
+            attribution.map(str::to_owned),
+            Some("halved the salt".to_owned()),
+            "2026-08-29",
+        )
+        .unwrap()
+    }
+
+    fn starter_provenance(slug: &str, rights: Option<RecipeRights>) -> RecipeProvenance {
+        RecipeProvenance::with_rights(
+            ProvenanceKind::Starter,
+            None,
+            None,
+            Some("Kimatta".to_owned()),
+            rights,
+            Some(slug.to_owned()),
+        )
+        .unwrap()
+    }
+
+    fn starter_recipe(household: &str, id: &str, slug: &str, catalog_id: &str) -> Recipe {
+        let line = IngredientLine::new(
+            "1 tbsp olive oil",
+            "olive oil",
+            Some(IngredientRef::Catalog(
+                IngredientId::new(catalog_id).unwrap(),
+            )),
+            Quantity::Exact(Rational::new(1, 1).unwrap()),
+            Unit::Known(UnitKind::Tablespoon),
+            None,
+            false,
+        )
+        .unwrap();
+        Recipe::new(
+            RecipeId::new(id).unwrap(),
+            HouseholdId::new(household).unwrap(),
+            format!("Starter {slug}"),
+            Some(2),
+            Some(15),
+            "Cook.",
+            vec![line],
+            starter_provenance(slug, Some(rights(RightsBasis::Original, Some("Kimatta")))),
+        )
+        .unwrap()
+    }
+
+    fn set_provenance_column(conn: &Connection, recipe: &str, column: &str, value: Option<&str>) {
+        conn.execute(
+            &format!("UPDATE recipe_provenance SET {column} = ?1 WHERE recipe_id = ?2"),
+            params![value, recipe],
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn a_migrated_recipe_has_no_prep_estimate_and_no_rights() {
+        // No backfill: a recipe written before v6 has genuinely never had a prep estimate,
+        // and must not acquire a fabricated rights row.
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("kimatta.db");
+        {
+            let mut raw = Connection::open(&path).unwrap();
+            MIGRATIONS.to_version(&mut raw, 5).unwrap();
+            raw.pragma_update(None, "foreign_keys", "ON").unwrap();
+            seed(&mut raw, "h");
+            insert_pre_v6_recipe(&raw, "h", "r");
+        }
+        let conn = open(&path).unwrap();
+        let loaded = load(&conn, "h", "r").unwrap();
+        assert_eq!(loaded.prep_minutes(), None);
+        assert_eq!(loaded.provenance().rights(), None);
+        assert_eq!(loaded.provenance().starter_slug(), None);
+    }
+
+    #[test]
+    fn an_existing_v5_database_migrates_to_v6_without_losing_data() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("kimatta.db");
+        {
+            let mut raw = Connection::open(&path).unwrap();
+            MIGRATIONS.to_version(&mut raw, 5).unwrap();
+            assert_eq!(schema_version(&raw).unwrap(), 5);
+            raw.pragma_update(None, "foreign_keys", "ON").unwrap();
+            seed(&mut raw, "h");
+            insert_pre_v6_recipe(&raw, "h", "r");
+        }
+        let conn = open(&path).unwrap();
+        assert_eq!(schema_version(&conn).unwrap(), 6);
+        assert_eq!(count(&conn, "household"), 1);
+        assert_eq!(count(&conn, "recipe"), 1);
+        assert_eq!(load(&conn, "h", "r").unwrap().title(), "Recipe r");
+    }
+
+    #[test]
+    fn a_zero_prep_minutes_row_is_refused_by_the_check() {
+        let mut conn = open(":memory:").unwrap();
+        seed(&mut conn, "h");
+        save_recipe(&mut conn, &recipe("h", "r", vec![])).unwrap();
+        let err = conn
+            .execute("UPDATE recipe SET prep_minutes = 0 WHERE id = 'r'", [])
+            .unwrap_err();
+        assert!(err.to_string().contains("CHECK constraint failed"), "{err}");
+    }
+
+    #[test]
+    fn a_non_civil_verified_on_row_is_refused_by_the_check() {
+        let mut conn = open(":memory:").unwrap();
+        seed(&mut conn, "h");
+        save_recipe(&mut conn, &recipe("h", "r", vec![])).unwrap();
+        let err = conn
+            .execute(
+                "UPDATE recipe_provenance SET verified_on = '29-08-2026' WHERE recipe_id = 'r'",
+                [],
+            )
+            .unwrap_err();
+        assert!(err.to_string().contains("CHECK constraint failed"), "{err}");
+    }
+
+    #[test]
+    fn rights_and_slug_round_trip() {
+        let mut conn = open(":memory:").unwrap();
+        seed(&mut conn, "h");
+        upsert_ingredient(&mut conn, &ingredient("i", "olive oil", &[])).unwrap();
+        let r = starter_recipe("h", "r", "a-slug", "i");
+        save_recipe(&mut conn, &r).unwrap();
+        assert_eq!(load(&conn, "h", "r"), Some(r));
+    }
+
+    #[test]
+    fn provenance_without_rights_round_trips_as_none() {
+        let mut conn = open(":memory:").unwrap();
+        seed(&mut conn, "h");
+        let r = recipe("h", "r", vec![]);
+        save_recipe(&mut conn, &r).unwrap();
+        let loaded = load(&conn, "h", "r").unwrap();
+        assert_eq!(loaded.provenance().rights(), None);
+        assert_eq!(loaded.provenance().starter_slug(), None);
+    }
+
+    #[test]
+    fn prep_minutes_round_trips_and_absence_stays_absent() {
+        let mut conn = open(":memory:").unwrap();
+        seed(&mut conn, "h");
+        upsert_ingredient(&mut conn, &ingredient("i", "olive oil", &[])).unwrap();
+        save_recipe(&mut conn, &starter_recipe("h", "r", "a-slug", "i")).unwrap();
+        assert_eq!(load(&conn, "h", "r").unwrap().prep_minutes(), Some(15));
+        save_recipe(&mut conn, &recipe("h", "r2", vec![])).unwrap();
+        assert_eq!(load(&conn, "h", "r2").unwrap().prep_minutes(), None);
+    }
+
+    #[test]
+    fn editing_a_starter_recipe_keeps_its_rights_and_slug() {
+        // Risk 1: the MVP-008 edit path loads a `RecipeDto` whose rights scalars are
+        // output-only, so a re-save carries no rights at all. It must not blank the columns.
+        let mut conn = open(":memory:").unwrap();
+        seed(&mut conn, "h");
+        upsert_ingredient(&mut conn, &ingredient("i", "olive oil", &[])).unwrap();
+        save_recipe(&mut conn, &starter_recipe("h", "r", "a-slug", "i")).unwrap();
+        let edited = Recipe::new(
+            RecipeId::new("r").unwrap(),
+            HouseholdId::new("h").unwrap(),
+            "Renamed by the user",
+            Some(2),
+            Some(20),
+            "Cook.",
+            vec![],
+            RecipeProvenance::new(ProvenanceKind::Starter, None, None, None).unwrap(),
+        )
+        .unwrap();
+        save_recipe(&mut conn, &edited).unwrap();
+        let loaded = load(&conn, "h", "r").unwrap();
+        assert_eq!(loaded.title(), "Renamed by the user");
+        assert_eq!(loaded.prep_minutes(), Some(20));
+        assert_eq!(loaded.provenance().starter_slug(), Some("a-slug"));
+        let kept = loaded.provenance().rights().unwrap();
+        assert_eq!(kept.basis(), RightsBasis::Original);
+        assert_eq!(kept.attribution(), Some("Kimatta"));
+        assert_eq!(kept.modifications(), Some("halved the salt"));
+    }
+
+    #[test]
+    fn an_edit_that_supplies_rights_replaces_them() {
+        let mut conn = open(":memory:").unwrap();
+        seed(&mut conn, "h");
+        upsert_ingredient(&mut conn, &ingredient("i", "olive oil", &[])).unwrap();
+        save_recipe(&mut conn, &starter_recipe("h", "r", "a-slug", "i")).unwrap();
+        let mut replaced = starter_recipe("h", "r", "a-slug", "i");
+        replaced = Recipe::new(
+            RecipeId::new("r").unwrap(),
+            HouseholdId::new("h").unwrap(),
+            replaced.title().to_owned(),
+            replaced.servings(),
+            replaced.prep_minutes(),
+            replaced.instructions().to_owned(),
+            replaced.lines().to_vec(),
+            starter_provenance("a-slug", Some(rights(RightsBasis::Cc0, Some("Someone")))),
+        )
+        .unwrap();
+        save_recipe(&mut conn, &replaced).unwrap();
+        let kept = load(&conn, "h", "r").unwrap();
+        let kept = kept.provenance().rights().unwrap();
+        assert_eq!(kept.basis(), RightsBasis::Cc0);
+        assert_eq!(kept.attribution(), Some("Someone"));
+    }
+
+    #[test]
+    fn an_edit_supplying_rights_with_no_attribution_clears_the_stored_one() {
+        // The four rights columns move as one group: an incoming record that names no
+        // attribution says there is none, and must not silently retain the old credit.
+        let mut conn = open(":memory:").unwrap();
+        seed(&mut conn, "h");
+        upsert_ingredient(&mut conn, &ingredient("i", "olive oil", &[])).unwrap();
+        save_recipe(&mut conn, &starter_recipe("h", "r", "a-slug", "i")).unwrap();
+        let base = starter_recipe("h", "r", "a-slug", "i");
+        let cleared = Recipe::new(
+            RecipeId::new("r").unwrap(),
+            HouseholdId::new("h").unwrap(),
+            base.title().to_owned(),
+            base.servings(),
+            base.prep_minutes(),
+            base.instructions().to_owned(),
+            base.lines().to_vec(),
+            starter_provenance("a-slug", Some(rights(RightsBasis::Original, None))),
+        )
+        .unwrap();
+        save_recipe(&mut conn, &cleared).unwrap();
+        let loaded = load(&conn, "h", "r").unwrap();
+        assert_eq!(loaded.provenance().rights().unwrap().attribution(), None);
+    }
+
+    #[test]
+    fn a_corrupt_rights_basis_row_is_reported_not_coerced() {
+        let mut conn = open(":memory:").unwrap();
+        seed(&mut conn, "h");
+        upsert_ingredient(&mut conn, &ingredient("i", "olive oil", &[])).unwrap();
+        save_recipe(&mut conn, &starter_recipe("h", "r", "a-slug", "i")).unwrap();
+        set_provenance_column(&conn, "r", "rights_basis", Some("cc_by"));
+        let err = load_record_err(&conn, "h", "r");
+        assert!(
+            matches!(&err, StorageError::CorruptRights { recipe, detail }
+                if recipe == "r" && detail.contains("unreadable rights_basis")),
+            "{err:?}"
+        );
+    }
+
+    #[test]
+    fn a_partial_rights_row_is_reported_not_coerced() {
+        let mut conn = open(":memory:").unwrap();
+        seed(&mut conn, "h");
+        upsert_ingredient(&mut conn, &ingredient("i", "olive oil", &[])).unwrap();
+        save_recipe(&mut conn, &starter_recipe("h", "r", "a-slug", "i")).unwrap();
+        set_provenance_column(&conn, "r", "verified_on", None);
+        let err = load_record_err(&conn, "h", "r");
+        assert!(
+            matches!(&err, StorageError::CorruptRights { detail, .. }
+                if detail.contains("rights_basis is set but verified_on is NULL")),
+            "{err:?}"
+        );
+        // And the mirror.
+        set_provenance_column(&conn, "r", "verified_on", Some("2026-08-29"));
+        set_provenance_column(&conn, "r", "rights_basis", None);
+        let err = load_record_err(&conn, "h", "r");
+        assert!(
+            matches!(&err, StorageError::CorruptRights { detail, .. }
+                if detail.contains("verified_on is set but rights_basis is NULL")),
+            "{err:?}"
+        );
+    }
+
+    #[test]
+    fn an_attribution_without_a_basis_is_reported_not_dropped() {
+        let mut conn = open(":memory:").unwrap();
+        seed(&mut conn, "h");
+        save_recipe(&mut conn, &recipe("h", "r", vec![])).unwrap();
+        set_provenance_column(&conn, "r", "attribution", Some("Someone"));
+        let err = load_record_err(&conn, "h", "r");
+        assert!(
+            matches!(&err, StorageError::CorruptRights { detail, .. }
+                if detail.contains("attribution or modifications without a rights basis")),
+            "{err:?}"
+        );
+    }
+
+    #[test]
+    fn a_glob_passing_non_date_verified_on_is_reported() {
+        // `2026-13-45` satisfies the column GLOB and still is not a civil date.
+        let mut conn = open(":memory:").unwrap();
+        seed(&mut conn, "h");
+        upsert_ingredient(&mut conn, &ingredient("i", "olive oil", &[])).unwrap();
+        save_recipe(&mut conn, &starter_recipe("h", "r", "a-slug", "i")).unwrap();
+        set_provenance_column(&conn, "r", "verified_on", Some("2026-13-45"));
+        let err = load_record_err(&conn, "h", "r");
+        assert!(
+            matches!(&err, StorageError::CorruptRights { detail, .. }
+                if detail.contains("unreadable rights record")),
+            "{err:?}"
+        );
+    }
+
+    // Expected-to-pass pins on the `write_recipe` extraction: the guards `save_recipe` kept
+    // for itself are not covered by the line-set pin, so they are asserted directly.
+    #[test]
+    fn save_into_an_absent_household_is_still_no_such_household() {
+        let mut conn = open(":memory:").unwrap();
+        let err = save_recipe(&mut conn, &recipe("nope", "r", vec![])).unwrap_err();
+        assert!(
+            matches!(err, StorageError::NoSuchHousehold(ref h) if h == "nope"),
+            "{err:?}"
+        );
+    }
+
+    #[test]
+    fn saving_over_another_households_recipe_id_is_still_rejected() {
+        let mut conn = open(":memory:").unwrap();
+        seed(&mut conn, "h1");
+        seed(&mut conn, "h2");
+        save_recipe(&mut conn, &recipe("h1", "r", vec![])).unwrap();
+        let err = save_recipe(&mut conn, &recipe("h2", "r", vec![])).unwrap_err();
+        assert!(
+            matches!(&err, StorageError::NoSuchRecipe { recipe, household }
+                if recipe == "r" && household == "h2"),
+            "{err:?}"
+        );
+        assert_eq!(
+            load(&conn, "h1", "r").unwrap().household_id().as_str(),
+            "h1"
+        );
+    }
+
+    // --- install_starter_content --------------------------------------------------------
+
+    fn catalog() -> Vec<Ingredient> {
+        vec![
+            ingredient("i-oil", "olive oil", &["extra virgin olive oil"]),
+            ingredient("i-salt", "salt", &[]),
+        ]
+    }
+
+    fn starter_set(household: &str) -> Vec<Recipe> {
+        vec![
+            starter_recipe(household, "sr-1", "slug-one", "i-oil"),
+            starter_recipe(household, "sr-2", "slug-two", "i-salt"),
+        ]
+    }
+
+    #[test]
+    fn installing_into_an_empty_household_installs_every_recipe() {
+        let mut conn = open(":memory:").unwrap();
+        seed(&mut conn, "h");
+        let report =
+            install_starter_content(&mut conn, &hid("h"), &catalog(), &starter_set("h")).unwrap();
+        assert_eq!(
+            report,
+            StarterInstallReport {
+                installed: 2,
+                skipped: 0,
+                catalog_installed: 2
+            }
+        );
+        assert_eq!(ids(&conn, "h", RecipeListing::Active), vec!["sr-1", "sr-2"]);
+        assert_eq!(
+            load(&conn, "h", "sr-1")
+                .unwrap()
+                .provenance()
+                .starter_slug(),
+            Some("slug-one")
+        );
+    }
+
+    #[test]
+    fn installing_twice_installs_nothing_the_second_time() {
+        let mut conn = open(":memory:").unwrap();
+        seed(&mut conn, "h");
+        install_starter_content(&mut conn, &hid("h"), &catalog(), &starter_set("h")).unwrap();
+        let report =
+            install_starter_content(&mut conn, &hid("h"), &catalog(), &starter_set("h")).unwrap();
+        assert_eq!(
+            report,
+            StarterInstallReport {
+                installed: 0,
+                skipped: 2,
+                catalog_installed: 0
+            }
+        );
+        assert_eq!(count(&conn, "recipe"), 2);
+        assert_eq!(count(&conn, "ingredient"), 2);
+    }
+
+    #[test]
+    fn a_second_install_writes_no_rows() {
+        // Risk 10. `total_changes()` can prove "no rows were written"; it cannot prove "no
+        // transaction was opened", and this test claims only what it can prove.
+        let mut conn = open(":memory:").unwrap();
+        seed(&mut conn, "h");
+        install_starter_content(&mut conn, &hid("h"), &catalog(), &starter_set("h")).unwrap();
+        let before = conn.total_changes();
+        install_starter_content(&mut conn, &hid("h"), &catalog(), &starter_set("h")).unwrap();
+        assert_eq!(conn.total_changes(), before);
+    }
+
+    #[test]
+    fn an_archived_starter_recipe_is_not_reinstalled() {
+        let mut conn = open(":memory:").unwrap();
+        seed(&mut conn, "h");
+        install_starter_content(&mut conn, &hid("h"), &catalog(), &starter_set("h")).unwrap();
+        archive_recipe(
+            &mut conn,
+            &hid("h"),
+            &RecipeId::new("sr-1").unwrap(),
+            parse_civil_date("2026-08-29").unwrap(),
+        )
+        .unwrap();
+        let report =
+            install_starter_content(&mut conn, &hid("h"), &catalog(), &starter_set("h")).unwrap();
+        assert_eq!(report.installed, 0);
+        assert_eq!(report.skipped, 2);
+        assert_eq!(ids(&conn, "h", RecipeListing::Active), vec!["sr-2"]);
+        assert_eq!(ids(&conn, "h", RecipeListing::Archived), vec!["sr-1"]);
+    }
+
+    #[test]
+    fn an_edited_installed_starter_recipe_is_not_overwritten() {
+        // Install-once (Risk 9): a revised entry does not reach a device that holds the slug.
+        let mut conn = open(":memory:").unwrap();
+        seed(&mut conn, "h");
+        install_starter_content(&mut conn, &hid("h"), &catalog(), &starter_set("h")).unwrap();
+        let mut edited = starter_recipe("h", "sr-1", "slug-one", "i-oil");
+        edited = Recipe::new(
+            RecipeId::new("sr-1").unwrap(),
+            hid("h"),
+            "The user's own title",
+            edited.servings(),
+            edited.prep_minutes(),
+            edited.instructions().to_owned(),
+            edited.lines().to_vec(),
+            edited.provenance().clone(),
+        )
+        .unwrap();
+        save_recipe(&mut conn, &edited).unwrap();
+        install_starter_content(&mut conn, &hid("h"), &catalog(), &starter_set("h")).unwrap();
+        assert_eq!(
+            load(&conn, "h", "sr-1").unwrap().title(),
+            "The user's own title"
+        );
+    }
+
+    #[test]
+    fn install_is_household_scoped() {
+        let mut conn = open(":memory:").unwrap();
+        seed(&mut conn, "h1");
+        seed(&mut conn, "h2");
+        install_starter_content(&mut conn, &hid("h1"), &catalog(), &starter_set("h1")).unwrap();
+        let mut second = starter_set("h2");
+        second = second
+            .into_iter()
+            .enumerate()
+            .map(|(i, r)| {
+                Recipe::new(
+                    RecipeId::new(format!("h2-{i}")).unwrap(),
+                    hid("h2"),
+                    r.title().to_owned(),
+                    r.servings(),
+                    r.prep_minutes(),
+                    r.instructions().to_owned(),
+                    r.lines().to_vec(),
+                    r.provenance().clone(),
+                )
+                .unwrap()
+            })
+            .collect();
+        let report = install_starter_content(&mut conn, &hid("h2"), &catalog(), &second).unwrap();
+        assert_eq!(report.installed, 2);
+        assert_eq!(
+            ids(&conn, "h1", RecipeListing::Active),
+            vec!["sr-1", "sr-2"]
+        );
+        assert_eq!(
+            ids(&conn, "h2", RecipeListing::Active),
+            vec!["h2-0", "h2-1"]
+        );
+    }
+
+    #[test]
+    fn installing_an_empty_recipe_set_still_seeds_the_catalog_and_reports_it() {
+        // Risk 4: the zero-cook-review case must read as empty by design, not as nothing
+        // happening at all.
+        let mut conn = open(":memory:").unwrap();
+        seed(&mut conn, "h");
+        let report = install_starter_content(&mut conn, &hid("h"), &catalog(), &[]).unwrap();
+        assert_eq!(report.installed, 0);
+        assert_eq!(report.skipped, 0);
+        assert_eq!(report.catalog_installed, 2);
+        assert_eq!(count(&conn, "ingredient"), 2);
+    }
+
+    #[test]
+    fn a_changed_alias_set_is_replaced_whole_when_any_id_is_new() {
+        let mut conn = open(":memory:").unwrap();
+        seed(&mut conn, "h");
+        install_starter_content(&mut conn, &hid("h"), &catalog()[..1], &[]).unwrap();
+        let revised = vec![
+            ingredient("i-oil", "olive oil", &["evoo"]),
+            ingredient("i-salt", "salt", &[]),
+        ];
+        install_starter_content(&mut conn, &hid("h"), &revised, &[]).unwrap();
+        assert_eq!(
+            load_ingredient(&conn, &IngredientId::new("i-oil").unwrap())
+                .unwrap()
+                .unwrap()
+                .aliases(),
+            ["evoo"]
+        );
+    }
+
+    #[test]
+    fn a_starter_recipe_without_a_slug_is_rejected() {
+        let mut conn = open(":memory:").unwrap();
+        seed(&mut conn, "h");
+        let err = install_starter_content(
+            &mut conn,
+            &hid("h"),
+            &catalog(),
+            &[recipe("h", "r", vec![])],
+        )
+        .unwrap_err();
+        assert!(
+            matches!(&err, StorageError::MissingStarterSlug(t) if t == "Recipe r"),
+            "{err:?}"
+        );
+        assert_eq!(count(&conn, "recipe"), 0);
+        assert_eq!(count(&conn, "ingredient"), 0);
+    }
+
+    #[test]
+    fn a_recipe_line_naming_an_unseeded_catalog_id_rolls_back_the_whole_install() {
+        // The catalog upserts happen earlier in the same transaction, so the guarantee is
+        // rollback, not write-avoidance: the catalog must be absent afterwards too.
+        let mut conn = open(":memory:").unwrap();
+        seed(&mut conn, "h");
+        let bad = vec![starter_recipe("h", "sr-1", "slug-one", "i-missing")];
+        let err = install_starter_content(&mut conn, &hid("h"), &catalog(), &bad).unwrap_err();
+        assert!(
+            matches!(&err, StorageError::NoSuchIngredient(i) if i == "i-missing"),
+            "{err:?}"
+        );
+        assert_eq!(count(&conn, "recipe"), 0);
+        assert_eq!(count(&conn, "ingredient"), 0);
+    }
+
+    #[test]
+    fn install_for_an_absent_household_is_rejected() {
+        let mut conn = open(":memory:").unwrap();
+        let err = install_starter_content(&mut conn, &hid("nope"), &catalog(), &[]).unwrap_err();
+        assert!(
+            matches!(&err, StorageError::NoSuchHousehold(h) if h == "nope"),
+            "{err:?}"
+        );
+    }
+
+    #[test]
+    fn install_for_an_absent_household_is_rejected_after_a_successful_install() {
+        // Adversarial: run it against a database where the catalog is already fully seeded,
+        // so the call takes the short-circuit path. The naive ordering — household check
+        // inside the write branch — passes the test above vacuously and fails this one.
+        let mut conn = open(":memory:").unwrap();
+        seed(&mut conn, "h");
+        install_starter_content(&mut conn, &hid("h"), &catalog(), &[]).unwrap();
+        let err = install_starter_content(&mut conn, &hid("nope"), &catalog(), &[]).unwrap_err();
+        assert!(
+            matches!(&err, StorageError::NoSuchHousehold(h) if h == "nope"),
+            "{err:?}"
         );
     }
 }

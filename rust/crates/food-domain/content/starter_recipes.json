@@ -1,0 +1,241 @@
+{
+  "policy": {
+    "allowed_rights_bases": ["original", "us_federal_public_domain", "cc0"],
+    "excluded": ["scraped", "cc_by", "cc_by_sa", "cc_nc", "cc_nd"],
+    "cc_by_note": "excluded for MVP: attribution survival on the public surface is MVP-020's unbuilt work",
+    "images": "none packaged; MVP-010 recipe photos was cut 2026-08-29",
+    "authorship": "every entry below is written for this project. US law protects a recipe's literary expression, not its ingredient list or its functional steps; the instructions are written plainly and functionally on purpose, so no third-party text is reproduced and no attribution question arises.",
+    "cook_review": "every entry is cook_review: null until a human cooks it. MVP-011 AC-3 says NOT VERIFIED cannot ship, and the installer only sees entries with a recorded review.",
+    "expected_conflicts_note": "expected_conflicts records what food_domain::assess actually returns under rule version 1, not a nutritional claim. peanut-noodle-bowl therefore declares gluten: rule version 1 matches the term \"noodles\" in \"rice noodles\", which are gluten-free. The declaration is kept honest rather than dodged by renaming the ingredient — MVP-009 accepted explainable false positives, over-warning is the safe direction, and the warning copy never claims safety. The reverse direction is present too and is the one to watch: rule version 1 has no gluten term matching soy sauce, so vegetable-fried-rice declares soy and sesame but no gluten conflict, even though conventionally brewed soy sauce is made with wheat and is a well-known hidden gluten source. peanut-noodle-bowl carries the same soy sauce and is flagged gluten only because \"noodles\" matches inside \"rice noodles\", so the roster is inconsistent on this one ingredient, and inconsistent in the unsafe direction on one of the two. Adding soy sauce to the gluten terms — and deciding the same question for tamari and miso, which rule version 1 already matches as soy but not as gluten — is an MVP-009 rule change with a RULE_VERSION bump, not a content edit; renaming the ingredient to dodge the matcher is not an option here either.",
+    "expected_conflicts_order": "order is not significant: every_recipe_matches_its_declared_conflicts sorts both sides into RestrictionKind::ALL order before comparing, so entries may list expected_conflicts in any order."
+  },
+  "catalog": [
+    { "id": "ing-olive-oil", "canonical_name": "olive oil", "aliases": ["extra virgin olive oil"], "store_category": "pantry" },
+    { "id": "ing-salt", "canonical_name": "salt", "aliases": ["kosher salt"], "store_category": "pantry" },
+    { "id": "ing-black-pepper", "canonical_name": "black pepper", "aliases": ["pepper"], "store_category": "pantry" },
+    { "id": "ing-garlic", "canonical_name": "garlic", "aliases": ["garlic cloves"], "store_category": "produce" },
+    { "id": "ing-onion", "canonical_name": "onion", "aliases": ["yellow onion"], "store_category": "produce" },
+    { "id": "ing-carrot", "canonical_name": "carrot", "aliases": ["carrots"], "store_category": "produce" },
+    { "id": "ing-lemon", "canonical_name": "lemon", "aliases": [], "store_category": "produce" },
+    { "id": "ing-lime", "canonical_name": "lime", "aliases": [], "store_category": "produce" },
+    { "id": "ing-scallion", "canonical_name": "scallion", "aliases": ["green onion"], "store_category": "produce" },
+    { "id": "ing-parsley", "canonical_name": "parsley", "aliases": ["flat-leaf parsley"], "store_category": "produce" },
+    { "id": "ing-dill", "canonical_name": "dill", "aliases": [], "store_category": "produce" },
+    { "id": "ing-ginger", "canonical_name": "ginger", "aliases": ["fresh ginger"], "store_category": "produce" },
+    { "id": "ing-potato", "canonical_name": "potato", "aliases": ["potatoes"], "store_category": "produce" },
+    { "id": "ing-chicken-thighs", "canonical_name": "chicken thighs", "aliases": ["chicken thigh"], "store_category": "meat" },
+    { "id": "ing-salmon-fillet", "canonical_name": "salmon fillet", "aliases": ["salmon"], "store_category": "seafood" },
+    { "id": "ing-shrimp", "canonical_name": "shrimp", "aliases": ["prawns"], "store_category": "seafood" },
+    { "id": "ing-red-lentils", "canonical_name": "red lentils", "aliases": ["split red lentils"], "store_category": "pantry" },
+    { "id": "ing-black-beans", "canonical_name": "black beans", "aliases": [], "store_category": "pantry" },
+    { "id": "ing-chickpeas", "canonical_name": "chickpeas", "aliases": ["garbanzo beans"], "store_category": "pantry" },
+    { "id": "ing-white-rice", "canonical_name": "white rice", "aliases": ["long-grain white rice"], "store_category": "pantry" },
+    { "id": "ing-rice-noodles", "canonical_name": "rice noodles", "aliases": [], "store_category": "pantry" },
+    { "id": "ing-spaghetti", "canonical_name": "spaghetti", "aliases": [], "store_category": "pantry" },
+    { "id": "ing-corn-tortillas", "canonical_name": "corn tortillas", "aliases": ["corn tortilla"], "store_category": "bakery" },
+    { "id": "ing-flour-tortillas", "canonical_name": "flour tortillas", "aliases": ["flour tortilla"], "store_category": "bakery" },
+    { "id": "ing-canned-tomatoes", "canonical_name": "crushed tomatoes", "aliases": ["canned crushed tomatoes"], "store_category": "pantry" },
+    { "id": "ing-coconut-milk", "canonical_name": "coconut milk", "aliases": [], "store_category": "pantry" },
+    { "id": "ing-vegetable-broth", "canonical_name": "vegetable broth", "aliases": ["vegetable stock"], "store_category": "pantry" },
+    { "id": "ing-heavy-cream", "canonical_name": "heavy cream", "aliases": ["double cream"], "store_category": "dairy" },
+    { "id": "ing-butter", "canonical_name": "butter", "aliases": ["unsalted butter"], "store_category": "dairy" },
+    { "id": "ing-cheddar", "canonical_name": "cheddar cheese", "aliases": ["cheddar"], "store_category": "dairy" },
+    { "id": "ing-eggs", "canonical_name": "eggs", "aliases": ["egg"], "store_category": "dairy" },
+    { "id": "ing-peanut-butter", "canonical_name": "peanut butter", "aliases": [], "store_category": "pantry" },
+    { "id": "ing-soy-sauce", "canonical_name": "soy sauce", "aliases": [], "store_category": "pantry" },
+    { "id": "ing-sesame-oil", "canonical_name": "toasted sesame oil", "aliases": ["sesame oil"], "store_category": "pantry" },
+    { "id": "ing-cumin", "canonical_name": "ground cumin", "aliases": ["cumin"], "store_category": "pantry" },
+    { "id": "ing-curry-powder", "canonical_name": "curry powder", "aliases": [], "store_category": "pantry" },
+    { "id": "ing-peas", "canonical_name": "frozen peas", "aliases": ["peas"], "store_category": "frozen" }
+  ],
+  "recipes": [
+    {
+      "slug": "sheet-pan-lemon-chicken",
+      "title": "Sheet-Pan Lemon Chicken and Potatoes",
+      "servings": 4,
+      "prep_minutes": 15,
+      "instructions": "Heat the oven to 220C. Halve the potatoes and toss them with half the oil, the salt and the pepper on a sheet pan. Roast 15 minutes. Toss the chicken with the rest of the oil, the sliced garlic and the juice of the lemon. Add it to the pan and roast 25 minutes more, until the chicken reads 74C at its thickest point.",
+      "provenance": { "kind": "starter", "source_url": null, "source_name": null, "source_author": "Kimatta", "rights": { "basis": "original", "attribution": null, "modifications": null, "verified_on": "2026-08-29" } },
+      "cook_review": null,
+      "expected_conflicts": ["vegetarian", "vegan"],
+      "lines": [
+        { "original_text": "700 g chicken thighs, boneless", "name": "chicken thighs", "catalog_id": "ing-chicken-thighs", "quantity": { "kind": "exact", "numer": 700, "denom": 1 }, "unit": "g", "preparation": "boneless", "optional": false },
+        { "original_text": "700 g potatoes, halved", "name": "potato", "catalog_id": "ing-potato", "quantity": { "kind": "exact", "numer": 700, "denom": 1 }, "unit": "g", "preparation": "halved", "optional": false },
+        { "original_text": "2 tbsp olive oil", "name": "olive oil", "catalog_id": "ing-olive-oil", "quantity": { "kind": "exact", "numer": 2, "denom": 1 }, "unit": "tbsp", "preparation": null, "optional": false },
+        { "original_text": "1 lemon", "name": "lemon", "catalog_id": "ing-lemon", "quantity": { "kind": "exact", "numer": 1, "denom": 1 }, "unit": "piece", "preparation": null, "optional": false },
+        { "original_text": "3 garlic cloves, sliced", "name": "garlic", "catalog_id": "ing-garlic", "quantity": { "kind": "exact", "numer": 3, "denom": 1 }, "unit": "piece", "preparation": "sliced", "optional": false },
+        { "original_text": "1 tsp salt", "name": "salt", "catalog_id": "ing-salt", "quantity": { "kind": "exact", "numer": 1, "denom": 1 }, "unit": "tsp", "preparation": null, "optional": false },
+        { "original_text": "1/2 tsp black pepper", "name": "black pepper", "catalog_id": "ing-black-pepper", "quantity": { "kind": "exact", "numer": 1, "denom": 2 }, "unit": "tsp", "preparation": null, "optional": false }
+      ]
+    },
+    {
+      "slug": "red-lentil-soup",
+      "title": "Red Lentil Soup",
+      "servings": 4,
+      "prep_minutes": 10,
+      "instructions": "Soften the chopped onion and carrot in the oil over medium heat, about 8 minutes. Stir in the cumin for 30 seconds. Add the lentils and the broth, bring to a boil, then simmer 20 minutes until the lentils fall apart. Season with the salt and blend as smooth as you like it.",
+      "provenance": { "kind": "starter", "source_url": null, "source_name": null, "source_author": "Kimatta", "rights": { "basis": "original", "attribution": null, "modifications": null, "verified_on": "2026-08-29" } },
+      "cook_review": null,
+      "expected_conflicts": [],
+      "lines": [
+        { "original_text": "250 g red lentils, rinsed", "name": "red lentils", "catalog_id": "ing-red-lentils", "quantity": { "kind": "exact", "numer": 250, "denom": 1 }, "unit": "g", "preparation": "rinsed", "optional": false },
+        { "original_text": "1 onion, chopped", "name": "onion", "catalog_id": "ing-onion", "quantity": { "kind": "exact", "numer": 1, "denom": 1 }, "unit": "piece", "preparation": "chopped", "optional": false },
+        { "original_text": "2 carrots, chopped", "name": "carrot", "catalog_id": "ing-carrot", "quantity": { "kind": "exact", "numer": 2, "denom": 1 }, "unit": "piece", "preparation": "chopped", "optional": false },
+        { "original_text": "2 tbsp olive oil", "name": "olive oil", "catalog_id": "ing-olive-oil", "quantity": { "kind": "exact", "numer": 2, "denom": 1 }, "unit": "tbsp", "preparation": null, "optional": false },
+        { "original_text": "1 tsp ground cumin", "name": "ground cumin", "catalog_id": "ing-cumin", "quantity": { "kind": "exact", "numer": 1, "denom": 1 }, "unit": "tsp", "preparation": null, "optional": false },
+        { "original_text": "1 l vegetable broth", "name": "vegetable broth", "catalog_id": "ing-vegetable-broth", "quantity": { "kind": "exact", "numer": 1, "denom": 1 }, "unit": "l", "preparation": null, "optional": false },
+        { "original_text": "1 tsp salt", "name": "salt", "catalog_id": "ing-salt", "quantity": { "kind": "exact", "numer": 1, "denom": 1 }, "unit": "tsp", "preparation": null, "optional": false }
+      ]
+    },
+    {
+      "slug": "black-bean-tacos",
+      "title": "Black Bean Tacos",
+      "servings": 4,
+      "prep_minutes": 20,
+      "instructions": "Cook the chopped onion in the oil over medium heat until soft. Add the cumin, then the drained beans and a splash of water, and mash about half of them. Simmer 5 minutes and season with the salt. Warm the tortillas in a dry pan and fill them. Finish with lime juice.",
+      "provenance": { "kind": "starter", "source_url": null, "source_name": null, "source_author": "Kimatta", "rights": { "basis": "original", "attribution": null, "modifications": null, "verified_on": "2026-08-29" } },
+      "cook_review": null,
+      "expected_conflicts": [],
+      "lines": [
+        { "original_text": "2 cups black beans, drained", "name": "black beans", "catalog_id": "ing-black-beans", "quantity": { "kind": "exact", "numer": 2, "denom": 1 }, "unit": "cup", "preparation": "drained", "optional": false },
+        { "original_text": "8 corn tortillas", "name": "corn tortillas", "catalog_id": "ing-corn-tortillas", "quantity": { "kind": "exact", "numer": 8, "denom": 1 }, "unit": "piece", "preparation": null, "optional": false },
+        { "original_text": "1 onion, chopped", "name": "onion", "catalog_id": "ing-onion", "quantity": { "kind": "exact", "numer": 1, "denom": 1 }, "unit": "piece", "preparation": "chopped", "optional": false },
+        { "original_text": "1 tbsp olive oil", "name": "olive oil", "catalog_id": "ing-olive-oil", "quantity": { "kind": "exact", "numer": 1, "denom": 1 }, "unit": "tbsp", "preparation": null, "optional": false },
+        { "original_text": "1 tsp ground cumin", "name": "ground cumin", "catalog_id": "ing-cumin", "quantity": { "kind": "exact", "numer": 1, "denom": 1 }, "unit": "tsp", "preparation": null, "optional": false },
+        { "original_text": "1 lime", "name": "lime", "catalog_id": "ing-lime", "quantity": { "kind": "exact", "numer": 1, "denom": 1 }, "unit": "piece", "preparation": null, "optional": false },
+        { "original_text": "1/2 tsp salt", "name": "salt", "catalog_id": "ing-salt", "quantity": { "kind": "exact", "numer": 1, "denom": 2 }, "unit": "tsp", "preparation": null, "optional": false }
+      ]
+    },
+    {
+      "slug": "creamy-tomato-spaghetti",
+      "title": "Creamy Tomato Spaghetti",
+      "servings": 4,
+      "prep_minutes": 10,
+      "instructions": "Boil the spaghetti in salted water. Meanwhile melt the butter with the oil, cook the sliced garlic 1 minute, add the tomatoes and simmer 10 minutes. Stir in the cream and the salt. Drain the pasta, reserving a cup of its water, and toss it through the sauce, loosening with the water until it coats.",
+      "provenance": { "kind": "starter", "source_url": null, "source_name": null, "source_author": "Kimatta", "rights": { "basis": "original", "attribution": null, "modifications": null, "verified_on": "2026-08-29" } },
+      "cook_review": null,
+      "expected_conflicts": ["dairy", "gluten", "vegan"],
+      "lines": [
+        { "original_text": "400 g spaghetti", "name": "spaghetti", "catalog_id": "ing-spaghetti", "quantity": { "kind": "exact", "numer": 400, "denom": 1 }, "unit": "g", "preparation": null, "optional": false },
+        { "original_text": "400 g crushed tomatoes", "name": "crushed tomatoes", "catalog_id": "ing-canned-tomatoes", "quantity": { "kind": "exact", "numer": 400, "denom": 1 }, "unit": "g", "preparation": null, "optional": false },
+        { "original_text": "120 ml heavy cream", "name": "heavy cream", "catalog_id": "ing-heavy-cream", "quantity": { "kind": "exact", "numer": 120, "denom": 1 }, "unit": "ml", "preparation": null, "optional": false },
+        { "original_text": "2 tbsp butter", "name": "butter", "catalog_id": "ing-butter", "quantity": { "kind": "exact", "numer": 2, "denom": 1 }, "unit": "tbsp", "preparation": null, "optional": false },
+        { "original_text": "1 tbsp olive oil", "name": "olive oil", "catalog_id": "ing-olive-oil", "quantity": { "kind": "exact", "numer": 1, "denom": 1 }, "unit": "tbsp", "preparation": null, "optional": false },
+        { "original_text": "3 garlic cloves, sliced", "name": "garlic", "catalog_id": "ing-garlic", "quantity": { "kind": "exact", "numer": 3, "denom": 1 }, "unit": "piece", "preparation": "sliced", "optional": false },
+        { "original_text": "1 tsp salt", "name": "salt", "catalog_id": "ing-salt", "quantity": { "kind": "exact", "numer": 1, "denom": 1 }, "unit": "tsp", "preparation": null, "optional": false }
+      ]
+    },
+    {
+      "slug": "peanut-noodle-bowl",
+      "title": "Peanut Noodle Bowl",
+      "servings": 3,
+      "prep_minutes": 15,
+      "instructions": "Soak the rice noodles in hot water until pliable, then drain. Whisk the peanut butter with the soy sauce, the sesame oil, the juice of the lime and enough hot water to pour. Toss the noodles with the sauce, the julienned carrot and the sliced scallion.",
+      "provenance": { "kind": "starter", "source_url": null, "source_name": null, "source_author": "Kimatta", "rights": { "basis": "original", "attribution": null, "modifications": null, "verified_on": "2026-08-29" } },
+      "cook_review": null,
+      "expected_conflicts": ["peanuts", "gluten", "soy", "sesame"],
+      "lines": [
+        { "original_text": "250 g rice noodles", "name": "rice noodles", "catalog_id": "ing-rice-noodles", "quantity": { "kind": "exact", "numer": 250, "denom": 1 }, "unit": "g", "preparation": null, "optional": false },
+        { "original_text": "1/3 cup peanut butter", "name": "peanut butter", "catalog_id": "ing-peanut-butter", "quantity": { "kind": "exact", "numer": 1, "denom": 3 }, "unit": "cup", "preparation": null, "optional": false },
+        { "original_text": "3 tbsp soy sauce", "name": "soy sauce", "catalog_id": "ing-soy-sauce", "quantity": { "kind": "exact", "numer": 3, "denom": 1 }, "unit": "tbsp", "preparation": null, "optional": false },
+        { "original_text": "1 tbsp toasted sesame oil", "name": "toasted sesame oil", "catalog_id": "ing-sesame-oil", "quantity": { "kind": "exact", "numer": 1, "denom": 1 }, "unit": "tbsp", "preparation": null, "optional": false },
+        { "original_text": "2 carrots, julienned", "name": "carrot", "catalog_id": "ing-carrot", "quantity": { "kind": "exact", "numer": 2, "denom": 1 }, "unit": "piece", "preparation": "julienned", "optional": false },
+        { "original_text": "3 scallions, sliced", "name": "scallion", "catalog_id": "ing-scallion", "quantity": { "kind": "exact", "numer": 3, "denom": 1 }, "unit": "piece", "preparation": "sliced", "optional": false },
+        { "original_text": "1 lime", "name": "lime", "catalog_id": "ing-lime", "quantity": { "kind": "exact", "numer": 1, "denom": 1 }, "unit": "piece", "preparation": null, "optional": false }
+      ]
+    },
+    {
+      "slug": "baked-salmon-and-rice",
+      "title": "Baked Salmon with Lemon Rice",
+      "servings": 2,
+      "prep_minutes": 10,
+      "instructions": "Heat the oven to 200C. Rub the salmon with the oil and the salt and bake 12 minutes, until it flakes. Cook the rice in twice its volume of water. Fold the juice of the lemon and the chopped dill through the rice and serve the salmon on top.",
+      "provenance": { "kind": "starter", "source_url": null, "source_name": null, "source_author": "Kimatta", "rights": { "basis": "original", "attribution": null, "modifications": null, "verified_on": "2026-08-29" } },
+      "cook_review": null,
+      "expected_conflicts": ["fish", "vegetarian", "vegan"],
+      "lines": [
+        { "original_text": "2 salmon fillets", "name": "salmon fillet", "catalog_id": "ing-salmon-fillet", "quantity": { "kind": "exact", "numer": 2, "denom": 1 }, "unit": "piece", "preparation": null, "optional": false },
+        { "original_text": "1 cup white rice", "name": "white rice", "catalog_id": "ing-white-rice", "quantity": { "kind": "exact", "numer": 1, "denom": 1 }, "unit": "cup", "preparation": null, "optional": false },
+        { "original_text": "1 tbsp olive oil", "name": "olive oil", "catalog_id": "ing-olive-oil", "quantity": { "kind": "exact", "numer": 1, "denom": 1 }, "unit": "tbsp", "preparation": null, "optional": false },
+        { "original_text": "1 lemon", "name": "lemon", "catalog_id": "ing-lemon", "quantity": { "kind": "exact", "numer": 1, "denom": 1 }, "unit": "piece", "preparation": null, "optional": false },
+        { "original_text": "2 tbsp dill, chopped", "name": "dill", "catalog_id": "ing-dill", "quantity": { "kind": "exact", "numer": 2, "denom": 1 }, "unit": "tbsp", "preparation": "chopped", "optional": false },
+        { "original_text": "1/2 tsp salt", "name": "salt", "catalog_id": "ing-salt", "quantity": { "kind": "exact", "numer": 1, "denom": 2 }, "unit": "tsp", "preparation": null, "optional": false }
+      ]
+    },
+    {
+      "slug": "vegetable-fried-rice",
+      "title": "Vegetable Fried Rice",
+      "servings": 3,
+      "prep_minutes": 15,
+      "instructions": "Use rice cooked and cooled the day before. Scramble the beaten eggs in a hot pan and set them aside. Fry the diced carrot 3 minutes, add the peas, then the rice, breaking up the clumps. Return the eggs, add the soy sauce and the sesame oil, and finish with the sliced scallion.",
+      "provenance": { "kind": "starter", "source_url": null, "source_name": null, "source_author": "Kimatta", "rights": { "basis": "original", "attribution": null, "modifications": null, "verified_on": "2026-08-29" } },
+      "cook_review": null,
+      "expected_conflicts": ["eggs", "soy", "sesame", "vegan"],
+      "lines": [
+        { "original_text": "3 cups white rice, cooked and cooled", "name": "white rice", "catalog_id": "ing-white-rice", "quantity": { "kind": "exact", "numer": 3, "denom": 1 }, "unit": "cup", "preparation": "cooked and cooled", "optional": false },
+        { "original_text": "3 eggs, beaten", "name": "eggs", "catalog_id": "ing-eggs", "quantity": { "kind": "exact", "numer": 3, "denom": 1 }, "unit": "piece", "preparation": "beaten", "optional": false },
+        { "original_text": "2 tbsp soy sauce", "name": "soy sauce", "catalog_id": "ing-soy-sauce", "quantity": { "kind": "exact", "numer": 2, "denom": 1 }, "unit": "tbsp", "preparation": null, "optional": false },
+        { "original_text": "1 tsp toasted sesame oil", "name": "toasted sesame oil", "catalog_id": "ing-sesame-oil", "quantity": { "kind": "exact", "numer": 1, "denom": 1 }, "unit": "tsp", "preparation": null, "optional": false },
+        { "original_text": "1 carrot, diced", "name": "carrot", "catalog_id": "ing-carrot", "quantity": { "kind": "exact", "numer": 1, "denom": 1 }, "unit": "piece", "preparation": "diced", "optional": false },
+        { "original_text": "1 cup frozen peas", "name": "frozen peas", "catalog_id": "ing-peas", "quantity": { "kind": "exact", "numer": 1, "denom": 1 }, "unit": "cup", "preparation": null, "optional": false },
+        { "original_text": "2 scallions, sliced", "name": "scallion", "catalog_id": "ing-scallion", "quantity": { "kind": "exact", "numer": 2, "denom": 1 }, "unit": "piece", "preparation": "sliced", "optional": false }
+      ]
+    },
+    {
+      "slug": "coconut-chickpea-curry",
+      "title": "Coconut Chickpea Curry",
+      "servings": 4,
+      "prep_minutes": 20,
+      "instructions": "Soften the chopped onion in the oil, then cook the grated ginger and the sliced garlic 1 minute. Stir in the curry powder for 30 seconds, add the drained chickpeas and the coconut milk, and simmer 20 minutes until it thickens. Season with the salt.",
+      "provenance": { "kind": "starter", "source_url": null, "source_name": null, "source_author": "Kimatta", "rights": { "basis": "original", "attribution": null, "modifications": null, "verified_on": "2026-08-29" } },
+      "cook_review": null,
+      "expected_conflicts": [],
+      "lines": [
+        { "original_text": "2 cups chickpeas, drained", "name": "chickpeas", "catalog_id": "ing-chickpeas", "quantity": { "kind": "exact", "numer": 2, "denom": 1 }, "unit": "cup", "preparation": "drained", "optional": false },
+        { "original_text": "400 ml coconut milk", "name": "coconut milk", "catalog_id": "ing-coconut-milk", "quantity": { "kind": "exact", "numer": 400, "denom": 1 }, "unit": "ml", "preparation": null, "optional": false },
+        { "original_text": "1 onion, chopped", "name": "onion", "catalog_id": "ing-onion", "quantity": { "kind": "exact", "numer": 1, "denom": 1 }, "unit": "piece", "preparation": "chopped", "optional": false },
+        { "original_text": "3 garlic cloves, sliced", "name": "garlic", "catalog_id": "ing-garlic", "quantity": { "kind": "exact", "numer": 3, "denom": 1 }, "unit": "piece", "preparation": "sliced", "optional": false },
+        { "original_text": "1 tbsp ginger, grated", "name": "ginger", "catalog_id": "ing-ginger", "quantity": { "kind": "exact", "numer": 1, "denom": 1 }, "unit": "tbsp", "preparation": "grated", "optional": false },
+        { "original_text": "1 tbsp curry powder", "name": "curry powder", "catalog_id": "ing-curry-powder", "quantity": { "kind": "exact", "numer": 1, "denom": 1 }, "unit": "tbsp", "preparation": null, "optional": false },
+        { "original_text": "2 tbsp olive oil", "name": "olive oil", "catalog_id": "ing-olive-oil", "quantity": { "kind": "exact", "numer": 2, "denom": 1 }, "unit": "tbsp", "preparation": null, "optional": false },
+        { "original_text": "1 tsp salt", "name": "salt", "catalog_id": "ing-salt", "quantity": { "kind": "exact", "numer": 1, "denom": 1 }, "unit": "tsp", "preparation": null, "optional": false }
+      ]
+    },
+    {
+      "slug": "cheese-and-bean-quesadillas",
+      "title": "Cheese and Black Bean Quesadillas",
+      "servings": 2,
+      "prep_minutes": 10,
+      "instructions": "Mash the drained beans with the cumin. Spread them over half of each tortilla, scatter the grated cheddar over, and fold. Cook in a lightly oiled pan over medium heat, about 3 minutes a side, until the cheese has melted and the outside is crisp.",
+      "provenance": { "kind": "starter", "source_url": null, "source_name": null, "source_author": "Kimatta", "rights": { "basis": "original", "attribution": null, "modifications": null, "verified_on": "2026-08-29" } },
+      "cook_review": null,
+      "expected_conflicts": ["dairy", "gluten", "vegan"],
+      "lines": [
+        { "original_text": "4 flour tortillas", "name": "flour tortillas", "catalog_id": "ing-flour-tortillas", "quantity": { "kind": "exact", "numer": 4, "denom": 1 }, "unit": "piece", "preparation": null, "optional": false },
+        { "original_text": "1 1/2 cups cheddar cheese, grated", "name": "cheddar cheese", "catalog_id": "ing-cheddar", "quantity": { "kind": "exact", "numer": 3, "denom": 2 }, "unit": "cup", "preparation": "grated", "optional": false },
+        { "original_text": "1 cup black beans, drained", "name": "black beans", "catalog_id": "ing-black-beans", "quantity": { "kind": "exact", "numer": 1, "denom": 1 }, "unit": "cup", "preparation": "drained", "optional": false },
+        { "original_text": "1 tsp ground cumin", "name": "ground cumin", "catalog_id": "ing-cumin", "quantity": { "kind": "exact", "numer": 1, "denom": 1 }, "unit": "tsp", "preparation": null, "optional": false },
+        { "original_text": "1 tbsp olive oil", "name": "olive oil", "catalog_id": "ing-olive-oil", "quantity": { "kind": "exact", "numer": 1, "denom": 1 }, "unit": "tbsp", "preparation": null, "optional": false }
+      ]
+    },
+    {
+      "slug": "garlic-shrimp-spaghetti",
+      "title": "Garlic Shrimp Spaghetti",
+      "servings": 4,
+      "prep_minutes": 15,
+      "instructions": "Boil the spaghetti in salted water. Cook the sliced garlic in the oil over low heat until it smells sweet, about 3 minutes. Raise the heat, add the shrimp and cook 3 minutes, until they are opaque throughout. Toss in the drained pasta with a splash of its water, the chopped parsley, the juice of the lemon and the salt.",
+      "provenance": { "kind": "starter", "source_url": null, "source_name": null, "source_author": "Kimatta", "rights": { "basis": "original", "attribution": null, "modifications": null, "verified_on": "2026-08-29" } },
+      "cook_review": null,
+      "expected_conflicts": ["gluten", "shellfish", "vegetarian", "vegan"],
+      "lines": [
+        { "original_text": "400 g spaghetti", "name": "spaghetti", "catalog_id": "ing-spaghetti", "quantity": { "kind": "exact", "numer": 400, "denom": 1 }, "unit": "g", "preparation": null, "optional": false },
+        { "original_text": "450 g shrimp, peeled", "name": "shrimp", "catalog_id": "ing-shrimp", "quantity": { "kind": "exact", "numer": 450, "denom": 1 }, "unit": "g", "preparation": "peeled", "optional": false },
+        { "original_text": "5 garlic cloves, sliced", "name": "garlic", "catalog_id": "ing-garlic", "quantity": { "kind": "exact", "numer": 5, "denom": 1 }, "unit": "piece", "preparation": "sliced", "optional": false },
+        { "original_text": "3 tbsp olive oil", "name": "olive oil", "catalog_id": "ing-olive-oil", "quantity": { "kind": "exact", "numer": 3, "denom": 1 }, "unit": "tbsp", "preparation": null, "optional": false },
+        { "original_text": "1/4 cup parsley, chopped", "name": "parsley", "catalog_id": "ing-parsley", "quantity": { "kind": "exact", "numer": 1, "denom": 4 }, "unit": "cup", "preparation": "chopped", "optional": false },
+        { "original_text": "1 lemon", "name": "lemon", "catalog_id": "ing-lemon", "quantity": { "kind": "exact", "numer": 1, "denom": 1 }, "unit": "piece", "preparation": null, "optional": false },
+        { "original_text": "1 tsp salt", "name": "salt", "catalog_id": "ing-salt", "quantity": { "kind": "exact", "numer": 1, "denom": 1 }, "unit": "tsp", "preparation": null, "optional": false }
+      ]
+    }
+  ]
+}

@@ -8,6 +8,7 @@ import 'package:meal_mate/src/rust/api/household.dart';
 import 'package:meal_mate/src/rust/api/planning.dart';
 import 'package:meal_mate/src/rust/api/recipe.dart';
 import 'package:meal_mate/src/rust/api/restrictions.dart';
+import 'package:meal_mate/src/rust/api/starter.dart';
 import 'package:meal_mate/src/rust/frb_generated.dart';
 import 'package:meal_mate/features/recipes/recipe_fields.dart';
 import 'package:meal_mate/features/restrictions/restriction_copy.dart';
@@ -38,9 +39,9 @@ void main() {
     );
   });
 
-  test('open_database migrates a real database to schema v5', () async {
+  test('open_database migrates a real database to schema v6', () async {
     final report = await openDatabase(dbPath: await tempDb());
-    expect(report.schemaVersion, 5);
+    expect(report.schemaVersion, 6);
   });
 
   test('storage failure surfaces as KimattaError_Storage', () async {
@@ -144,6 +145,49 @@ void main() {
     expect(again.lengthDays, 14);
     expect(again.mealSlots, [MealSlotDto.breakfast, MealSlotDto.dinner]);
   });
+
+  test('starter content installs once and is idempotent', () async {
+    await openDatabase(dbPath: await tempDb());
+    final h = await bootstrapHousehold();
+    final first = await installStarterContent(householdId: h.id);
+    // Empty by design, and the report says so rather than leaving `installed: 0`
+    // indistinguishable from a swallowed failure (MVP-011 AC-3).
+    expect(first.catalogInstalled, greaterThan(0));
+    expect(first.installed, first.available);
+    expect(first.pendingCookReview, greaterThan(0));
+
+    final second = await installStarterContent(householdId: h.id);
+    expect(second.catalogInstalled, 0);
+    expect(second.installed, 0);
+    expect(second.available, first.available);
+    expect(second.pendingCookReview, first.pendingCookReview);
+  });
+
+  test('installed starter content survives reopening the same file', () async {
+    final path = await tempDb();
+    await openDatabase(dbPath: path);
+    final h = await bootstrapHousehold();
+    final first = await installStarterContent(householdId: h.id);
+
+    await openDatabase(dbPath: path);
+    final again = await installStarterContent(householdId: h.id);
+    // Nothing is re-seeded, which is only observable because the catalog persisted.
+    expect(again.catalogInstalled, 0);
+    expect(again.installed, 0);
+    expect(first.catalogInstalled, greaterThan(0));
+  });
+
+  test(
+    'installing for an unknown household is a typed Storage error',
+    () async {
+      await openDatabase(dbPath: await tempDb());
+      await bootstrapHousehold();
+      await expectLater(
+        () => installStarterContent(householdId: 'not-a-household'),
+        throwsA(isA<KimattaError_Storage>()),
+      );
+    },
+  );
 
   test('an invalid anchor date is a typed Planning error in Dart', () async {
     await openDatabase(dbPath: await tempDb());

@@ -9,6 +9,7 @@ import 'api/household.dart';
 import 'api/planning.dart';
 import 'api/recipe.dart';
 import 'api/restrictions.dart';
+import 'api/starter.dart';
 
 import 'dart:async';
 import 'dart:convert';
@@ -74,7 +75,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.13.0';
 
   @override
-  int get rustContentHash => -878769591;
+  int get rustContentHash => -2080577187;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -110,6 +111,10 @@ abstract class RustLibApi extends BaseApi {
   });
 
   Future<void> crateApiHealthInitApp();
+
+  Future<StarterInstallReportDto> crateApiStarterInstallStarterContent({
+    required String householdId,
+  });
 
   Future<List<String>> crateApiRestrictionsKnownRestrictionKinds();
 
@@ -386,6 +391,39 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       const TaskConstMeta(debugName: "init_app", argNames: []);
 
   @override
+  Future<StarterInstallReportDto> crateApiStarterInstallStarterContent({
+    required String householdId,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(householdId, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 8,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_starter_install_report_dto,
+          decodeErrorData: sse_decode_kimatta_error,
+        ),
+        constMeta: kCrateApiStarterInstallStarterContentConstMeta,
+        argValues: [householdId],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiStarterInstallStarterContentConstMeta =>
+      const TaskConstMeta(
+        debugName: "install_starter_content",
+        argNames: ["householdId"],
+      );
+
+  @override
   Future<List<String>> crateApiRestrictionsKnownRestrictionKinds() {
     return handler.executeNormal(
       NormalTask(
@@ -394,7 +432,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 8,
+            funcId: 9,
             port: port_,
           );
         },
@@ -421,7 +459,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 9,
+            funcId: 10,
             port: port_,
           );
         },
@@ -451,7 +489,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 10,
+            funcId: 11,
             port: port_,
           );
         },
@@ -484,7 +522,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 11,
+            funcId: 12,
             port: port_,
           );
         },
@@ -517,7 +555,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 12,
+            funcId: 13,
             port: port_,
           );
         },
@@ -549,7 +587,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 13,
+            funcId: 14,
             port: port_,
           );
         },
@@ -581,7 +619,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 14,
+            funcId: 15,
             port: port_,
           );
         },
@@ -612,7 +650,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 15,
+            funcId: 16,
             port: port_,
           );
         },
@@ -644,7 +682,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 16,
+            funcId: 17,
             port: port_,
           );
         },
@@ -679,7 +717,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 17,
+            funcId: 18,
             port: port_,
           );
         },
@@ -718,7 +756,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 18,
+            funcId: 19,
             port: port_,
           );
         },
@@ -749,7 +787,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 19,
+            funcId: 20,
             port: port_,
           );
         },
@@ -781,7 +819,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 20,
+            funcId: 21,
             port: port_,
           );
         },
@@ -1108,18 +1146,19 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   RecipeDto dco_decode_recipe_dto(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 9)
-      throw Exception('unexpected arr length: expect 9 but see ${arr.length}');
+    if (arr.length != 10)
+      throw Exception('unexpected arr length: expect 10 but see ${arr.length}');
     return RecipeDto(
       id: dco_decode_String(arr[0]),
       householdId: dco_decode_String(arr[1]),
       title: dco_decode_String(arr[2]),
       servings: dco_decode_opt_box_autoadd_u_32(arr[3]),
-      instructions: dco_decode_String(arr[4]),
-      lines: dco_decode_list_ingredient_line_dto(arr[5]),
-      provenance: dco_decode_recipe_provenance_dto(arr[6]),
-      archivedAt: dco_decode_opt_String(arr[7]),
-      assessment: dco_decode_opt_box_autoadd_restriction_assessment_dto(arr[8]),
+      prepMinutes: dco_decode_opt_box_autoadd_u_32(arr[4]),
+      instructions: dco_decode_String(arr[5]),
+      lines: dco_decode_list_ingredient_line_dto(arr[6]),
+      provenance: dco_decode_recipe_provenance_dto(arr[7]),
+      archivedAt: dco_decode_opt_String(arr[8]),
+      assessment: dco_decode_opt_box_autoadd_restriction_assessment_dto(arr[9]),
     );
   }
 
@@ -1127,13 +1166,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   RecipeProvenanceDto dco_decode_recipe_provenance_dto(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 4)
-      throw Exception('unexpected arr length: expect 4 but see ${arr.length}');
+    if (arr.length != 9)
+      throw Exception('unexpected arr length: expect 9 but see ${arr.length}');
     return RecipeProvenanceDto(
       kind: dco_decode_String(arr[0]),
       sourceUrl: dco_decode_opt_String(arr[1]),
       sourceName: dco_decode_opt_String(arr[2]),
       sourceAuthor: dco_decode_opt_String(arr[3]),
+      rightsBasis: dco_decode_opt_String(arr[4]),
+      attribution: dco_decode_opt_String(arr[5]),
+      modifications: dco_decode_opt_String(arr[6]),
+      verifiedOn: dco_decode_opt_String(arr[7]),
+      starterSlug: dco_decode_opt_String(arr[8]),
     );
   }
 
@@ -1176,6 +1220,21 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       default:
         throw Exception("unreachable");
     }
+  }
+
+  @protected
+  StarterInstallReportDto dco_decode_starter_install_report_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 5)
+      throw Exception('unexpected arr length: expect 5 but see ${arr.length}');
+    return StarterInstallReportDto(
+      installed: dco_decode_u_32(arr[0]),
+      skipped: dco_decode_u_32(arr[1]),
+      catalogInstalled: dco_decode_u_32(arr[2]),
+      available: dco_decode_u_32(arr[3]),
+      pendingCookReview: dco_decode_u_32(arr[4]),
+    );
   }
 
   @protected
@@ -1632,6 +1691,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_householdId = sse_decode_String(deserializer);
     var var_title = sse_decode_String(deserializer);
     var var_servings = sse_decode_opt_box_autoadd_u_32(deserializer);
+    var var_prepMinutes = sse_decode_opt_box_autoadd_u_32(deserializer);
     var var_instructions = sse_decode_String(deserializer);
     var var_lines = sse_decode_list_ingredient_line_dto(deserializer);
     var var_provenance = sse_decode_recipe_provenance_dto(deserializer);
@@ -1644,6 +1704,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       householdId: var_householdId,
       title: var_title,
       servings: var_servings,
+      prepMinutes: var_prepMinutes,
       instructions: var_instructions,
       lines: var_lines,
       provenance: var_provenance,
@@ -1661,11 +1722,21 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_sourceUrl = sse_decode_opt_String(deserializer);
     var var_sourceName = sse_decode_opt_String(deserializer);
     var var_sourceAuthor = sse_decode_opt_String(deserializer);
+    var var_rightsBasis = sse_decode_opt_String(deserializer);
+    var var_attribution = sse_decode_opt_String(deserializer);
+    var var_modifications = sse_decode_opt_String(deserializer);
+    var var_verifiedOn = sse_decode_opt_String(deserializer);
+    var var_starterSlug = sse_decode_opt_String(deserializer);
     return RecipeProvenanceDto(
       kind: var_kind,
       sourceUrl: var_sourceUrl,
       sourceName: var_sourceName,
       sourceAuthor: var_sourceAuthor,
+      rightsBasis: var_rightsBasis,
+      attribution: var_attribution,
+      modifications: var_modifications,
+      verifiedOn: var_verifiedOn,
+      starterSlug: var_starterSlug,
     );
   }
 
@@ -1716,6 +1787,25 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       default:
         throw UnimplementedError('');
     }
+  }
+
+  @protected
+  StarterInstallReportDto sse_decode_starter_install_report_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_installed = sse_decode_u_32(deserializer);
+    var var_skipped = sse_decode_u_32(deserializer);
+    var var_catalogInstalled = sse_decode_u_32(deserializer);
+    var var_available = sse_decode_u_32(deserializer);
+    var var_pendingCookReview = sse_decode_u_32(deserializer);
+    return StarterInstallReportDto(
+      installed: var_installed,
+      skipped: var_skipped,
+      catalogInstalled: var_catalogInstalled,
+      available: var_available,
+      pendingCookReview: var_pendingCookReview,
+    );
   }
 
   @protected
@@ -2124,6 +2214,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_String(self.householdId, serializer);
     sse_encode_String(self.title, serializer);
     sse_encode_opt_box_autoadd_u_32(self.servings, serializer);
+    sse_encode_opt_box_autoadd_u_32(self.prepMinutes, serializer);
     sse_encode_String(self.instructions, serializer);
     sse_encode_list_ingredient_line_dto(self.lines, serializer);
     sse_encode_recipe_provenance_dto(self.provenance, serializer);
@@ -2144,6 +2235,11 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_opt_String(self.sourceUrl, serializer);
     sse_encode_opt_String(self.sourceName, serializer);
     sse_encode_opt_String(self.sourceAuthor, serializer);
+    sse_encode_opt_String(self.rightsBasis, serializer);
+    sse_encode_opt_String(self.attribution, serializer);
+    sse_encode_opt_String(self.modifications, serializer);
+    sse_encode_opt_String(self.verifiedOn, serializer);
+    sse_encode_opt_String(self.starterSlug, serializer);
   }
 
   @protected
@@ -2184,6 +2280,19 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         sse_encode_i_32(1, serializer);
         sse_encode_String(text, serializer);
     }
+  }
+
+  @protected
+  void sse_encode_starter_install_report_dto(
+    StarterInstallReportDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_u_32(self.installed, serializer);
+    sse_encode_u_32(self.skipped, serializer);
+    sse_encode_u_32(self.catalogInstalled, serializer);
+    sse_encode_u_32(self.available, serializer);
+    sse_encode_u_32(self.pendingCookReview, serializer);
   }
 
   @protected

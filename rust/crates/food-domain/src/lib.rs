@@ -4,6 +4,7 @@
 pub mod preference;
 pub mod recipe;
 pub mod restriction;
+pub mod starter;
 
 use household_core::HouseholdId;
 use jiff::Span;
@@ -13,6 +14,7 @@ pub use jiff::civil::Date as CivilDate; // re-exported so dependents need no jif
 pub use preference::*;
 pub use recipe::*;
 pub use restriction::*;
+pub use starter::*;
 
 pub const DEFAULT_CYCLE_DAYS: u32 = 7;
 pub const MIN_CYCLE_DAYS: u32 = 1;

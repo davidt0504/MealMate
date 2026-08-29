@@ -39,7 +39,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.13.0";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -878769591;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -2080577187;
 
 // Section: executor
 
@@ -278,6 +278,39 @@ fn wire__crate__api__health__init_app_impl(
                     let output_ok = Ok::<_, ()>({
                         crate::api::health::init_app();
                     })?;
+                    std::result::Result::Ok(output_ok)
+                })())
+            }
+        },
+    )
+}
+fn wire__crate__api__starter__install_starter_content_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "install_starter_content",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_household_id = <String>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, crate::api::error::KimattaError>((move || {
+                    let output_ok = crate::api::starter::install_starter_content(api_household_id)?;
                     std::result::Result::Ok(output_ok)
                 })())
             }
@@ -1165,6 +1198,7 @@ impl SseDecode for crate::api::recipe::RecipeDto {
         let mut var_householdId = <String>::sse_decode(deserializer);
         let mut var_title = <String>::sse_decode(deserializer);
         let mut var_servings = <Option<u32>>::sse_decode(deserializer);
+        let mut var_prepMinutes = <Option<u32>>::sse_decode(deserializer);
         let mut var_instructions = <String>::sse_decode(deserializer);
         let mut var_lines = <Vec<crate::api::recipe::IngredientLineDto>>::sse_decode(deserializer);
         let mut var_provenance =
@@ -1177,6 +1211,7 @@ impl SseDecode for crate::api::recipe::RecipeDto {
             household_id: var_householdId,
             title: var_title,
             servings: var_servings,
+            prep_minutes: var_prepMinutes,
             instructions: var_instructions,
             lines: var_lines,
             provenance: var_provenance,
@@ -1193,11 +1228,21 @@ impl SseDecode for crate::api::recipe::RecipeProvenanceDto {
         let mut var_sourceUrl = <Option<String>>::sse_decode(deserializer);
         let mut var_sourceName = <Option<String>>::sse_decode(deserializer);
         let mut var_sourceAuthor = <Option<String>>::sse_decode(deserializer);
+        let mut var_rightsBasis = <Option<String>>::sse_decode(deserializer);
+        let mut var_attribution = <Option<String>>::sse_decode(deserializer);
+        let mut var_modifications = <Option<String>>::sse_decode(deserializer);
+        let mut var_verifiedOn = <Option<String>>::sse_decode(deserializer);
+        let mut var_starterSlug = <Option<String>>::sse_decode(deserializer);
         return crate::api::recipe::RecipeProvenanceDto {
             kind: var_kind,
             source_url: var_sourceUrl,
             source_name: var_sourceName,
             source_author: var_sourceAuthor,
+            rights_basis: var_rightsBasis,
+            attribution: var_attribution,
+            modifications: var_modifications,
+            verified_on: var_verifiedOn,
+            starter_slug: var_starterSlug,
         };
     }
 }
@@ -1252,6 +1297,24 @@ impl SseDecode for crate::api::restrictions::RestrictionDto {
                 unimplemented!("");
             }
         }
+    }
+}
+
+impl SseDecode for crate::api::starter::StarterInstallReportDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_installed = <u32>::sse_decode(deserializer);
+        let mut var_skipped = <u32>::sse_decode(deserializer);
+        let mut var_catalogInstalled = <u32>::sse_decode(deserializer);
+        let mut var_available = <u32>::sse_decode(deserializer);
+        let mut var_pendingCookReview = <u32>::sse_decode(deserializer);
+        return crate::api::starter::StarterInstallReportDto {
+            installed: var_installed,
+            skipped: var_skipped,
+            catalog_installed: var_catalogInstalled,
+            available: var_available,
+            pending_cook_review: var_pendingCookReview,
+        };
     }
 }
 
@@ -1323,38 +1386,44 @@ fn pde_ffi_dispatcher_primary_impl(
             data_len,
         ),
         7 => wire__crate__api__health__init_app_impl(port, ptr, rust_vec_len, data_len),
-        8 => wire__crate__api__restrictions__known_restriction_kinds_impl(
+        8 => wire__crate__api__starter__install_starter_content_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        9 => wire__crate__api__recipe__known_unit_kinds_impl(port, ptr, rust_vec_len, data_len),
-        10 => {
+        9 => wire__crate__api__restrictions__known_restriction_kinds_impl(
+            port,
+            ptr,
+            rust_vec_len,
+            data_len,
+        ),
+        10 => wire__crate__api__recipe__known_unit_kinds_impl(port, ptr, rust_vec_len, data_len),
+        11 => {
             wire__crate__api__recipe__list_archived_recipes_impl(port, ptr, rust_vec_len, data_len)
         }
-        11 => wire__crate__api__recipe__list_custom_ingredients_impl(
+        12 => wire__crate__api__recipe__list_custom_ingredients_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        12 => wire__crate__api__recipe__list_recipes_impl(port, ptr, rust_vec_len, data_len),
-        13 => wire__crate__api__recipe__load_recipe_impl(port, ptr, rust_vec_len, data_len),
-        14 => wire__crate__api__restrictions__load_restrictions_impl(
+        13 => wire__crate__api__recipe__list_recipes_impl(port, ptr, rust_vec_len, data_len),
+        14 => wire__crate__api__recipe__load_recipe_impl(port, ptr, rust_vec_len, data_len),
+        15 => wire__crate__api__restrictions__load_restrictions_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        15 => wire__crate__api__health__open_database_impl(port, ptr, rust_vec_len, data_len),
-        16 => wire__crate__api__household__rename_household_impl(port, ptr, rust_vec_len, data_len),
-        17 => wire__crate__api__recipe__restore_recipe_impl(port, ptr, rust_vec_len, data_len),
-        18 => {
+        16 => wire__crate__api__health__open_database_impl(port, ptr, rust_vec_len, data_len),
+        17 => wire__crate__api__household__rename_household_impl(port, ptr, rust_vec_len, data_len),
+        18 => wire__crate__api__recipe__restore_recipe_impl(port, ptr, rust_vec_len, data_len),
+        19 => {
             wire__crate__api__planning__save_planning_cycle_impl(port, ptr, rust_vec_len, data_len)
         }
-        19 => wire__crate__api__recipe__save_recipe_impl(port, ptr, rust_vec_len, data_len),
-        20 => wire__crate__api__restrictions__save_restrictions_impl(
+        20 => wire__crate__api__recipe__save_recipe_impl(port, ptr, rust_vec_len, data_len),
+        21 => wire__crate__api__restrictions__save_restrictions_impl(
             port,
             ptr,
             rust_vec_len,
@@ -1673,6 +1742,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::recipe::RecipeDto {
             self.household_id.into_into_dart().into_dart(),
             self.title.into_into_dart().into_dart(),
             self.servings.into_into_dart().into_dart(),
+            self.prep_minutes.into_into_dart().into_dart(),
             self.instructions.into_into_dart().into_dart(),
             self.lines.into_into_dart().into_dart(),
             self.provenance.into_into_dart().into_dart(),
@@ -1698,6 +1768,11 @@ impl flutter_rust_bridge::IntoDart for crate::api::recipe::RecipeProvenanceDto {
             self.source_url.into_into_dart().into_dart(),
             self.source_name.into_into_dart().into_dart(),
             self.source_author.into_into_dart().into_dart(),
+            self.rights_basis.into_into_dart().into_dart(),
+            self.attribution.into_into_dart().into_dart(),
+            self.modifications.into_into_dart().into_dart(),
+            self.verified_on.into_into_dart().into_dart(),
+            self.starter_slug.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -1783,6 +1858,30 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::restrictions::RestrictionDto>
     for crate::api::restrictions::RestrictionDto
 {
     fn into_into_dart(self) -> crate::api::restrictions::RestrictionDto {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::starter::StarterInstallReportDto {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.installed.into_into_dart().into_dart(),
+            self.skipped.into_into_dart().into_dart(),
+            self.catalog_installed.into_into_dart().into_dart(),
+            self.available.into_into_dart().into_dart(),
+            self.pending_cook_review.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::starter::StarterInstallReportDto
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::starter::StarterInstallReportDto>
+    for crate::api::starter::StarterInstallReportDto
+{
+    fn into_into_dart(self) -> crate::api::starter::StarterInstallReportDto {
         self
     }
 }
@@ -2150,6 +2249,7 @@ impl SseEncode for crate::api::recipe::RecipeDto {
         <String>::sse_encode(self.household_id, serializer);
         <String>::sse_encode(self.title, serializer);
         <Option<u32>>::sse_encode(self.servings, serializer);
+        <Option<u32>>::sse_encode(self.prep_minutes, serializer);
         <String>::sse_encode(self.instructions, serializer);
         <Vec<crate::api::recipe::IngredientLineDto>>::sse_encode(self.lines, serializer);
         <crate::api::recipe::RecipeProvenanceDto>::sse_encode(self.provenance, serializer);
@@ -2168,6 +2268,11 @@ impl SseEncode for crate::api::recipe::RecipeProvenanceDto {
         <Option<String>>::sse_encode(self.source_url, serializer);
         <Option<String>>::sse_encode(self.source_name, serializer);
         <Option<String>>::sse_encode(self.source_author, serializer);
+        <Option<String>>::sse_encode(self.rights_basis, serializer);
+        <Option<String>>::sse_encode(self.attribution, serializer);
+        <Option<String>>::sse_encode(self.modifications, serializer);
+        <Option<String>>::sse_encode(self.verified_on, serializer);
+        <Option<String>>::sse_encode(self.starter_slug, serializer);
     }
 }
 
@@ -2207,6 +2312,17 @@ impl SseEncode for crate::api::restrictions::RestrictionDto {
                 unimplemented!("");
             }
         }
+    }
+}
+
+impl SseEncode for crate::api::starter::StarterInstallReportDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <u32>::sse_encode(self.installed, serializer);
+        <u32>::sse_encode(self.skipped, serializer);
+        <u32>::sse_encode(self.catalog_installed, serializer);
+        <u32>::sse_encode(self.available, serializer);
+        <u32>::sse_encode(self.pending_cook_review, serializer);
     }
 }
 

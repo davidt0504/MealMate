@@ -61,6 +61,16 @@ pub struct RecipeProvenanceDto {
     pub source_url: Option<String>,
     pub source_name: Option<String>,
     pub source_author: Option<String>,
+    /// The five rights scalars are **output only**: `save_recipe` drops them, so a Dart caller
+    /// cannot forge a rights basis onto a recipe. They are flat `Option<String>` rather than a
+    /// nested struct for the same reason `RestrictionDto::Known` carries a token string.
+    /// `rights_basis` is one of `original`, `us_federal_public_domain`, `cc0`.
+    pub rights_basis: Option<String>,
+    pub attribution: Option<String>,
+    pub modifications: Option<String>,
+    /// ISO civil date.
+    pub verified_on: Option<String>,
+    pub starter_slug: Option<String>,
 }
 
 /// One line matched against one restriction: the restriction, the line and the literal term
@@ -91,6 +101,10 @@ pub struct RecipeDto {
     pub household_id: String,
     pub title: String,
     pub servings: Option<u32>,
+    /// Ordinary user-editable data, **not** output-only: it round-trips both ways. The five
+    /// rights scalars on `provenance` are the output-only fields, alongside `archived_at` and
+    /// `assessment`. `None` means no estimate was given and is never rendered as a number.
+    pub prep_minutes: Option<u32>,
     pub instructions: String,
     pub lines: Vec<IngredientLineDto>,
     pub provenance: RecipeProvenanceDto,
@@ -294,6 +308,8 @@ fn recipe_to_domain(dto: RecipeDto) -> Result<Recipe, KimattaError> {
         .into_iter()
         .map(line_to_domain)
         .collect::<Result<Vec<_>, _>>()?;
+    // `RecipeProvenance::new`, never `with_rights`: the five rights scalars are output-only,
+    // so whatever a request carries in them is dropped here rather than trusted.
     let provenance = RecipeProvenance::new(
         ProvenanceKind::parse(&dto.provenance.kind)?,
         dto.provenance.source_url,
@@ -305,6 +321,7 @@ fn recipe_to_domain(dto: RecipeDto) -> Result<Recipe, KimattaError> {
         household_id,
         dto.title,
         dto.servings,
+        dto.prep_minutes,
         dto.instructions,
         lines,
         provenance,
@@ -346,6 +363,7 @@ fn recipe_from_domain(record: &RecipeRecord, restrictions: &HouseholdRestriction
         household_id: r.household_id().as_str().to_owned(),
         title: r.title().to_owned(),
         servings: r.servings(),
+        prep_minutes: r.prep_minutes(),
         instructions: r.instructions().to_owned(),
         lines: r.lines().iter().map(line_from_domain).collect(),
         provenance: RecipeProvenanceDto {
@@ -353,6 +371,23 @@ fn recipe_from_domain(record: &RecipeRecord, restrictions: &HouseholdRestriction
             source_url: r.provenance().source_url().map(str::to_owned),
             source_name: r.provenance().source_name().map(str::to_owned),
             source_author: r.provenance().source_author().map(str::to_owned),
+            rights_basis: r
+                .provenance()
+                .rights()
+                .map(|g| g.basis().as_str().to_owned()),
+            attribution: r
+                .provenance()
+                .rights()
+                .and_then(|g| g.attribution().map(str::to_owned)),
+            modifications: r
+                .provenance()
+                .rights()
+                .and_then(|g| g.modifications().map(str::to_owned)),
+            verified_on: r
+                .provenance()
+                .rights()
+                .map(|g| format_civil_date(g.verified_on())),
+            starter_slug: r.provenance().starter_slug().map(str::to_owned),
         },
         archived_at: record.archived_at.map(format_civil_date),
         assessment: Some(assess_names(
@@ -545,6 +580,11 @@ mod tests {
             source_url: None,
             source_name: None,
             source_author: None,
+            rights_basis: None,
+            attribution: None,
+            modifications: None,
+            verified_on: None,
+            starter_slug: None,
         }
     }
 
@@ -566,6 +606,7 @@ mod tests {
             household_id: household.to_owned(),
             title: format!("Recipe {id}"),
             servings: Some(2),
+            prep_minutes: Some(15),
             instructions: "Cook.".to_owned(),
             lines,
             provenance: authored(),
@@ -962,6 +1003,62 @@ mod tests {
         assert_eq!(a.restrictions_checked, 1);
         assert_eq!(a.conflicts.len(), 1);
         assert_eq!(a.conflicts[0].term, "butter");
+    }
+
+    #[test]
+    fn a_sent_rights_basis_is_ignored_on_save() {
+        // Adversarial, mirroring `a_sent_assessment_is_ignored_on_save`: the five rights
+        // scalars are output-only, so a Dart caller cannot forge a rights basis onto a
+        // recipe and cannot mint itself a starter slug.
+        let mut conn = open_seeded(&["h"]);
+        let mut dto = recipe("h", "r", vec![]);
+        dto.provenance.rights_basis = Some("cc0".to_owned());
+        dto.provenance.attribution = Some("Someone Else".to_owned());
+        dto.provenance.modifications = Some("none".to_owned());
+        dto.provenance.verified_on = Some("2026-08-29".to_owned());
+        dto.provenance.starter_slug = Some("forged-slug".to_owned());
+        let stored = save_recipe_in(&mut conn, dto).unwrap();
+        assert_eq!(stored.provenance.rights_basis, None);
+        assert_eq!(stored.provenance.attribution, None);
+        assert_eq!(stored.provenance.modifications, None);
+        assert_eq!(stored.provenance.verified_on, None);
+        assert_eq!(stored.provenance.starter_slug, None);
+    }
+
+    #[test]
+    fn prep_minutes_survives_save_load_and_the_bridge() {
+        // The cross-layer pin for MVP-011 step 3: this is the one test that would have
+        // caught "pass `None` at every `Recipe::new` call site". It fails at
+        // `recipe_to_domain` (the write path) and at `load_recipe` (the read path) alike.
+        let mut conn = open_seeded(&["h"]);
+        let saved = save_recipe_in(&mut conn, recipe("h", "r", vec![])).unwrap();
+        assert_eq!(saved.prep_minutes, Some(15));
+        let loaded = load_recipe_in(&conn, "h", "r").unwrap().unwrap();
+        assert_eq!(loaded.prep_minutes, Some(15));
+    }
+
+    #[test]
+    fn an_absent_prep_estimate_stays_absent_through_the_bridge() {
+        let mut conn = open_seeded(&["h"]);
+        let mut dto = recipe("h", "r", vec![]);
+        dto.prep_minutes = None;
+        let saved = save_recipe_in(&mut conn, dto).unwrap();
+        assert_eq!(saved.prep_minutes, None);
+        let loaded = load_recipe_in(&conn, "h", "r").unwrap().unwrap();
+        assert_eq!(loaded.prep_minutes, None);
+    }
+
+    #[test]
+    fn a_zero_prep_minutes_request_is_a_recipe_error() {
+        let mut conn = open_seeded(&["h"]);
+        let mut dto = recipe("h", "r", vec![]);
+        dto.prep_minutes = Some(0);
+        let err = save_recipe_in(&mut conn, dto).unwrap_err();
+        assert!(
+            matches!(&err, KimattaError::Recipe { message }
+                if message.contains("prep minutes must be at least 1")),
+            "{err:?}"
+        );
     }
 
     #[test]

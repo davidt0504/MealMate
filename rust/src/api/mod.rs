@@ -4,3 +4,4 @@ pub mod household;
 pub mod planning;
 pub mod recipe;
 pub mod restrictions;
+pub mod starter;
