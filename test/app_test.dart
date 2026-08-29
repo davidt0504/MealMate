@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:meal_mate/app/app.dart';
 import 'package:meal_mate/features/household/household_provider.dart';
+import 'package:meal_mate/features/household/household_screen.dart';
 import 'package:meal_mate/features/settings/health_provider.dart';
 import 'package:meal_mate/src/rust/api/error.dart';
 import 'package:meal_mate/src/rust/api/health.dart';
@@ -15,8 +16,11 @@ import 'package:meal_mate/features/planning/planning_cycle.dart';
 import 'package:meal_mate/features/planning/planning_provider.dart';
 import 'package:meal_mate/features/recipes/recipes_provider.dart';
 import 'package:meal_mate/features/recipes/restriction_warnings.dart';
+import 'package:meal_mate/features/pantry/pantry_copy.dart';
+import 'package:meal_mate/features/pantry/pantry_provider.dart';
 import 'package:meal_mate/features/restrictions/restrictions_provider.dart';
 import 'package:meal_mate/features/restrictions/restriction_copy.dart';
+import 'package:meal_mate/src/rust/api/pantry.dart';
 import 'package:meal_mate/src/rust/api/planning.dart';
 import 'package:meal_mate/src/rust/api/recipe.dart';
 import 'package:meal_mate/src/rust/api/restrictions.dart';
@@ -31,6 +35,17 @@ const okStarterReport = StarterInstallReportDto(
   installed: 0,
   skipped: 0,
   catalogInstalled: 37,
+  available: 0,
+  pendingCookReview: 10,
+);
+
+/// A steady-state install: it short-circuited and wrote nothing, so nothing downstream needs
+/// re-reading. `okStarterReport` models a *first* install (`catalogInstalled: 37`), which is
+/// why every harness launch re-reads the pantry unless a test opts out with this.
+const noCatalogStarterReport = StarterInstallReportDto(
+  installed: 0,
+  skipped: 0,
+  catalogInstalled: 0,
   available: 0,
   pendingCookReview: 10,
 );
@@ -107,6 +122,36 @@ const checkedCleanSummary = RecipeSummaryDto(
   id: 'r-3',
   title: 'Rice',
   assessment: checkedCleanAssessment,
+);
+
+/// One line that resolves to a catalog identity and one that resolves to nothing, so the
+/// detail's pantry affordance has both arms to exercise. `okRecipe`'s lines are both
+/// unresolved, which is why this cannot reuse it.
+const recipeWithResolvedLine = RecipeDto(
+  id: 'r-1',
+  householdId: 'h-1',
+  title: 'Hummus',
+  servings: 4,
+  instructions: 'Mix. Fry.',
+  lines: [
+    IngredientLineDto(
+      originalText: 'chickpeas',
+      name: 'chickpeas',
+      ingredient: chickpeasRef,
+      quantity: QuantityDto.unknown(),
+      unit: UnitDto.none(),
+      optional: false,
+    ),
+    IngredientLineDto(
+      originalText: 'a splash of something',
+      name: 'something',
+      quantity: QuantityDto.unknown(),
+      unit: UnitDto.none(),
+      optional: false,
+    ),
+  ],
+  provenance: RecipeProvenanceDto(kind: 'authored'),
+  assessment: emptyAssessment,
 );
 
 /// `okRecipe` with no prep estimate, for the absence case.
@@ -440,6 +485,66 @@ class _SeamedArchivedRecipesNotifier extends ArchivedRecipesNotifier {
   }
 }
 
+/// The *real* `PantryNotifier` with only its two bridge seams replaced, in the
+/// `_SeamedArchivedRecipesNotifier` pattern: its own `build`, `refresh` and `setMark` all run,
+/// so a regression in any of them is visible here. Overriding `setMark` wholesale — as this
+/// double used to — meant every row assertion verified the test file's own copy of the merge.
+class _FakePantryNotifier extends PantryNotifier {
+  _FakePantryNotifier(this._build, this._setMark);
+
+  final FutureOr<List<PantryEntryDto>> Function()? _build;
+  final Future<PantryEntryDto> Function(String, IngredientRefDto, bool)?
+  _setMark;
+
+  @override
+  Future<List<PantryEntryDto>> fetchPantry(String householdId) async =>
+      (_build ?? () => pantryEntries)();
+
+  @override
+  Future<PantryEntryDto> writeMark(
+    String householdId,
+    IngredientRefDto ingredient,
+    bool marked,
+  ) async {
+    final fake = _setMark;
+    if (fake == null) {
+      throw StateError(
+        'this test toggles a pantry row without a `setMark:` hook',
+      );
+    }
+    return fake(householdId, ingredient, marked);
+  }
+}
+
+/// One catalog identity carrying an alias that is not a substring of its canonical name, and
+/// one custom identity, so alias search and the custom subtitle both have something to bite on.
+const chickpeasRef = IngredientRefDto.catalog(id: 'i-chickpeas');
+const houseMixRef = IngredientRefDto.custom(id: 'c-1');
+const pantryEntries = [
+  PantryEntryDto(
+    ingredient: chickpeasRef,
+    name: 'chickpeas',
+    aliases: ['garbanzo beans'],
+    marked: false,
+  ),
+  PantryEntryDto(
+    ingredient: houseMixRef,
+    name: "nana's mix",
+    aliases: [],
+    marked: false,
+  ),
+];
+
+PantryEntryDto pantryEntryMarked(IngredientRefDto ingredient, bool marked) {
+  final entry = pantryEntries.firstWhere((e) => e.ingredient == ingredient);
+  return PantryEntryDto(
+    ingredient: entry.ingredient,
+    name: entry.name,
+    aliases: entry.aliases,
+    marked: marked,
+  );
+}
+
 /// The eleven unit tokens the real bridge returns (`known_unit_kinds`).
 const unitKindTokens = [
   'tsp',
@@ -492,6 +597,8 @@ Widget harness({
   Future<RecipeDto> Function(String, String)? restoreRecipe,
   FutureOr<List<String>> Function()? unitKinds,
   Future<StarterInstallReportDto> Function(String)? starterInstall,
+  FutureOr<List<PantryEntryDto>> Function()? pantry,
+  Future<PantryEntryDto> Function(String, IngredientRefDto, bool)? setMark,
 }) => ProviderScope(
   overrides: [
     // Unconditional, like every other bridge seam here: `App` subscribes to this on the
@@ -534,6 +641,10 @@ Widget harness({
     knownRestrictionKindsProvider.overrideWith(
       (_) async => (kinds ?? () => knownKinds)(),
     ),
+    // Unconditional, as the restriction overrides are: the destinations, restoration,
+    // accessibility and text-scale tests all visit Pantry, and an un-overridden provider
+    // would reach the real bridge.
+    pantryProvider.overrideWith(() => _FakePantryNotifier(pantry, setMark)),
   ],
   child: App(initialLocation: initial),
 );
@@ -796,7 +907,9 @@ void main() {
   testWidgets('destination screens survive text scale 2.0', (tester) async {
     usePixel5(tester);
     // `NavigationBar` labels are clamped to 1.3 by the framework; what this
-    // exercises is the placeholder bodies and AppBar titles at a genuine 2.0.
+    // exercises is the destination bodies and AppBar titles at a genuine 2.0 — including
+    // the live pantry screen's disclaimer paragraph, search field and `SwitchListTile`s on
+    // Pixel-5 geometry, which is exactly where a switch row overflows.
     tester.platformDispatcher.textScaleFactorTestValue = 2.0;
     await tester.pumpWidget(harness());
     await tester.pumpAndSettle();
@@ -3466,6 +3579,521 @@ void main() {
       }
     }
     expect(reached, targets.keys.toSet());
+  });
+
+  // --- MVP-014 pantry ------------------------------------------------------
+
+  testWidgets('the pantry screen lists identities and marks one', (
+    tester,
+  ) async {
+    useTallView(tester);
+    final sent = <(String, IngredientRefDto, bool)>[];
+    await tester.pumpWidget(
+      harness(
+        initial: '/pantry',
+        setMark: (household, ingredient, marked) async {
+          sent.add((household, ingredient, marked));
+          return pantryEntryMarked(ingredient, marked);
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text(pantryDisclaimer), findsOneWidget);
+    expect(find.byType(SwitchListTile), findsNWidgets(2));
+    expect(find.text('Your ingredient'), findsOneWidget);
+
+    await tester.tap(find.widgetWithText(SwitchListTile, 'chickpeas'));
+    await tester.pumpAndSettle();
+    expect(sent, [('h-1', chickpeasRef, true)]);
+    expect(
+      tester
+          .widget<SwitchListTile>(
+            find.widgetWithText(SwitchListTile, 'chickpeas'),
+          )
+          .value,
+      isTrue,
+    );
+  });
+
+  testWidgets('unmarking sends marked false and the row returns to unmarked', (
+    tester,
+  ) async {
+    useTallView(tester);
+    final sent = <bool>[];
+    await tester.pumpWidget(
+      harness(
+        initial: '/pantry',
+        pantry: () => [pantryEntryMarked(chickpeasRef, true)],
+        setMark: (_, ingredient, marked) async {
+          sent.add(marked);
+          return pantryEntryMarked(ingredient, marked);
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(SwitchListTile, 'chickpeas'));
+    await tester.pumpAndSettle();
+    expect(sent, [false]);
+    expect(
+      tester
+          .widget<SwitchListTile>(
+            find.widgetWithText(SwitchListTile, 'chickpeas'),
+          )
+          .value,
+      isFalse,
+    );
+  });
+
+  testWidgets('the pantry search filters by name', (tester) async {
+    useTallView(tester);
+    await tester.pumpWidget(harness(initial: '/pantry'));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byType(TextField), 'nana');
+    await tester.pumpAndSettle();
+    expect(find.byType(SwitchListTile), findsOneWidget);
+    expect(find.text("nana's mix"), findsOneWidget);
+
+    await tester.enterText(find.byType(TextField), 'zzz');
+    await tester.pumpAndSettle();
+    expect(find.byType(SwitchListTile), findsNothing);
+    expect(find.text(pantryNoMatchCopy('zzz')), findsOneWidget);
+  });
+
+  /// Edge: `ingredient_alias` ships names that are not substrings of their canonical name, so
+  /// a name-only filter would return nothing for the word the user actually knows.
+  testWidgets('the pantry search finds an identity by its alias', (
+    tester,
+  ) async {
+    useTallView(tester);
+    await tester.pumpWidget(harness(initial: '/pantry'));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byType(TextField), 'garbanzo');
+    await tester.pumpAndSettle();
+    expect(find.byType(SwitchListTile), findsOneWidget);
+    expect(find.text('chickpeas'), findsOneWidget);
+  });
+
+  /// AC-2: an empty pantry is a screen that still works and says what it does not know,
+  /// never a claim that the household is out of anything.
+  testWidgets('an empty pantry is honest about what it does not know', (
+    tester,
+  ) async {
+    useTallView(tester);
+    await tester.pumpWidget(
+      harness(initial: '/pantry', pantry: () => const <PantryEntryDto>[]),
+    );
+    await tester.pumpAndSettle();
+    expect(title('Pantry'), findsOneWidget);
+    expect(find.text(pantryEmptyCopy), findsOneWidget);
+    expect(find.byType(SwitchListTile), findsNothing);
+    expect(find.text(pantryDisclaimer), findsOneWidget);
+  });
+
+  testWidgets('the pantry screen renders a load failure and no list', (
+    tester,
+  ) async {
+    useTallView(tester);
+    await tester.pumpWidget(
+      harness(
+        initial: '/pantry',
+        pantry: () =>
+            Future<List<PantryEntryDto>>.error(const KimattaError.notOpen()),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(title('Pantry'), findsOneWidget);
+    expect(
+      find.text(
+        describeFailure(const KimattaError.notOpen(), subject: 'Pantry'),
+      ),
+      findsOneWidget,
+    );
+    expect(find.byType(SwitchListTile), findsNothing);
+  });
+
+  testWidgets('a failed pantry mark reports the reason in a snackbar and '
+      'leaves the row alone', (tester) async {
+    useTallView(tester);
+    await tester.pumpWidget(
+      harness(
+        initial: '/pantry',
+        setMark: (_, _, _) async => throw const KimattaError.notOpen(),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(SwitchListTile, 'chickpeas'));
+    await tester.pumpAndSettle();
+    expect(
+      find.descendant(
+        of: find.byType(SnackBar),
+        matching: find.text(
+          describeFailure(const KimattaError.notOpen(), subject: 'Pantry'),
+        ),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      tester
+          .widget<SwitchListTile>(
+            find.widgetWithText(SwitchListTile, 'chickpeas'),
+          )
+          .value,
+      isFalse,
+      reason: 'a failed write must leave the row at its stored value',
+    );
+  });
+
+  /// Every `okRecipe` line is unresolved, so a resolved line needs its own fixture — the
+  /// arm that carries a pantry control cannot be reached otherwise.
+  testWidgets('the recipe detail toggles pantry for a resolved line only', (
+    tester,
+  ) async {
+    useTallView(tester);
+    final sent = <(String, IngredientRefDto, bool)>[];
+    await tester.pumpWidget(
+      harness(
+        initial: '/recipes/r-1',
+        recipe: (_) => recipeWithResolvedLine,
+        setMark: (household, ingredient, marked) async {
+          sent.add((household, ingredient, marked));
+          return pantryEntryMarked(ingredient, marked);
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byType(Switch), findsOneWidget);
+
+    await tester.tap(find.byType(Switch));
+    await tester.pumpAndSettle();
+    expect(sent, [('h-1', chickpeasRef, true)]);
+  });
+
+  /// Expected-to-pass by construction — the recipe detail had no pantry dependency before
+  /// this step — and given teeth: with the pantry in `AsyncError`, the recipe still renders
+  /// in full and nothing on screen reports a pantry failure (AC-2).
+  testWidgets('a pantry failure does not block the recipe detail', (
+    tester,
+  ) async {
+    useTallView(tester);
+    await tester.pumpWidget(
+      harness(
+        initial: '/recipes/r-1',
+        recipe: (_) => recipeWithResolvedLine,
+        pantry: () =>
+            Future<List<PantryEntryDto>>.error(const KimattaError.notOpen()),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('chickpeas'), findsOneWidget);
+    expect(find.text('a splash of something'), findsOneWidget);
+    expect(find.text('Mix. Fry.'), findsOneWidget);
+    expect(
+      find.text(
+        describeFailure(const KimattaError.notOpen(), subject: 'Pantry'),
+      ),
+      findsNothing,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  /// AC-3's accessible half. The claim is that the accessible *name* states the meaning
+  /// before the platform's own toggle state — not that "off" is never announced, which no
+  /// label can prevent and which a widget-test semantics tree could never detect.
+  testWidgets('the pantry screen meets the accessibility guidelines', (
+    tester,
+  ) async {
+    usePixel5(tester);
+    // Disposed inline rather than via `addTearDown`: the framework verifies no handle is
+    // live at the end of the test body, which runs before tear-downs.
+    final handle = tester.ensureSemantics();
+    for (final brightness in Brightness.values) {
+      tester.platformDispatcher.platformBrightnessTestValue = brightness;
+      await tester.pumpWidget(harness(initial: '/pantry'));
+      await tester.pumpAndSettle();
+      await expectLater(tester, meetsGuideline(androidTapTargetGuideline));
+      await expectLater(tester, meetsGuideline(labeledTapTargetGuideline));
+      await expectLater(tester, meetsGuideline(textContrastGuideline));
+      for (final entry in pantryEntries) {
+        expect(
+          find.bySemanticsLabel(pantryRowLabel(entry.name, entry.marked)),
+          findsOneWidget,
+          reason: '${entry.name} must carry its meaning as its exact label',
+        );
+      }
+    }
+    handle.dispose();
+  });
+
+  /// The reachable stale-list path: `installStarterContent` grows the catalog after
+  /// `pantryProvider` has already read it, so a recipe line can resolve to an identity the
+  /// list has never seen. The write commits either way — the question is whether the UI
+  /// learns. The recipe detail is the surface because an empty pantry renders
+  /// `pantryEmptyCopy` with no rows to tap.
+  testWidgets('a mark for an identity the list has not seen re-reads the list', (
+    tester,
+  ) async {
+    useTallView(tester);
+    var reads = 0;
+    await tester.pumpWidget(
+      harness(
+        initial: '/recipes/r-1',
+        recipe: (_) => recipeWithResolvedLine,
+        // No launch re-read, so `reads` counts only what this finding is about.
+        starterInstall: (_) async => noCatalogStarterReport,
+        pantry: () {
+          reads++;
+          return reads == 1
+              ? const <PantryEntryDto>[]
+              : [pantryEntryMarked(chickpeasRef, true)];
+        },
+        setMark: (_, ingredient, marked) async =>
+            pantryEntryMarked(ingredient, marked),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(reads, 1);
+
+    await tester.tap(find.byType(Switch));
+    await tester.pumpAndSettle();
+    expect(reads, 2, reason: 'a miss must re-read rather than drop the write');
+    expect(
+      tester.widget<Switch>(find.byType(Switch)).value,
+      isTrue,
+      reason: 'the committed mark must reach the control the user tapped',
+    );
+  });
+
+  /// The re-list above can itself fail. The write has already committed, so the failure must
+  /// not be published over a usable list: `_lineTile` drops the control entirely when the
+  /// pantry has no value, which would cost the user the switch as the result of a *successful*
+  /// mark. `pantryEntries[1]` alone — `nana's mix` — leaves chickpeas absent, so the tap
+  /// genuinely reaches the miss path.
+  testWidgets(
+    'a re-list that fails after a mark commits keeps the list usable',
+    (tester) async {
+      useTallView(tester);
+      var reads = 0;
+      await tester.pumpWidget(
+        harness(
+          initial: '/recipes/r-1',
+          recipe: (_) => recipeWithResolvedLine,
+          starterInstall: (_) async => noCatalogStarterReport,
+          pantry: () {
+            reads++;
+            if (reads == 1) return [pantryEntries[1]];
+            throw const KimattaError.notOpen();
+          },
+          setMark: (_, ingredient, marked) async =>
+              pantryEntryMarked(ingredient, marked),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byType(Switch));
+      await tester.pumpAndSettle();
+      expect(reads, 2, reason: 'the miss path must have attempted the re-read');
+      expect(
+        find.byType(Switch),
+        findsOneWidget,
+        reason:
+            'a failed re-list must not strip the control off a committed mark',
+      );
+      expect(
+        find.byType(SnackBar),
+        findsNothing,
+        reason: 'AC-2: a pantry failure is not reported on the recipe detail',
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  /// The starter install grows the catalog after `pantryProvider` has already read it, and
+  /// `okStarterReport` models a first install (`catalogInstalled: 37`). Without the launch
+  /// invalidate the screen shows `pantryEmptyCopy` until the app is killed.
+  testWidgets('a starter install that grew the catalog re-reads the pantry', (
+    tester,
+  ) async {
+    useTallView(tester);
+    var reads = 0;
+    await tester.pumpWidget(
+      harness(
+        initial: '/pantry',
+        pantry: () {
+          reads++;
+          return reads == 1 ? const <PantryEntryDto>[] : pantryEntries;
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byType(SwitchListTile), findsNWidgets(2));
+  });
+
+  /// The other half of the gate: a steady-state launch short-circuits and writes nothing, so
+  /// re-reading would be pure cost. `initial: '/pantry'` is load-bearing — on the harness
+  /// default route nothing watches `pantryProvider` and the count is 0 either way.
+  testWidgets(
+    'a starter install that wrote no catalog does not re-read the pantry',
+    (tester) async {
+      useTallView(tester);
+      var reads = 0;
+      await tester.pumpWidget(
+        harness(
+          initial: '/pantry',
+          starterInstall: (_) async => noCatalogStarterReport,
+          pantry: () {
+            reads++;
+            return pantryEntries;
+          },
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(reads, 1);
+    },
+  );
+
+  /// `pantryEmptyCopy` tells the user to pull down, so the gesture is pinned rather than only
+  /// the callback. A flag rather than a call count, so the launch invalidate cannot silently
+  /// satisfy the refresh.
+  testWidgets('pulling down on an empty pantry re-reads it', (tester) async {
+    useTallView(tester);
+    var installed = false;
+    await tester.pumpWidget(
+      harness(
+        initial: '/pantry',
+        starterInstall: (_) async => noCatalogStarterReport,
+        pantry: () => installed ? pantryEntries : const <PantryEntryDto>[],
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text(pantryEmptyCopy), findsOneWidget);
+
+    installed = true;
+    await tester.fling(find.byType(ListView), const Offset(0, 300), 1000);
+    await tester.pumpAndSettle();
+    expect(find.byType(SwitchListTile), findsNWidgets(2));
+  });
+
+  testWidgets('the pantry error arm retries', (tester) async {
+    useTallView(tester);
+    var installed = false;
+    await tester.pumpWidget(
+      harness(
+        initial: '/pantry',
+        starterInstall: (_) async => noCatalogStarterReport,
+        pantry: () {
+          if (installed) return pantryEntries;
+          throw const KimattaError.notOpen();
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.text(
+        describeFailure(const KimattaError.notOpen(), subject: 'Pantry'),
+      ),
+      findsOneWidget,
+    );
+
+    installed = true;
+    await tester.tap(find.text('Try again'));
+    await tester.pumpAndSettle();
+    expect(find.byType(SwitchListTile), findsNWidgets(2));
+  });
+
+  /// The other half of `refresh`: a pull-to-refresh that fails over a list the user is already
+  /// reading reports the reason without replacing that list with an error screen. Publishing
+  /// the failure would cost the user every row to tell them a re-read did not work.
+  testWidgets('a refresh that fails keeps the list and says why', (
+    tester,
+  ) async {
+    useTallView(tester);
+    var reads = 0;
+    await tester.pumpWidget(
+      harness(
+        initial: '/pantry',
+        starterInstall: (_) async => noCatalogStarterReport,
+        pantry: () {
+          reads++;
+          if (reads == 1) return pantryEntries;
+          throw const KimattaError.notOpen();
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.fling(find.byType(ListView), const Offset(0, 300), 1000);
+    await tester.pumpAndSettle();
+    expect(
+      find.descendant(
+        of: find.byType(SnackBar),
+        matching: find.text(
+          describeFailure(const KimattaError.notOpen(), subject: 'Pantry'),
+        ),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.byType(SwitchListTile),
+      findsNWidgets(2),
+      reason: 'a failed refresh must not cost the user the list',
+    );
+  });
+
+  /// AC-3's accessible half on the *second* pantry control. This is the only
+  /// `Semantics`-wrapped `Switch` in `lib/`, and Key Decision 4 records that an annotation
+  /// outside the tappable node leaves that node unnamed. Each expectation is kept on its own
+  /// line so a failure names itself — this screen has never been checked against any of the
+  /// three guidelines, so a red run does not on its own implicate the semantics shape.
+  testWidgets(
+    'the recipe detail pantry control meets the accessibility guidelines',
+    (tester) async {
+      usePixel5(tester);
+      final handle = tester.ensureSemantics();
+      for (final brightness in Brightness.values) {
+        tester.platformDispatcher.platformBrightnessTestValue = brightness;
+        await tester.pumpWidget(
+          harness(
+            initial: '/recipes/r-1',
+            recipe: (_) => recipeWithResolvedLine,
+            // No launch re-read, so the tree under assertion is the one read produced.
+            starterInstall: (_) async => noCatalogStarterReport,
+          ),
+        );
+        await tester.pumpAndSettle();
+        await expectLater(tester, meetsGuideline(androidTapTargetGuideline));
+        await expectLater(tester, meetsGuideline(labeledTapTargetGuideline));
+        await expectLater(tester, meetsGuideline(textContrastGuideline));
+        expect(
+          find.bySemanticsLabel(pantryRowLabel('chickpeas', false)),
+          findsOneWidget,
+          reason:
+              'the control must carry its ingredient as its accessible name',
+        );
+      }
+      handle.dispose();
+    },
+  );
+
+  /// The label must track the value, not be fixed at "not marked".
+  testWidgets('the recipe detail pantry label states the marked state', (
+    tester,
+  ) async {
+    usePixel5(tester);
+    final handle = tester.ensureSemantics();
+    await tester.pumpWidget(
+      harness(
+        initial: '/recipes/r-1',
+        recipe: (_) => recipeWithResolvedLine,
+        starterInstall: (_) async => noCatalogStarterReport,
+        pantry: () => [pantryEntryMarked(chickpeasRef, true)],
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.bySemanticsLabel(pantryRowLabel('chickpeas', true)),
+      findsOneWidget,
+    );
+    handle.dispose();
   });
 
   // Keep this test last: the assertion it provokes leaves the element tree

@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:meal_mate/src/rust/api/error.dart';
 import 'package:meal_mate/src/rust/api/health.dart';
 import 'package:meal_mate/src/rust/api/household.dart';
+import 'package:meal_mate/src/rust/api/pantry.dart';
 import 'package:meal_mate/src/rust/api/planned_meals.dart';
 import 'package:meal_mate/src/rust/api/planning.dart';
 import 'package:meal_mate/src/rust/api/recipe.dart';
@@ -40,9 +41,9 @@ void main() {
     );
   });
 
-  test('open_database migrates a real database to schema v7', () async {
+  test('open_database migrates a real database to schema v8', () async {
     final report = await openDatabase(dbPath: await tempDb());
-    expect(report.schemaVersion, 7);
+    expect(report.schemaVersion, 8);
   });
 
   test('storage failure surfaces as KimattaError_Storage', () async {
@@ -386,6 +387,29 @@ void main() {
     expect(again, isNotNull);
     expect(again!.lines.single.originalText, '2 eggs');
     expect(again.lines.single.unit, const UnitDto.known(unit: 'piece'));
+  });
+
+  /// AC-1 at the real bridge: the mark is durable state in the file, not process state.
+  test('a marked pantry item survives reopening the same file', () async {
+    final path = await tempDb();
+    await openDatabase(dbPath: path);
+    final h = await bootstrapHousehold();
+    await installStarterContent(householdId: h.id);
+    final first = (await listPantry(householdId: h.id)).first;
+    expect(first.marked, isFalse);
+    final stored = await setPantryMark(
+      householdId: h.id,
+      ingredient: first.ingredient,
+      marked: true,
+    );
+    expect(stored.marked, isTrue);
+
+    await openDatabase(dbPath: path);
+    final again = (await listPantry(householdId: h.id))
+        .where((e) => e.ingredient == first.ingredient)
+        .single;
+    expect(again.marked, isTrue);
+    expect(again.name, first.name);
   });
 
   test('a blank title is a typed Recipe error in Dart', () async {

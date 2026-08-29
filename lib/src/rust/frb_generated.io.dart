@@ -6,6 +6,7 @@
 import 'api/error.dart';
 import 'api/health.dart';
 import 'api/household.dart';
+import 'api/pantry.dart';
 import 'api/planned_meals.dart';
 import 'api/planning.dart';
 import 'api/recipe.dart';
@@ -103,6 +104,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   List<MemberDto> dco_decode_list_member_dto(dynamic raw);
 
   @protected
+  List<PantryEntryDto> dco_decode_list_pantry_entry_dto(dynamic raw);
+
+  @protected
   List<PlannedMealDto> dco_decode_list_planned_meal_dto(dynamic raw);
 
   @protected
@@ -144,6 +148,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   int? dco_decode_opt_box_autoadd_u_32(dynamic raw);
+
+  @protected
+  PantryEntryDto dco_decode_pantry_entry_dto(dynamic raw);
 
   @protected
   PlannedMealDto dco_decode_planned_meal_dto(dynamic raw);
@@ -278,6 +285,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   List<MemberDto> sse_decode_list_member_dto(SseDeserializer deserializer);
 
   @protected
+  List<PantryEntryDto> sse_decode_list_pantry_entry_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   List<PlannedMealDto> sse_decode_list_planned_meal_dto(
     SseDeserializer deserializer,
   );
@@ -333,6 +345,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   int? sse_decode_opt_box_autoadd_u_32(SseDeserializer deserializer);
+
+  @protected
+  PantryEntryDto sse_decode_pantry_entry_dto(SseDeserializer deserializer);
 
   @protected
   PlannedMealDto sse_decode_planned_meal_dto(SseDeserializer deserializer);
@@ -500,6 +515,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_list_pantry_entry_dto(
+    List<PantryEntryDto> self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_list_planned_meal_dto(
     List<PlannedMealDto> self,
     SseSerializer serializer,
@@ -570,6 +591,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_opt_box_autoadd_u_32(int? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_pantry_entry_dto(
+    PantryEntryDto self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_planned_meal_dto(

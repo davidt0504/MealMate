@@ -5,6 +5,7 @@ import 'package:meal_mate/app/placeholder_screen.dart';
 import 'package:meal_mate/app/shell.dart';
 import 'package:meal_mate/features/household/household_screen.dart';
 import 'package:meal_mate/features/onboarding/welcome_screen.dart';
+import 'package:meal_mate/features/pantry/pantry_screen.dart';
 import 'package:meal_mate/features/planning/cycle_editor_screen.dart';
 import 'package:meal_mate/features/recipes/recipe_detail_screen.dart';
 import 'package:meal_mate/features/recipes/recipe_form_screen.dart';
@@ -92,14 +93,7 @@ GoRouter buildRouter({String initialLocation = homeLocation}) => GoRouter(
         StatefulShellBranch(
           restorationScopeId: 'pantry',
           routes: [
-            GoRoute(
-              path: '/pantry',
-              builder: (_, _) => const PlaceholderScreen(
-                title: 'Pantry',
-                message:
-                    "Optional have/don't-have pantry arrives with MVP-014.",
-              ),
-            ),
+            GoRoute(path: '/pantry', builder: (_, _) => const PantryScreen()),
           ],
         ),
         StatefulShellBranch(

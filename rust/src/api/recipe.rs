@@ -257,16 +257,30 @@ fn unit_from_domain(u: &Unit) -> UnitDto {
     }
 }
 
+/// Shared with `pantry.rs`, which marks the same identities a line resolves to, so a ref
+/// crosses the bridge one way only. The `Option` a line carries is handled at each call site;
+/// this pair is the unwrapped conversion.
+pub(crate) fn ref_to_domain(dto: IngredientRefDto) -> Result<IngredientRef, KimattaError> {
+    Ok(match dto {
+        IngredientRefDto::Catalog { id } => IngredientRef::Catalog(IngredientId::new(id)?),
+        IngredientRefDto::Custom { id } => IngredientRef::Custom(CustomIngredientId::new(id)?),
+    })
+}
+
+/// Shared with `pantry.rs`; see [`ref_to_domain`].
+pub(crate) fn ref_from_domain(r: &IngredientRef) -> IngredientRefDto {
+    match r {
+        IngredientRef::Catalog(id) => IngredientRefDto::Catalog {
+            id: id.as_str().to_owned(),
+        },
+        IngredientRef::Custom(id) => IngredientRefDto::Custom {
+            id: id.as_str().to_owned(),
+        },
+    }
+}
+
 fn line_to_domain(l: IngredientLineDto) -> Result<IngredientLine, KimattaError> {
-    let ingredient = match l.ingredient {
-        None => None,
-        Some(IngredientRefDto::Catalog { id }) => {
-            Some(IngredientRef::Catalog(IngredientId::new(id)?))
-        }
-        Some(IngredientRefDto::Custom { id }) => {
-            Some(IngredientRef::Custom(CustomIngredientId::new(id)?))
-        }
-    };
+    let ingredient = l.ingredient.map(ref_to_domain).transpose()?;
     Ok(IngredientLine::new(
         l.original_text,
         l.name,
@@ -282,14 +296,7 @@ fn line_from_domain(l: &IngredientLine) -> IngredientLineDto {
     IngredientLineDto {
         original_text: l.original_text().to_owned(),
         name: l.name().to_owned(),
-        ingredient: l.ingredient().map(|r| match r {
-            IngredientRef::Catalog(id) => IngredientRefDto::Catalog {
-                id: id.as_str().to_owned(),
-            },
-            IngredientRef::Custom(id) => IngredientRefDto::Custom {
-                id: id.as_str().to_owned(),
-            },
-        }),
+        ingredient: l.ingredient().map(ref_from_domain),
         quantity: quantity_from_domain(l.quantity()),
         unit: unit_from_domain(l.unit()),
         preparation: l.preparation().map(str::to_owned),
