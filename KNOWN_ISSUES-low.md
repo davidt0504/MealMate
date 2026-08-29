@@ -376,3 +376,55 @@ Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-orch-6-2026-0
 - **`healthReportProvider` and `health_provider.dart` no longer describe what they do** (`lib/features/settings/health_provider.dart:12`) -- `health_check` became `open_database` and now installs the process-wide connection as its primary effect, so this provider is the app's connection-lifetime owner, not a diagnostic; `lib/app/app.dart:43` needs prose to explain that. It also sits under `features/settings` while being a startup concern. Fix: rename to `databaseProvider` outside `features/settings` — four call sites.
   Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-orch-6-2026-08-28T2327-6b40.md
   **Status:** DEFERRED 2026-08-28 -- fix-both-or-defer-both. Renaming only the Dart provider leaves `HealthReport`, `lib/src/rust/api/health.dart` and `rust/src/api/health.rs` carrying the identical stale vocabulary, so `databaseProvider` would return a `HealthReport` from `health.dart` -- the same naming defect, half-fixed. Fixing both means renaming the Rust module and regenerating the FRB bridge (`frb_generated.rs`, `frb_generated.dart`, `.io.dart`, `.web.dart`), out of proportion for a card at `Verify`. Fold into the next card that touches these providers, renaming both sides in one pass.
+
+---
+
+## orch/8 -- 2026-08-29
+
+Source: /home/davidlinux/.claude/reviews/impl-handoff-orch-8-2026-08-29T0109-5f49.md
+Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-orch-8-2026-08-29T0120-ca0e.md
+
+Note: the review exists as two copies, and the `~/.claude/reviews/` one every `Full review:` line below points at
+is the **pre-fix snapshot** -- writes outside the worktree were blocked in the 2026-08-29 fix-pass session, so
+only the worktree copy, `.orch/redteam-impl-handoff-orch-8-2026-08-29T0120-ca0e.md`, carries the closed statuses
+(`RESOLVED -- 5 fixed, 2 deferred, 0 retracted`) and the per-finding reasoning the entries below summarise. The
+two are otherwise byte-identical. Reconcile the copies when this branch merges.
+
+### LOW
+
+- **`planningCycleProvider`'s anti-rebuild `selectAsync` choice has no test** (`lib/features/planning/planning_provider.dart:13`) -- the comment claims watching the whole future would cost a bridge write and a "Loading…" flicker on every rename; nothing proves it, and `_FakePlanningCycleNotifier` (`test/app_test.dart:84`) re-implements the same line, so a switch to `.future` stays green. Fix: a rename test on the real notifier asserting one `ensurePlanningCycle` call and no loading string.
+  Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-orch-8-2026-08-29T0120-ca0e.md
+  **Status:** OPEN -- deferred in the 2026-08-29 fix pass under batch criterion (b): the regression costs a
+  "Loading…" flicker plus one extra `ensurePlanningCycle`, which is idempotent by construction
+  (`kimatta-storage/src/lib.rs:285`-`:291` returns the stored row and ignores `default_cycle`), so no stored or
+  displayed value is wrong. UX polish with no correctness impact. Fold into the next card that touches this provider.
+
+- **The unknown-slot read path is untested and `slot` is the only unconstrained column** (`rust/crates/kimatta-storage/src/lib.rs:339`) -- the two sibling read-side guards have tests (`:572`, `:631`) but `MealSlot::parse`'s failure has none, and `planning_meal_slot.slot` (`:63`) carries no CHECK while both columns beside it in the same migration do. A `'supper'` row surfaces as an untested `KimattaError::Storage`. Fix: a storage test mirroring `:631`.
+  Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-orch-8-2026-08-29T0120-ca0e.md
+  **Status:** OPEN -- half fixed 2026-08-29. The read path is now pinned by
+  `an_unknown_slot_row_is_rejected_on_read`, which inserts a `'supper'` row directly and asserts
+  `StorageError::Planning(UnknownMealSlot("supper"))`. The `CHECK (slot IN (...))` half is deliberately not
+  applied: migration 2 is immutable on shipped databases, so pinning the slot vocabulary there costs a third
+  migration the first time a slot is added. That half stays open.
+
+- **`save_planning_cycle` is the only read-then-write transaction that is not IMMEDIATE** (`rust/crates/kimatta-storage/src/lib.rs:302`) -- it reads through `require_household` then writes under a DEFERRED transaction, while `ensure_household` (`:201`) and `ensure_planning_cycle` (`:282`) both use IMMEDIATE. Unreachable behind the single connection at `rust/src/db.rs:9`; a second connection turns it into a 5s busy stall. Fix: `TransactionBehavior::Immediate`.
+  Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-orch-8-2026-08-29T0120-ca0e.md
+  **Status:** RESOLVED 2026-08-29 -- fix pass: `save_planning_cycle` now opens
+  `transaction_with_behavior(TransactionBehavior::Immediate)`, matching its two read-then-write siblings, and its
+  doc comment states the lock ordering. Pinned by `save_takes_the_write_lock_before_it_reads`, which holds RESERVED
+  on a second connection with the busy timeout at zero and asserts the `BEGIN` is refused before
+  `require_household` runs; confirmed red pre-fix (`got NoSuchHousehold("absent")`). `insert_household` (`:94`) is
+  left DEFERRED deliberately -- it is write-only, so its first statement takes the write lock with no upgrade.
+
+- **Four `kimatta-storage` re-exports have no consumer** (`rust/crates/kimatta-storage/src/lib.rs:6`) -- `CivilDate`, `DEFAULT_CYCLE_DAYS`, `MIN_CYCLE_DAYS` and `MAX_CYCLE_DAYS` appear outside `food-domain` only on the re-export line, so the crate's public API overstates what is load-bearing and `cargo` warns on none of it. Fix: drop them, or let the schema-bound test consume the two `*_CYCLE_DAYS` constants.
+  Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-orch-8-2026-08-29T0120-ca0e.md
+  **Status:** OPEN -- deferred in the 2026-08-29 fix pass under batch criterion (d), fix-both-or-defer-both, and the
+  second half of the suggested fix is withdrawn as unsound: `the_length_check_constraint_matches_the_domain_bounds`
+  does now read `MIN_CYCLE_DAYS`/`MAX_CYCLE_DAYS`, but it reaches them through `use super::*` from the crate's own
+  `mod tests`, a path that resolves whether or not line 6 says `pub`. An in-crate test cannot justify a `pub use`.
+  On the other half: `CivilDate` cannot be dropped, because it is the return type of the re-exported
+  `parse_civil_date`, the parameter type of `format_civil_date` and the return type of `PlanningCycle::anchor()` --
+  all re-exported here and all used by `rust/src/api/planning.rs`, which would otherwise need its own `food-domain`
+  dependency to name the type, reintroducing the coupling `food-domain/src/lib.rs:8` re-exports jiff's `Date` to
+  avoid. One member of the set cannot be fixed, so the set is deferred. Revisit when MVP-006's editor gives the
+  three constants a real out-of-crate caller.

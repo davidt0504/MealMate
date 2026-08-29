@@ -9,6 +9,7 @@
 import 'api/error.dart';
 import 'api/health.dart';
 import 'api/household.dart';
+import 'api/planning.dart';
 
 import 'dart:async';
 import 'dart:convert';
@@ -35,7 +36,16 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   HouseholdDto dco_decode_household_dto(dynamic raw);
 
   @protected
+  int dco_decode_i_32(dynamic raw);
+
+  @protected
   KimattaError dco_decode_kimatta_error(dynamic raw);
+
+  @protected
+  List<String> dco_decode_list_String(dynamic raw);
+
+  @protected
+  List<MealSlotDto> dco_decode_list_meal_slot_dto(dynamic raw);
 
   @protected
   List<MemberDto> dco_decode_list_member_dto(dynamic raw);
@@ -44,10 +54,16 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   Uint8List dco_decode_list_prim_u_8_strict(dynamic raw);
 
   @protected
+  MealSlotDto dco_decode_meal_slot_dto(dynamic raw);
+
+  @protected
   MemberDto dco_decode_member_dto(dynamic raw);
 
   @protected
   String? dco_decode_opt_String(dynamic raw);
+
+  @protected
+  PlanningCycleDto dco_decode_planning_cycle_dto(dynamic raw);
 
   @protected
   int dco_decode_u_32(dynamic raw);
@@ -68,7 +84,16 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   HouseholdDto sse_decode_household_dto(SseDeserializer deserializer);
 
   @protected
+  int sse_decode_i_32(SseDeserializer deserializer);
+
+  @protected
   KimattaError sse_decode_kimatta_error(SseDeserializer deserializer);
+
+  @protected
+  List<String> sse_decode_list_String(SseDeserializer deserializer);
+
+  @protected
+  List<MealSlotDto> sse_decode_list_meal_slot_dto(SseDeserializer deserializer);
 
   @protected
   List<MemberDto> sse_decode_list_member_dto(SseDeserializer deserializer);
@@ -77,10 +102,16 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   Uint8List sse_decode_list_prim_u_8_strict(SseDeserializer deserializer);
 
   @protected
+  MealSlotDto sse_decode_meal_slot_dto(SseDeserializer deserializer);
+
+  @protected
   MemberDto sse_decode_member_dto(SseDeserializer deserializer);
 
   @protected
   String? sse_decode_opt_String(SseDeserializer deserializer);
+
+  @protected
+  PlanningCycleDto sse_decode_planning_cycle_dto(SseDeserializer deserializer);
 
   @protected
   int sse_decode_u_32(SseDeserializer deserializer);
@@ -90,9 +121,6 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_decode_unit(SseDeserializer deserializer);
-
-  @protected
-  int sse_decode_i_32(SseDeserializer deserializer);
 
   @protected
   bool sse_decode_bool(SseDeserializer deserializer);
@@ -107,7 +135,19 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_household_dto(HouseholdDto self, SseSerializer serializer);
 
   @protected
+  void sse_encode_i_32(int self, SseSerializer serializer);
+
+  @protected
   void sse_encode_kimatta_error(KimattaError self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_String(List<String> self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_meal_slot_dto(
+    List<MealSlotDto> self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_list_member_dto(
@@ -122,10 +162,19 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_meal_slot_dto(MealSlotDto self, SseSerializer serializer);
+
+  @protected
   void sse_encode_member_dto(MemberDto self, SseSerializer serializer);
 
   @protected
   void sse_encode_opt_String(String? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_planning_cycle_dto(
+    PlanningCycleDto self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_u_32(int self, SseSerializer serializer);
@@ -135,9 +184,6 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_unit(void self, SseSerializer serializer);
-
-  @protected
-  void sse_encode_i_32(int self, SseSerializer serializer);
 
   @protected
   void sse_encode_bool(bool self, SseSerializer serializer);

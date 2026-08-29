@@ -9,11 +9,25 @@ pub enum KimattaError {
     NotOpen,
     #[error("storage error: {message}")]
     Storage { message: String },
+    #[error("invalid planning input: {message}")]
+    Planning { message: String },
 }
 
 impl From<kimatta_storage::StorageError> for KimattaError {
     fn from(e: kimatta_storage::StorageError) -> Self {
         KimattaError::Storage {
+            message: e.to_string(),
+        }
+    }
+}
+
+/// Applies only where a `PlanningError` is produced *before* reaching storage — parsing and
+/// validating bridge arguments. A `PlanningError` surfacing from inside storage arrives
+/// wrapped as `StorageError::Planning` and stays a `Storage` error, which is correct: by then
+/// the failure is a persistence-layer failure.
+impl From<kimatta_storage::PlanningError> for KimattaError {
+    fn from(e: kimatta_storage::PlanningError) -> Self {
+        KimattaError::Planning {
             message: e.to_string(),
         }
     }

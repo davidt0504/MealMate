@@ -1,0 +1,9 @@
+[package]
+name = "food-domain"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+household-core = { path = "../household-core" }
+jiff = { version = "0.2.35", default-features = false, features = ["std"] }
+thiserror = "2"
