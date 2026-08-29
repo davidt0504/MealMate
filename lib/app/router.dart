@@ -6,6 +6,9 @@ import 'package:meal_mate/app/shell.dart';
 import 'package:meal_mate/features/household/household_screen.dart';
 import 'package:meal_mate/features/onboarding/welcome_screen.dart';
 import 'package:meal_mate/features/planning/cycle_editor_screen.dart';
+import 'package:meal_mate/features/recipes/recipe_detail_screen.dart';
+import 'package:meal_mate/features/recipes/recipe_form_screen.dart';
+import 'package:meal_mate/features/recipes/recipe_list_screen.dart';
 import 'package:meal_mate/features/restrictions/restrictions_screen.dart';
 import 'package:meal_mate/features/settings/settings_screen.dart';
 
@@ -30,10 +33,32 @@ GoRouter buildRouter({String initialLocation = homeLocation}) => GoRouter(
           routes: [
             GoRoute(
               path: '/recipes',
-              builder: (_, _) => const PlaceholderScreen(
-                title: 'Recipes',
-                message: 'Your recipe and meal library arrives with MVP-008.',
-              ),
+              builder: (_, _) => const RecipeListScreen(),
+              // Literal segments before `:id`, so `new` and `archived` are never read as
+              // recipe ids.
+              routes: [
+                GoRoute(
+                  path: 'new',
+                  builder: (_, _) => const RecipeFormScreen(),
+                ),
+                GoRoute(
+                  path: 'archived',
+                  builder: (_, _) => const ArchivedRecipesScreen(),
+                ),
+                GoRoute(
+                  path: ':id',
+                  builder: (_, state) =>
+                      RecipeDetailScreen(recipeId: state.pathParameters['id']!),
+                  routes: [
+                    GoRoute(
+                      path: 'edit',
+                      builder: (_, state) => RecipeFormScreen(
+                        recipeId: state.pathParameters['id'],
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ),
           ],
         ),

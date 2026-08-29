@@ -10,7 +10,7 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:freezed_annotation/freezed_annotation.dart' hide protected;
 part 'recipe.freezed.dart';
 
-// These functions are ignored because they are not marked as `pub`: `add_custom_ingredient_in`, `custom_from_domain`, `id_or_minted`, `line_from_domain`, `line_to_domain`, `list_custom_ingredients_in`, `list_recipes_in`, `load_recipe_in`, `quantity_from_domain`, `quantity_to_domain`, `rational`, `recipe_from_domain`, `recipe_to_domain`, `save_recipe_in`, `unit_from_domain`, `unit_to_domain`
+// These functions are ignored because they are not marked as `pub`: `add_custom_ingredient_in`, `archive_recipe_in`, `custom_from_domain`, `id_or_minted`, `line_from_domain`, `line_to_domain`, `list_archived_recipes_in`, `list_custom_ingredients_in`, `list_recipes_in`, `load_recipe_in`, `quantity_from_domain`, `quantity_to_domain`, `rational`, `recipe_from_domain`, `recipe_to_domain`, `restore_recipe_in`, `save_recipe_in`, `stored_recipe`, `summaries`, `unit_from_domain`, `unit_to_domain`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 
 /// Saves the whole recipe; an empty `id` mints a v4 UUID (as `bootstrap_household` does).
@@ -27,8 +27,43 @@ Future<RecipeDto?> loadRecipe({
   recipeId: recipeId,
 );
 
+/// The household's library: active recipes only.
 Future<List<RecipeSummaryDto>> listRecipes({required String householdId}) =>
     RustLib.instance.api.crateApiRecipeListRecipes(householdId: householdId);
+
+/// Recipes the household has archived, so they can be restored.
+Future<List<RecipeSummaryDto>> listArchivedRecipes({
+  required String householdId,
+}) => RustLib.instance.api.crateApiRecipeListArchivedRecipes(
+  householdId: householdId,
+);
+
+/// "Delete" (owner decision 2026-08-28: archive, never hard-delete). `archived_on` is the
+/// local civil date, supplied by Dart because Rust never reads the clock (invariant 20).
+/// Idempotent; returns the recipe as stored, with `archived_at` set.
+Future<RecipeDto> archiveRecipe({
+  required String householdId,
+  required String recipeId,
+  required String archivedOn,
+}) => RustLib.instance.api.crateApiRecipeArchiveRecipe(
+  householdId: householdId,
+  recipeId: recipeId,
+  archivedOn: archivedOn,
+);
+
+/// Undoes `archive_recipe`. Idempotent; returns the recipe as stored.
+Future<RecipeDto> restoreRecipe({
+  required String householdId,
+  required String recipeId,
+}) => RustLib.instance.api.crateApiRecipeRestoreRecipe(
+  householdId: householdId,
+  recipeId: recipeId,
+);
+
+/// The known unit vocabulary, so the editor's dropdown has one source and cannot drift from
+/// the domain (as `known_restriction_kinds` does for restrictions).
+Future<List<String>> knownUnitKinds() =>
+    RustLib.instance.api.crateApiRecipeKnownUnitKinds();
 
 /// Empty `id` mints a UUID. Returns the stored item.
 Future<CustomIngredientDto> addCustomIngredient({
@@ -149,6 +184,10 @@ class RecipeDto {
   final List<IngredientLineDto> lines;
   final RecipeProvenanceDto provenance;
 
+  /// Output only: `save_recipe` ignores it and never changes archive state; use
+  /// `archive_recipe`/`restore_recipe`. ISO civil date, `None` while in the library.
+  final String? archivedAt;
+
   const RecipeDto({
     required this.id,
     required this.householdId,
@@ -157,6 +196,7 @@ class RecipeDto {
     required this.instructions,
     required this.lines,
     required this.provenance,
+    this.archivedAt,
   });
 
   @override
@@ -167,7 +207,8 @@ class RecipeDto {
       servings.hashCode ^
       instructions.hashCode ^
       lines.hashCode ^
-      provenance.hashCode;
+      provenance.hashCode ^
+      archivedAt.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -180,7 +221,8 @@ class RecipeDto {
           servings == other.servings &&
           instructions == other.instructions &&
           lines == other.lines &&
-          provenance == other.provenance;
+          provenance == other.provenance &&
+          archivedAt == other.archivedAt;
 }
 
 /// `kind` is a `ProvenanceKind` string: `authored`, `imported` or `starter`.

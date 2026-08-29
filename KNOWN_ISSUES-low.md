@@ -480,3 +480,94 @@ Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-orch-12-2026-
 - **Free text duplicating a known restriction token is stored twice** (`lib/features/restrictions/restrictions_screen.dart:190`) -- `_add` dedups only within `_other`, and `is_same` (`rust/crates/food-domain/src/restriction.rs:101`) never collapses a `Known`/`Other` pair, so Peanuts checked plus typed `peanuts` yields `Peanuts, peanuts` in Settings and a double match for MVP-009. Fix: reject free text matching a token or label in `kinds` and tick that checkbox instead.
   Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-orch-12-2026-08-29T0439-99c7.md
   **Status:** RESOLVED -- fixed in the orch/12 fix pass 2026-08-29; `_add` now takes `kinds` and matches the trimmed lowercase entry against each token and its label, ticking that checkbox instead of adding a chip. Pinned by `free text naming a known kind ticks its box instead of adding a chip`, which also covers the already-ticked case, confirmed red pre-fix.
+
+## orch/14 -- 2026-08-29
+
+Source: /home/davidlinux/.claude/reviews/impl-handoff-orch-14-2026-08-29T0605-a1a4.md
+Full review: /home/davidlinux/.claude/reviews/redteam-recipe-crud-handoff-2026-08-29T0615-043d.md
+
+### LOW
+
+- **A malformed archive date is reported as a `Planning` error** (`rust/src/api/recipe.rs:381`) -- `archive_recipe_in` uses `parse_civil_date`, whose error maps to `KimattaError::Planning`, so a recipe-archive rejection reaches the user as "Recipes unavailable: <planning message>"; `archive_rejects_a_non_civil_date_as_planning_error` pins the mislabelling. Unreachable while the only caller passes `todayCivilDate()`. Fix: map to `KimattaError::Recipe`, or document the deliberate reuse in the test's doc comment.
+  Full review: /home/davidlinux/.claude/reviews/redteam-recipe-crud-handoff-2026-08-29T0615-043d.md
+  **Status:** OPEN
+
+---
+
+- **A row touched only via `Optional` or `Unit` is silently dropped** (`lib/features/recipes/recipe_form_screen.dart:154`) -- the blank-row skip tests only the five text controllers and ignores `unitKey`/`optional`, so a row where the user picked `cup` and flipped `Optional` is `continue`d: not validated, not saved, not reported, and the form navigates away. Self-declared as an open low risk in the handoff. Fix: add `unitKey != unitNoneKey || optional` to the emptiness test so a touched row is validated.
+  Full review: /home/davidlinux/.claude/reviews/redteam-recipe-crud-handoff-2026-08-29T0615-043d.md
+  **Status:** OPEN
+
+## orch/14 -- 2026-08-29
+
+Source: /home/davidlinux/.claude/reviews/impl-handoff-orch-14-2026-08-29T0658-3755.md
+Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-orch-14-2026-08-29T0713-5c00.md
+
+### LOW
+
+- **`recipeDetailProvider` is a non-`autoDispose` family** (`lib/features/recipes/recipes_provider.dart:100`) -- the only `.family` in `lib/`, so Riverpod retains one instance per recipe id opened for the `ProviderScope`'s life, each holding a full `RecipeDto` and a watch on `recipeLibraryProvider`; a long browse of a large library grows unboundedly and nothing frees it short of a restart. Fix: `FutureProvider.autoDispose.family` -- both screens watch it while mounted, so nothing needs the cache longer.
+  Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-orch-14-2026-08-29T0713-5c00.md
+  **Status:** OPEN -- considered and deliberately not fixed in the orch/14 fix pass 2026-08-29, per the reviewer's own `defer:` disposition. `autoDispose` is a one-token change, but it trades the memory bound for a user-visible full-body `CircularProgressIndicator` on every re-open of a recipe (`recipe_detail_screen.dart:86-97` routes `AsyncLoading` to the spinner arm), which is a UX call with no correctness impact. Fold into the next card that touches these providers.
+
+---
+
+- **Redundant `as bridge` import used once** (`lib/features/recipes/recipes_provider.dart:7`) -- the bridge library is imported twice, plain and prefixed, but only `listArchivedRecipes` (`:90`) uses the prefix while the other six calls do not. Copied from `household_provider.dart:4-7`, where the prefix resolves a real `completeOnboarding` shadowing; there is no collision here. No runtime effect, `flutter analyze` clean. Fix: drop the aliased import, or prefix all six and say why.
+  Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-orch-14-2026-08-29T0713-5c00.md
+  **Status:** RESOLVED -- fixed in the orch/14 fix pass 2026-08-29; the aliased import dropped and `:90` calls `listArchivedRecipes` unprefixed like the file's other six bridge calls. Took the first option, not "prefix all six": `household_provider.dart`'s prefix resolves a real shadowing, and copying it where nothing shadows would spread a pattern that means nothing. No test -- import-only, no reachable behaviour difference; `flutter analyze` rc 0 and the suite unchanged. This entry was the one LOW of the three the reviewer marked `defer:` that was overridden, because deferring it avoids no risk.
+
+---
+
+- **Restore navigates away from the detail screen but not from the archived list** (`lib/features/recipes/recipe_detail_screen.dart:58`) -- `_run` is shared by archive and restore and always ends `context.go('/recipes')`, so restoring from a recipe you are reading ejects you to the library, while `ArchivedRecipesScreen._restore` (`recipe_list_screen.dart:68`) stays put. Same action, two outcomes. Fix: give restore its own continuation that stays on the detail screen and lets `recipeDetailProvider` re-render it.
+  Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-orch-14-2026-08-29T0713-5c00.md
+  **Status:** OPEN -- considered and deliberately not fixed in the orch/14 fix pass 2026-08-29, per the reviewer's own `defer:` disposition ("needs a UX call on the intended landing spot, not just a code change"). It is the only user-visible behaviour change the pass would have made, and this codebase records calls of that kind as `(owner decision <date>)` (`recipes_provider.dart:53`, `recipe_detail_screen.dart:22`); the call was not made unattended. Note for whoever takes it: staying put is not a quiet re-render -- a recomputed `recipeDetailProvider` emits `AsyncLoading`, which `recipe_detail_screen.dart:86-97` routes to a full-body spinner, so the user sees content → spinner → content.
+
+## orch/14 -- 2026-08-29
+
+Source: /home/davidlinux/.claude/reviews/impl-handoff-orch-14-2026-08-29T0750-b94e.md
+Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-orch-14-2026-08-29T0804-a280.md
+
+### LOW
+
+- **`_firstErrorKey`'s Servings branch is unexercised** (`lib/features/recipes/recipe_form_screen.dart:217`) -- of the three dispatch arms added by the scroll fix, only title and rows are tested. Nothing asserts `key: _servingsKey` is still attached to the Servings `TextField` (`:333`), so dropping it would make `_revealFirstError` silently no-op on a servings-only rejection with all 152 tests green. Fix: one `usePixel5` test entering `0` in Servings and asserting the error is visible.
+  Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-orch-14-2026-08-29T0804-a280.md
+  **Status:** RESOLVED -- fixed in the orch/14 pass-1 fix 2026-08-29 by `a rejected servings count scrolls its error into view`. Not the one-row test the finding suggested: on the default form the servings error renders inside the fold whether or not the scroll runs, so that version passes with `key: _servingsKey` deleted and pins nothing. The test adds two empty rows -- skipped by `_validate`, so they add height without a competing row error -- which puts Servings above the viewport once `tapVisible` scrolls to Save. Verified non-vacuous by mutation: with the key removed the error sits at **-899.3** against a viewport top of **56.0** and the test fails `error is clipped above the scroll viewport`.
+
+## orch/14 -- 2026-08-29
+
+Source: test/app_test.dart
+Full review: /home/davidlinux/.claude/reviews/redteam-app-test-2026-08-29T0823-c1d2.md
+
+### LOW
+
+- **`/recipes/archived`'s accessibility check measures the empty state** (`test/app_test.dart:2739`) -- the a11y loop passes `recipes:` but not `archived:`, so that iteration measures `Center(Text('Nothing archived.'))` and never checks the screen's only control, the `Restore` `TextButton` in `ListTile.trailing` (`lib/features/recipes/recipe_list_screen.dart:99`). Fix: add `archived: () => const [okSummary]` to the loop's harness call -- inert on the other three locations.
+  Full review: /home/davidlinux/.claude/reviews/redteam-app-test-2026-08-29T0823-c1d2.md
+  **Status:** OPEN
+
+---
+
+- **`ArchivedRecipesScreen._restore`'s failure path is untested** (`lib/features/recipes/recipe_list_screen.dart:68`) -- its `catch`, `finally` and `_busy` gate are a second copy of the detail screen's `_run` shape and only the detail copy is pinned (`test/app_test.dart:1895`), so dropping the `finally` leaves every `Restore` button permanently disabled after one failed restore. Fix: one test with `restoreRecipe:` throwing, asserting the snackbar and that `onPressed` is non-null after.
+  Full review: /home/davidlinux/.claude/reviews/redteam-app-test-2026-08-29T0823-c1d2.md
+  **Status:** OPEN
+
+---
+
+- **The recipe form's tab-traversal bound is an undocumented `40`** (`test/app_test.dart:2762`) -- its sibling at `:672` uses `maxTabPresses`, a constant given a rationale because `KNOWN_ISSUES-low.md:319` flagged the same pattern; when MVP-009 adds row controls the failure will read as "Add ingredient lost focusability" rather than "the bound is stale". Fix: hoist to `maxFormTabPresses` beside `maxTabPresses`, with one line on what it is sized against.
+  Full review: /home/davidlinux/.claude/reviews/redteam-app-test-2026-08-29T0823-c1d2.md
+  **Status:** OPEN
+
+## orch/14 -- 2026-08-29
+
+Source: /home/davidlinux/.claude/reviews/impl-handoff-orch-14-2026-08-29T0900-dcd3.md
+Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-orch-14-2026-08-29T0911-2a9d.md
+
+### LOW
+
+- **A row's inline error survives `_removeLine` and misnumbers the surviving row** (`lib/features/recipes/recipe_form_screen.dart:275`) -- `_LineDraft.error` is cleared only by `_validate`, and the message embeds the index at validation time while `_row` re-derives its header live, so after a rejected save removing row 1 leaves a card headed "Ingredient 1" showing "Ingredient 2: ...". Self-corrects on the next Save. Fix: clear `error` on the remaining drafts inside `_removeLine`, or drop the index from the message.
+  Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-orch-14-2026-08-29T0911-2a9d.md
+  **Status:** RESOLVED (orch/14 pass 1) -- fixed by neither listed option: `_LineDraft.error` now stores the message *without* the `Ingredient N:` prefix (`:58`) and `_row` applies the number from the live index at paint time (`:449`), so a removal renumbers every surviving row automatically. Clearing the survivors' errors was rejected because it would drop rejection signals that are still true for the rows above the removal -- the silent-rejection shape this card already fixed once. Pinned by `Remove ingredient renumbers the errors of the rows below it` (`test/app_test.dart:2450`), which fails pre-fix.
+
+---
+
+- **`ArchivedRecipesScreen._restore` returns silently on a null household id** (`lib/features/recipes/recipe_list_screen.dart:70`) -- a bare early return with the `Restore` button still enabled, so the tap reads as a broken button; `RecipeFormScreen` disables Save on the same condition (`recipe_form_screen.dart:360`) and `RecipeDetailScreen` takes the id off the DTO. Near-unreachable, since `archivedRecipesProvider.build` awaits the household first. Fix: gate `onPressed` on the id, or take it from the DTO as the detail screen does.
+  Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-orch-14-2026-08-29T0911-2a9d.md
+  **Status:** OPEN -- deferred at the orch/14 pass-1 fix round, deliberately. Two of the review's three suggested directions are unavailable or unpinnable: taking the id off the DTO is impossible because `RecipeSummaryDto` carries only `id` and `title` (`lib/src/rust/api/recipe.dart:260`-`264`), unlike the full `RecipeDto` the detail screen holds; and both gating `onPressed` and adding the `describeFailure` snackbar are behaviour-preserving in every state the app can reach, because `ArchivedRecipesNotifier.build` awaits `householdProvider.selectAsync(...)` before the list renders. Pinning either would need a fake that omits that await and so contradicts production. Gating `onPressed` is the only shape available without widening the bridge DTO; revisit when a caller can reach the archived list without a resolved household.

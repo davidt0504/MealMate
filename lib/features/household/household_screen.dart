@@ -31,6 +31,9 @@ String describeFailure(
   // Added with the variant itself, as the Planning arm was, so MVP-006's restriction
   // editor cannot surface a raw freezed `toString()`.
   KimattaError_Restriction(:final message) => '$subject unavailable: $message',
+  // Added with MVP-008's editor, as the Planning and Restriction arms were, so a recipe
+  // validation error reaches the user as prose rather than a raw freezed `toString()`.
+  KimattaError_Recipe(:final message) => '$subject unavailable: $message',
   _ => '$subject unavailable: $error',
 };
 

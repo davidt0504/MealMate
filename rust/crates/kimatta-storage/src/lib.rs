@@ -212,6 +212,14 @@ const MIGRATION_ARRAY: &[M] = &[
         PRIMARY KEY (member_id, position)
     ) STRICT;",
     ),
+    // Archive marker (MVP-008 decision gate, owner 2026-08-28): "delete" sets this, never
+    // removes the row, so every planner/occurrence reference stays resolvable (PRD §12).
+    // Same civil-date GLOB as `planning_cycle.anchor_date`; NULL = active.
+    M::up(
+        "ALTER TABLE recipe ADD COLUMN archived_at TEXT
+        CHECK (archived_at IS NULL
+            OR archived_at GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]');",
+    ),
 ];
 pub const MIGRATIONS: Migrations<'static> = Migrations::from_slice(MIGRATION_ARRAY);
 
@@ -850,6 +858,23 @@ pub struct RecipeSummary {
     pub title: String,
 }
 
+/// A recipe as stored, with its archive marker. `archived_at` is library/UX lifecycle state,
+/// deliberately not part of `food_domain::Recipe` — as `HouseholdRecord::onboarded` is kept
+/// out of `Household` — so `Recipe::new` and `save_recipe` never see it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RecipeRecord {
+    pub recipe: Recipe,
+    /// The civil date the household archived it, or `None` while it is in the library.
+    pub archived_at: Option<CivilDate>,
+}
+
+/// Which side of the archive marker `list_recipes` returns.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RecipeListing {
+    Active,
+    Archived,
+}
+
 /// Every referenced ingredient must exist, and every custom one must belong to the recipe's
 /// household. All probes run before any write, so a rejected save leaves no partial row.
 fn check_line_refs(conn: &Connection, recipe: &Recipe) -> Result<(), StorageError> {
@@ -1090,14 +1115,16 @@ fn line_from_row(
 /// The recipe `id` **in `household`**, or `None` — another household's recipe is `None`,
 /// never the row. Every stored value goes back through the domain constructors, so a row
 /// that violates an invariant surfaces as `StorageError::Recipe`, never as an invalid value.
+/// An archived recipe still loads (its `archived_at` says so): references to it must keep
+/// resolving.
 pub fn load_recipe(
     conn: &Connection,
     household: &HouseholdId,
     id: &RecipeId,
-) -> Result<Option<Recipe>, StorageError> {
+) -> Result<Option<RecipeRecord>, StorageError> {
     let row = conn
         .query_row(
-            "SELECT title, servings, instructions FROM recipe
+            "SELECT title, servings, instructions, archived_at FROM recipe
              WHERE id = ?1 AND household_id = ?2",
             params![id.as_str(), household.as_str()],
             |r| {
@@ -1105,13 +1132,15 @@ pub fn load_recipe(
                     r.get::<_, String>(0)?,
                     r.get::<_, Option<u32>>(1)?,
                     r.get::<_, String>(2)?,
+                    r.get::<_, Option<String>>(3)?,
                 ))
             },
         )
         .optional()?;
-    let Some((title, servings, instructions)) = row else {
+    let Some((title, servings, instructions, archived_at)) = row else {
         return Ok(None);
     };
+    let archived_at = archived_at.as_deref().map(parse_civil_date).transpose()?;
     let provenance = conn
         .query_row(
             "SELECT kind, source_url, source_name, source_author FROM recipe_provenance
@@ -1161,24 +1190,38 @@ pub fn load_recipe(
         .enumerate()
         .map(|(position, row)| line_from_row(id.as_str(), position, row?))
         .collect::<Result<Vec<_>, StorageError>>()?;
-    Ok(Some(Recipe::new(
-        id.clone(),
-        household.clone(),
-        title,
-        servings,
-        instructions,
-        lines,
-        provenance,
-    )?))
+    Ok(Some(RecipeRecord {
+        recipe: Recipe::new(
+            id.clone(),
+            household.clone(),
+            title,
+            servings,
+            instructions,
+            lines,
+            provenance,
+        )?,
+        archived_at,
+    }))
 }
 
-/// `(id, title)` of every recipe in `household`, ordered by title then id.
+/// `(id, title)` of every recipe in `household` on the requested side of the archive marker,
+/// ordered by title then id.
 pub fn list_recipes(
     conn: &Connection,
     household: &HouseholdId,
+    listing: RecipeListing,
 ) -> Result<Vec<RecipeSummary>, StorageError> {
-    let mut stmt =
-        conn.prepare("SELECT id, title FROM recipe WHERE household_id = ?1 ORDER BY title, id")?;
+    let sql = match listing {
+        RecipeListing::Active => {
+            "SELECT id, title FROM recipe
+             WHERE household_id = ?1 AND archived_at IS NULL ORDER BY title, id"
+        }
+        RecipeListing::Archived => {
+            "SELECT id, title FROM recipe
+             WHERE household_id = ?1 AND archived_at IS NOT NULL ORDER BY title, id"
+        }
+    };
+    let mut stmt = conn.prepare(sql)?;
     let summaries = stmt
         .query_map(params![household.as_str()], |r| {
             Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?))
@@ -1192,6 +1235,70 @@ pub fn list_recipes(
         })
         .collect();
     summaries
+}
+
+/// Sets `archived_at` to `at` on an active recipe. Idempotent: an already-archived recipe
+/// keeps its first date. The row is never deleted (PRD §12), so `load_recipe` keeps
+/// resolving it. Absent, or owned by another household, is `NoSuchRecipe`.
+pub fn archive_recipe(
+    conn: &mut Connection,
+    household: &HouseholdId,
+    id: &RecipeId,
+    at: CivilDate,
+) -> Result<(), StorageError> {
+    set_archive_marker(
+        conn,
+        household,
+        id,
+        "UPDATE recipe SET archived_at = ?1
+         WHERE id = ?2 AND household_id = ?3 AND archived_at IS NULL",
+        Some(format_civil_date(at)),
+    )
+}
+
+/// Clears `archived_at`. Idempotent on an active recipe; scoping as `archive_recipe`.
+pub fn restore_recipe(
+    conn: &mut Connection,
+    household: &HouseholdId,
+    id: &RecipeId,
+) -> Result<(), StorageError> {
+    set_archive_marker(
+        conn,
+        household,
+        id,
+        "UPDATE recipe SET archived_at = ?1
+         WHERE id = ?2 AND household_id = ?3 AND archived_at IS NOT NULL",
+        None,
+    )
+}
+
+/// The guarded UPDATE matches only rows on the other side of the marker, so zero rows means
+/// either "already there" (a no-op) or "no such recipe in this household" — the existence
+/// probe tells them apart, inside the same IMMEDIATE transaction so nothing moves between.
+fn set_archive_marker(
+    conn: &mut Connection,
+    household: &HouseholdId,
+    id: &RecipeId,
+    update: &str,
+    marker: Option<String>,
+) -> Result<(), StorageError> {
+    let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    let changed = tx.execute(update, params![marker, id.as_str(), household.as_str()])?;
+    if changed == 0 {
+        let exists: bool = tx.query_row(
+            "SELECT EXISTS(SELECT 1 FROM recipe WHERE id = ?1 AND household_id = ?2)",
+            params![id.as_str(), household.as_str()],
+            |r| r.get(0),
+        )?;
+        if !exists {
+            return Err(StorageError::NoSuchRecipe {
+                recipe: id.as_str().to_owned(),
+                household: household.as_str().to_owned(),
+            });
+        }
+    }
+    tx.commit()?;
+    Ok(())
 }
 
 #[cfg(test)]
@@ -1367,9 +1474,9 @@ mod tests {
     /// `open()` always migrates to latest, so v1 is unreachable through the public API once v2
     /// exists — hence the raw connection and `to_version`. Test-level stand-in for the
     /// on-device v1→v2 migration (PRD §12: tested from representative prior versions); since
-    /// v4 it proves v1→v4 end to end.
+    /// v4 it proves v1→latest end to end.
     #[test]
-    fn an_existing_v1_database_migrates_to_v4_without_losing_data() {
+    fn an_existing_v1_database_migrates_to_v5_without_losing_data() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("kimatta.db");
         {
@@ -1384,7 +1491,7 @@ mod tests {
             .unwrap();
         }
         let conn = open(&path).unwrap();
-        assert_eq!(schema_version(&conn).unwrap(), 4);
+        assert_eq!(schema_version(&conn).unwrap(), 5);
         assert_eq!(count(&conn, "household"), 1);
         assert_eq!(count(&conn, "household_member"), 2);
         assert_eq!(count(&conn, "planning_cycle"), 0);
@@ -1598,16 +1705,16 @@ mod tests {
     }
 
     #[test]
-    fn empty_db_migrates_to_v4() {
+    fn empty_db_migrates_to_v5() {
         let conn = open(":memory:").unwrap();
-        assert_eq!(schema_version(&conn).unwrap(), 4);
+        assert_eq!(schema_version(&conn).unwrap(), 5);
     }
 
     // --- Step 4: schema v3 -----------------------------------------------------------------
 
     /// Test-level stand-in for the on-device v2→v3 migration, as the v1 test is for v1→v2.
     #[test]
-    fn an_existing_v2_database_migrates_to_v4_without_losing_data() {
+    fn an_existing_v2_database_migrates_to_v5_without_losing_data() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("kimatta.db");
         {
@@ -1628,7 +1735,7 @@ mod tests {
             .unwrap();
         }
         let conn = open(&path).unwrap();
-        assert_eq!(schema_version(&conn).unwrap(), 4);
+        assert_eq!(schema_version(&conn).unwrap(), 5);
         assert_eq!(count(&conn, "household"), 1);
         assert_eq!(count(&conn, "planning_cycle"), 1);
         assert_eq!(count(&conn, "planning_meal_slot"), 2);
@@ -1641,7 +1748,7 @@ mod tests {
     /// theirs. A recipe is saved at v3 so the migration is proved not to disturb the tables
     /// migration 3 introduced, not merely the household one it alters.
     #[test]
-    fn an_existing_v3_database_migrates_to_v4_without_losing_data() {
+    fn an_existing_v3_database_migrates_to_v5_without_losing_data() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("kimatta.db");
         {
@@ -1653,12 +1760,53 @@ mod tests {
             save_recipe(&mut raw, &recipe("h", "r", vec![])).unwrap();
         }
         let conn = open(&path).unwrap();
-        assert_eq!(schema_version(&conn).unwrap(), 4);
+        assert_eq!(schema_version(&conn).unwrap(), 5);
         assert_eq!(count(&conn, "household"), 1);
         assert_eq!(count(&conn, "household_member"), 1);
         assert_eq!(count(&conn, "recipe"), 1);
         assert_eq!(count(&conn, "household_restriction"), 0);
         assert_eq!(count(&conn, "member_food_preference"), 0);
+    }
+
+    // --- schema v5 -------------------------------------------------------------------------
+
+    /// Test-level stand-in for the on-device v4→v5 migration, in the pattern of the v3→v4
+    /// test: a recipe saved at v4 must survive the `ALTER TABLE` that adds `archived_at`.
+    #[test]
+    fn an_existing_v4_database_migrates_to_v5_without_losing_data() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("kimatta.db");
+        {
+            let mut raw = Connection::open(&path).unwrap();
+            MIGRATIONS.to_version(&mut raw, 4).unwrap();
+            assert_eq!(schema_version(&raw).unwrap(), 4);
+            raw.pragma_update(None, "foreign_keys", "ON").unwrap();
+            seed(&mut raw, "h");
+            save_recipe(&mut raw, &recipe("h", "r", vec![])).unwrap();
+        }
+        let conn = open(&path).unwrap();
+        assert_eq!(schema_version(&conn).unwrap(), 5);
+        assert_eq!(count(&conn, "household"), 1);
+        assert_eq!(count(&conn, "recipe"), 1);
+        assert_eq!(count(&conn, "household_restriction"), 0);
+        assert_eq!(count(&conn, "member_food_preference"), 0);
+    }
+
+    /// No backfill: a recipe that existed before v5 is active, which is what NULL means.
+    #[test]
+    fn a_migrated_recipe_is_not_archived() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("kimatta.db");
+        {
+            let mut raw = Connection::open(&path).unwrap();
+            MIGRATIONS.to_version(&mut raw, 4).unwrap();
+            raw.pragma_update(None, "foreign_keys", "ON").unwrap();
+            seed(&mut raw, "h");
+            save_recipe(&mut raw, &recipe("h", "r", vec![])).unwrap();
+        }
+        let conn = open(&path).unwrap();
+        assert_eq!(archived_at_raw(&conn, "r"), None);
+        assert_eq!(active_ids(&conn, "h"), vec!["r"]);
     }
 
     /// The column default is what an already-shipped household reads after the upgrade: the
@@ -2013,13 +2161,66 @@ mod tests {
         upsert_custom_ingredient(conn, &custom("c", household, "nana's mix")).unwrap();
     }
 
-    fn load(conn: &Connection, household: &str, id: &str) -> Option<Recipe> {
+    fn load_record(conn: &Connection, household: &str, id: &str) -> Option<RecipeRecord> {
         load_recipe(
             conn,
             &HouseholdId::new(household).unwrap(),
             &RecipeId::new(id).unwrap(),
         )
         .unwrap()
+    }
+
+    fn load(conn: &Connection, household: &str, id: &str) -> Option<Recipe> {
+        load_record(conn, household, id).map(|r| r.recipe)
+    }
+
+    fn ids(conn: &Connection, household: &str, listing: RecipeListing) -> Vec<String> {
+        list_recipes(conn, &HouseholdId::new(household).unwrap(), listing)
+            .unwrap()
+            .into_iter()
+            .map(|s| s.id.as_str().to_owned())
+            .collect()
+    }
+
+    fn active_ids(conn: &Connection, household: &str) -> Vec<String> {
+        ids(conn, household, RecipeListing::Active)
+    }
+
+    fn archived_ids(conn: &Connection, household: &str) -> Vec<String> {
+        ids(conn, household, RecipeListing::Archived)
+    }
+
+    /// The column as stored, bypassing `load_recipe`, so the archive tests do not depend on
+    /// the read path they are also proving.
+    fn archived_at_raw(conn: &Connection, id: &str) -> Option<String> {
+        conn.query_row(
+            "SELECT archived_at FROM recipe WHERE id = ?1",
+            params![id],
+            |r| r.get(0),
+        )
+        .unwrap()
+    }
+
+    fn archive(
+        conn: &mut Connection,
+        household: &str,
+        id: &str,
+        at: &str,
+    ) -> Result<(), StorageError> {
+        archive_recipe(
+            conn,
+            &HouseholdId::new(household).unwrap(),
+            &RecipeId::new(id).unwrap(),
+            parse_civil_date(at).unwrap(),
+        )
+    }
+
+    fn restore(conn: &mut Connection, household: &str, id: &str) -> Result<(), StorageError> {
+        restore_recipe(
+            conn,
+            &HouseholdId::new(household).unwrap(),
+            &RecipeId::new(id).unwrap(),
+        )
     }
 
     #[test]
@@ -2071,7 +2272,12 @@ mod tests {
             .unwrap();
             save_recipe(&mut conn, &r).unwrap();
         }
-        let summaries = list_recipes(&conn, &HouseholdId::new("h").unwrap()).unwrap();
+        let summaries = list_recipes(
+            &conn,
+            &HouseholdId::new("h").unwrap(),
+            RecipeListing::Active,
+        )
+        .unwrap();
         assert_eq!(
             summaries,
             vec![
@@ -2284,12 +2490,131 @@ mod tests {
         seed(&mut conn, "h2");
         save_recipe(&mut conn, &recipe("h1", "r1", vec![])).unwrap();
         save_recipe(&mut conn, &recipe("h2", "r2", vec![])).unwrap();
-        let h1 = list_recipes(&conn, &HouseholdId::new("h1").unwrap()).unwrap();
-        let h2 = list_recipes(&conn, &HouseholdId::new("h2").unwrap()).unwrap();
-        assert_eq!(h1.len(), 1);
-        assert_eq!(h1[0].id.as_str(), "r1");
-        assert_eq!(h2.len(), 1);
-        assert_eq!(h2[0].id.as_str(), "r2");
+        assert_eq!(active_ids(&conn, "h1"), vec!["r1"]);
+        assert_eq!(active_ids(&conn, "h2"), vec!["r2"]);
+    }
+
+    // --- MVP-008: archive, never hard-delete (owner decision, 2026-08-28) ------------------
+
+    #[test]
+    fn archive_hides_a_recipe_from_the_active_list_and_lists_it_as_archived() {
+        let mut conn = open(":memory:").unwrap();
+        seed(&mut conn, "h");
+        save_recipe(&mut conn, &recipe("h", "r1", vec![])).unwrap();
+        save_recipe(&mut conn, &recipe("h", "r2", vec![])).unwrap();
+        assert_eq!(archived_ids(&conn, "h"), Vec::<String>::new());
+        archive(&mut conn, "h", "r1", "2026-08-29").unwrap();
+        assert_eq!(active_ids(&conn, "h"), vec!["r2"]);
+        assert_eq!(archived_ids(&conn, "h"), vec!["r1"]);
+        assert_eq!(archived_at_raw(&conn, "r1"), Some("2026-08-29".to_owned()));
+        // The row is still there: nothing was deleted (PRD §12).
+        assert_eq!(count(&conn, "recipe"), 2);
+    }
+
+    #[test]
+    fn archive_is_idempotent_and_keeps_the_first_date() {
+        let mut conn = open(":memory:").unwrap();
+        seed(&mut conn, "h");
+        save_recipe(&mut conn, &recipe("h", "r", vec![])).unwrap();
+        archive(&mut conn, "h", "r", "2026-08-29").unwrap();
+        archive(&mut conn, "h", "r", "2026-09-01").unwrap();
+        assert_eq!(archived_at_raw(&conn, "r"), Some("2026-08-29".to_owned()));
+        assert_eq!(archived_ids(&conn, "h"), vec!["r"]);
+    }
+
+    #[test]
+    fn restore_returns_a_recipe_to_the_active_list() {
+        let mut conn = open(":memory:").unwrap();
+        seed(&mut conn, "h");
+        save_recipe(&mut conn, &recipe("h", "r", vec![])).unwrap();
+        archive(&mut conn, "h", "r", "2026-08-29").unwrap();
+        restore(&mut conn, "h", "r").unwrap();
+        assert_eq!(archived_at_raw(&conn, "r"), None);
+        assert_eq!(active_ids(&conn, "h"), vec!["r"]);
+        assert_eq!(archived_ids(&conn, "h"), Vec::<String>::new());
+        // Restoring an active recipe is a no-op, not an error.
+        restore(&mut conn, "h", "r").unwrap();
+        assert_eq!(active_ids(&conn, "h"), vec!["r"]);
+    }
+
+    #[test]
+    fn archive_and_restore_are_household_scoped() {
+        let mut conn = open(":memory:").unwrap();
+        seed(&mut conn, "h1");
+        seed(&mut conn, "h2");
+        save_recipe(&mut conn, &recipe("h1", "r", vec![])).unwrap();
+        let err = archive(&mut conn, "h2", "r", "2026-08-29").unwrap_err();
+        assert!(
+            matches!(
+                &err,
+                StorageError::NoSuchRecipe { recipe, household } if recipe == "r" && household == "h2"
+            ),
+            "got {err:?}"
+        );
+        assert_eq!(archived_at_raw(&conn, "r"), None);
+        archive(&mut conn, "h1", "r", "2026-08-29").unwrap();
+        let err = restore(&mut conn, "h2", "r").unwrap_err();
+        assert!(
+            matches!(err, StorageError::NoSuchRecipe { .. }),
+            "got {err:?}"
+        );
+        assert_eq!(archived_at_raw(&conn, "r"), Some("2026-08-29".to_owned()));
+        assert_eq!(archived_ids(&conn, "h2"), Vec::<String>::new());
+    }
+
+    #[test]
+    fn archive_of_an_absent_recipe_is_no_such_recipe() {
+        let mut conn = open(":memory:").unwrap();
+        seed(&mut conn, "h");
+        let err = archive(&mut conn, "h", "ghost", "2026-08-29").unwrap_err();
+        assert!(
+            matches!(
+                &err,
+                StorageError::NoSuchRecipe { recipe, household } if recipe == "ghost" && household == "h"
+            ),
+            "got {err:?}"
+        );
+        let err = restore(&mut conn, "h", "ghost").unwrap_err();
+        assert!(
+            matches!(err, StorageError::NoSuchRecipe { .. }),
+            "got {err:?}"
+        );
+    }
+
+    /// `save_recipe`'s UPSERT names neither `archived_at` nor a default for it, so editing an
+    /// archived recipe neither restores it nor moves its date — restore is the only way back.
+    #[test]
+    fn save_never_changes_archive_state() {
+        let mut conn = open(":memory:").unwrap();
+        seed(&mut conn, "h");
+        save_recipe(&mut conn, &recipe("h", "r", vec![])).unwrap();
+        archive(&mut conn, "h", "r", "2026-08-29").unwrap();
+        let edited = recipe(
+            "h",
+            "r",
+            vec![line("1 egg", "egg", Quantity::Unknown, Unit::None)],
+        );
+        save_recipe(&mut conn, &edited).unwrap();
+        assert_eq!(archived_at_raw(&conn, "r"), Some("2026-08-29".to_owned()));
+        assert_eq!(load(&conn, "h", "r"), Some(edited));
+        assert_eq!(active_ids(&conn, "h"), Vec::<String>::new());
+    }
+
+    /// An archived id still resolves by `load_recipe`: this is the reference-stability half
+    /// of the archive policy that MVP-012's occurrences will rely on.
+    #[test]
+    fn load_reports_archived_at() {
+        let mut conn = open(":memory:").unwrap();
+        seed(&mut conn, "h");
+        save_recipe(&mut conn, &recipe("h", "r", vec![])).unwrap();
+        assert_eq!(load_record(&conn, "h", "r").unwrap().archived_at, None);
+        archive(&mut conn, "h", "r", "2026-08-29").unwrap();
+        let record = load_record(&conn, "h", "r").unwrap();
+        assert_eq!(
+            record.archived_at,
+            Some(parse_civil_date("2026-08-29").unwrap())
+        );
+        assert_eq!(record.recipe, recipe("h", "r", vec![]));
     }
 
     #[test]
@@ -2718,7 +3043,7 @@ mod tests {
             insert_household(&mut conn, &household("h"), &[member("m", "h")]).unwrap();
         }
         let conn = open(&path).unwrap();
-        assert_eq!(schema_version(&conn).unwrap(), 4);
+        assert_eq!(schema_version(&conn).unwrap(), 5);
         assert_eq!(count(&conn, "household"), 1);
         assert_eq!(count(&conn, "household_member"), 1);
         let on: i32 = conn
