@@ -835,9 +835,31 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  RestrictionAssessmentDto dco_decode_box_autoadd_restriction_assessment_dto(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_restriction_assessment_dto(raw);
+  }
+
+  @protected
   int dco_decode_box_autoadd_u_32(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw as int;
+  }
+
+  @protected
+  ConflictDto dco_decode_conflict_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 4)
+      throw Exception('unexpected arr length: expect 4 but see ${arr.length}');
+    return ConflictDto(
+      restriction: dco_decode_restriction_dto(arr[0]),
+      linePosition: dco_decode_u_32(arr[1]),
+      lineName: dco_decode_String(arr[2]),
+      term: dco_decode_String(arr[3]),
+    );
   }
 
   @protected
@@ -944,6 +966,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  List<ConflictDto> dco_decode_list_conflict_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>).map(dco_decode_conflict_dto).toList();
+  }
+
+  @protected
   List<CustomIngredientDto> dco_decode_list_custom_ingredient_dto(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return (raw as List<dynamic>)
@@ -1024,6 +1052,15 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  RestrictionAssessmentDto?
+  dco_decode_opt_box_autoadd_restriction_assessment_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw == null
+        ? null
+        : dco_decode_box_autoadd_restriction_assessment_dto(raw);
+  }
+
+  @protected
   int? dco_decode_opt_box_autoadd_u_32(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw == null ? null : dco_decode_box_autoadd_u_32(raw);
@@ -1071,8 +1108,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   RecipeDto dco_decode_recipe_dto(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 8)
-      throw Exception('unexpected arr length: expect 8 but see ${arr.length}');
+    if (arr.length != 9)
+      throw Exception('unexpected arr length: expect 9 but see ${arr.length}');
     return RecipeDto(
       id: dco_decode_String(arr[0]),
       householdId: dco_decode_String(arr[1]),
@@ -1082,6 +1119,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       lines: dco_decode_list_ingredient_line_dto(arr[5]),
       provenance: dco_decode_recipe_provenance_dto(arr[6]),
       archivedAt: dco_decode_opt_String(arr[7]),
+      assessment: dco_decode_opt_box_autoadd_restriction_assessment_dto(arr[8]),
     );
   }
 
@@ -1103,11 +1141,27 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   RecipeSummaryDto dco_decode_recipe_summary_dto(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
-    if (arr.length != 2)
-      throw Exception('unexpected arr length: expect 2 but see ${arr.length}');
+    if (arr.length != 3)
+      throw Exception('unexpected arr length: expect 3 but see ${arr.length}');
     return RecipeSummaryDto(
       id: dco_decode_String(arr[0]),
       title: dco_decode_String(arr[1]),
+      assessment: dco_decode_restriction_assessment_dto(arr[2]),
+    );
+  }
+
+  @protected
+  RestrictionAssessmentDto dco_decode_restriction_assessment_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 5)
+      throw Exception('unexpected arr length: expect 5 but see ${arr.length}');
+    return RestrictionAssessmentDto(
+      ruleVersion: dco_decode_u_32(arr[0]),
+      restrictionsChecked: dco_decode_u_32(arr[1]),
+      linesChecked: dco_decode_u_32(arr[2]),
+      conflicts: dco_decode_list_conflict_dto(arr[3]),
+      wordingOnly: dco_decode_list_String(arr[4]),
     );
   }
 
@@ -1193,9 +1247,32 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  RestrictionAssessmentDto sse_decode_box_autoadd_restriction_assessment_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_restriction_assessment_dto(deserializer));
+  }
+
+  @protected
   int sse_decode_box_autoadd_u_32(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return (sse_decode_u_32(deserializer));
+  }
+
+  @protected
+  ConflictDto sse_decode_conflict_dto(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_restriction = sse_decode_restriction_dto(deserializer);
+    var var_linePosition = sse_decode_u_32(deserializer);
+    var var_lineName = sse_decode_String(deserializer);
+    var var_term = sse_decode_String(deserializer);
+    return ConflictDto(
+      restriction: var_restriction,
+      linePosition: var_linePosition,
+      lineName: var_lineName,
+      term: var_term,
+    );
   }
 
   @protected
@@ -1321,6 +1398,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var ans_ = <String>[];
     for (var idx_ = 0; idx_ < len_; ++idx_) {
       ans_.add(sse_decode_String(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
+  List<ConflictDto> sse_decode_list_conflict_dto(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <ConflictDto>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_conflict_dto(deserializer));
     }
     return ans_;
   }
@@ -1467,6 +1556,20 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  RestrictionAssessmentDto?
+  sse_decode_opt_box_autoadd_restriction_assessment_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    if (sse_decode_bool(deserializer)) {
+      return (sse_decode_box_autoadd_restriction_assessment_dto(deserializer));
+    } else {
+      return null;
+    }
+  }
+
+  @protected
   int? sse_decode_opt_box_autoadd_u_32(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
 
@@ -1533,6 +1636,9 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var var_lines = sse_decode_list_ingredient_line_dto(deserializer);
     var var_provenance = sse_decode_recipe_provenance_dto(deserializer);
     var var_archivedAt = sse_decode_opt_String(deserializer);
+    var var_assessment = sse_decode_opt_box_autoadd_restriction_assessment_dto(
+      deserializer,
+    );
     return RecipeDto(
       id: var_id,
       householdId: var_householdId,
@@ -1542,6 +1648,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       lines: var_lines,
       provenance: var_provenance,
       archivedAt: var_archivedAt,
+      assessment: var_assessment,
     );
   }
 
@@ -1567,7 +1674,31 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var var_id = sse_decode_String(deserializer);
     var var_title = sse_decode_String(deserializer);
-    return RecipeSummaryDto(id: var_id, title: var_title);
+    var var_assessment = sse_decode_restriction_assessment_dto(deserializer);
+    return RecipeSummaryDto(
+      id: var_id,
+      title: var_title,
+      assessment: var_assessment,
+    );
+  }
+
+  @protected
+  RestrictionAssessmentDto sse_decode_restriction_assessment_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_ruleVersion = sse_decode_u_32(deserializer);
+    var var_restrictionsChecked = sse_decode_u_32(deserializer);
+    var var_linesChecked = sse_decode_u_32(deserializer);
+    var var_conflicts = sse_decode_list_conflict_dto(deserializer);
+    var var_wordingOnly = sse_decode_list_String(deserializer);
+    return RestrictionAssessmentDto(
+      ruleVersion: var_ruleVersion,
+      restrictionsChecked: var_restrictionsChecked,
+      linesChecked: var_linesChecked,
+      conflicts: var_conflicts,
+      wordingOnly: var_wordingOnly,
+    );
   }
 
   @protected
@@ -1663,9 +1794,27 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_box_autoadd_restriction_assessment_dto(
+    RestrictionAssessmentDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_restriction_assessment_dto(self, serializer);
+  }
+
+  @protected
   void sse_encode_box_autoadd_u_32(int self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_u_32(self, serializer);
+  }
+
+  @protected
+  void sse_encode_conflict_dto(ConflictDto self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_restriction_dto(self.restriction, serializer);
+    sse_encode_u_32(self.linePosition, serializer);
+    sse_encode_String(self.lineName, serializer);
+    sse_encode_String(self.term, serializer);
   }
 
   @protected
@@ -1762,6 +1911,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_i_32(self.length, serializer);
     for (final item in self) {
       sse_encode_String(item, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_list_conflict_dto(
+    List<ConflictDto> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_conflict_dto(item, serializer);
     }
   }
 
@@ -1897,6 +2058,19 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_opt_box_autoadd_restriction_assessment_dto(
+    RestrictionAssessmentDto? self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    sse_encode_bool(self != null, serializer);
+    if (self != null) {
+      sse_encode_box_autoadd_restriction_assessment_dto(self, serializer);
+    }
+  }
+
+  @protected
   void sse_encode_opt_box_autoadd_u_32(int? self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
 
@@ -1954,6 +2128,10 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_list_ingredient_line_dto(self.lines, serializer);
     sse_encode_recipe_provenance_dto(self.provenance, serializer);
     sse_encode_opt_String(self.archivedAt, serializer);
+    sse_encode_opt_box_autoadd_restriction_assessment_dto(
+      self.assessment,
+      serializer,
+    );
   }
 
   @protected
@@ -1976,6 +2154,20 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_String(self.id, serializer);
     sse_encode_String(self.title, serializer);
+    sse_encode_restriction_assessment_dto(self.assessment, serializer);
+  }
+
+  @protected
+  void sse_encode_restriction_assessment_dto(
+    RestrictionAssessmentDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_u_32(self.ruleVersion, serializer);
+    sse_encode_u_32(self.restrictionsChecked, serializer);
+    sse_encode_u_32(self.linesChecked, serializer);
+    sse_encode_list_conflict_dto(self.conflicts, serializer);
+    sse_encode_list_String(self.wordingOnly, serializer);
   }
 
   @protected

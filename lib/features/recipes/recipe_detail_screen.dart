@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'package:meal_mate/features/household/household_screen.dart';
 import 'package:meal_mate/features/recipes/recipe_fields.dart';
 import 'package:meal_mate/features/recipes/recipes_provider.dart';
+import 'package:meal_mate/features/recipes/restriction_warnings.dart';
 import 'package:meal_mate/src/rust/api/recipe.dart';
 
 class RecipeDetailScreen extends ConsumerStatefulWidget {
@@ -98,6 +99,38 @@ class _RecipeDetailScreenState extends ConsumerState<RecipeDetailScreen> {
     );
   }
 
+  /// Exactly one of: the warnings card (conflicts found), the unchecked line (no
+  /// restrictions set), or the not-a-safety-check line (checked, nothing known found) — plus
+  /// the wording-only note whenever an `Other` restriction was in the set.
+  List<Widget> _assessment(RestrictionAssessmentDto a) => [
+    if (a.conflicts.isNotEmpty)
+      Card(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                warningsHeading,
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              for (final c in a.conflicts)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text(describeConflict(c)),
+                ),
+            ],
+          ),
+        ),
+      )
+    else if (a.restrictionsChecked == 0)
+      const Text(noRestrictionsCopy)
+    else
+      const Text(noKnownConflictCopy),
+    if (a.wordingOnly.isNotEmpty) Text(wordingOnlyCopy(a.wordingOnly)),
+    const SizedBox(height: 16),
+  ];
+
   Widget _body(RecipeDto r) => ListView(
     padding: const EdgeInsets.all(16),
     children: [
@@ -116,6 +149,9 @@ class _RecipeDetailScreenState extends ConsumerState<RecipeDetailScreen> {
         ),
         const SizedBox(height: 16),
       ],
+      // A `null` assessment is impossible on a read-back (`every_read_back_is_some`); it
+      // renders nothing rather than a fabricated state.
+      if (r.assessment case final a?) ..._assessment(a),
       if (r.servings case final n?) Text('Serves $n'),
       const SizedBox(height: 8),
       Text('Ingredients', style: Theme.of(context).textTheme.titleMedium),

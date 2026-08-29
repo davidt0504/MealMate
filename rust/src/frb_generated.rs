@@ -750,6 +750,23 @@ impl SseDecode for bool {
     }
 }
 
+impl SseDecode for crate::api::recipe::ConflictDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_restriction =
+            <crate::api::restrictions::RestrictionDto>::sse_decode(deserializer);
+        let mut var_linePosition = <u32>::sse_decode(deserializer);
+        let mut var_lineName = <String>::sse_decode(deserializer);
+        let mut var_term = <String>::sse_decode(deserializer);
+        return crate::api::recipe::ConflictDto {
+            restriction: var_restriction,
+            line_position: var_linePosition,
+            line_name: var_lineName,
+            term: var_term,
+        };
+    }
+}
+
 impl SseDecode for crate::api::recipe::CustomIngredientDto {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -893,6 +910,18 @@ impl SseDecode for Vec<String> {
         let mut ans_ = Vec::with_capacity(len_ as usize);
         for idx_ in 0..len_ {
             ans_.push(<String>::sse_decode(deserializer));
+        }
+        return ans_;
+    }
+}
+
+impl SseDecode for Vec<crate::api::recipe::ConflictDto> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut len_ = <i32>::sse_decode(deserializer);
+        let mut ans_ = Vec::with_capacity(len_ as usize);
+        for idx_ in 0..len_ {
+            ans_.push(<crate::api::recipe::ConflictDto>::sse_decode(deserializer));
         }
         return ans_;
     }
@@ -1052,6 +1081,19 @@ impl SseDecode for Option<crate::api::recipe::RecipeDto> {
     }
 }
 
+impl SseDecode for Option<crate::api::recipe::RestrictionAssessmentDto> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        if (<bool>::sse_decode(deserializer)) {
+            return Some(<crate::api::recipe::RestrictionAssessmentDto>::sse_decode(
+                deserializer,
+            ));
+        } else {
+            return None;
+        }
+    }
+}
+
 impl SseDecode for Option<u32> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -1128,6 +1170,8 @@ impl SseDecode for crate::api::recipe::RecipeDto {
         let mut var_provenance =
             <crate::api::recipe::RecipeProvenanceDto>::sse_decode(deserializer);
         let mut var_archivedAt = <Option<String>>::sse_decode(deserializer);
+        let mut var_assessment =
+            <Option<crate::api::recipe::RestrictionAssessmentDto>>::sse_decode(deserializer);
         return crate::api::recipe::RecipeDto {
             id: var_id,
             household_id: var_householdId,
@@ -1137,6 +1181,7 @@ impl SseDecode for crate::api::recipe::RecipeDto {
             lines: var_lines,
             provenance: var_provenance,
             archived_at: var_archivedAt,
+            assessment: var_assessment,
         };
     }
 }
@@ -1162,9 +1207,30 @@ impl SseDecode for crate::api::recipe::RecipeSummaryDto {
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
         let mut var_id = <String>::sse_decode(deserializer);
         let mut var_title = <String>::sse_decode(deserializer);
+        let mut var_assessment =
+            <crate::api::recipe::RestrictionAssessmentDto>::sse_decode(deserializer);
         return crate::api::recipe::RecipeSummaryDto {
             id: var_id,
             title: var_title,
+            assessment: var_assessment,
+        };
+    }
+}
+
+impl SseDecode for crate::api::recipe::RestrictionAssessmentDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_ruleVersion = <u32>::sse_decode(deserializer);
+        let mut var_restrictionsChecked = <u32>::sse_decode(deserializer);
+        let mut var_linesChecked = <u32>::sse_decode(deserializer);
+        let mut var_conflicts = <Vec<crate::api::recipe::ConflictDto>>::sse_decode(deserializer);
+        let mut var_wordingOnly = <Vec<String>>::sse_decode(deserializer);
+        return crate::api::recipe::RestrictionAssessmentDto {
+            rule_version: var_ruleVersion,
+            restrictions_checked: var_restrictionsChecked,
+            lines_checked: var_linesChecked,
+            conflicts: var_conflicts,
+            wording_only: var_wordingOnly,
         };
     }
 }
@@ -1313,6 +1379,29 @@ fn pde_ffi_dispatcher_sync_impl(
 
 // Section: rust2dart
 
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::recipe::ConflictDto {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.restriction.into_into_dart().into_dart(),
+            self.line_position.into_into_dart().into_dart(),
+            self.line_name.into_into_dart().into_dart(),
+            self.term.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::recipe::ConflictDto
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::recipe::ConflictDto>
+    for crate::api::recipe::ConflictDto
+{
+    fn into_into_dart(self) -> crate::api::recipe::ConflictDto {
+        self
+    }
+}
 // Codec=Dco (DartCObject based), see doc to use other codecs
 impl flutter_rust_bridge::IntoDart for crate::api::recipe::CustomIngredientDto {
     fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
@@ -1588,6 +1677,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::recipe::RecipeDto {
             self.lines.into_into_dart().into_dart(),
             self.provenance.into_into_dart().into_dart(),
             self.archived_at.into_into_dart().into_dart(),
+            self.assessment.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -1629,6 +1719,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::recipe::RecipeSummaryDto {
         [
             self.id.into_into_dart().into_dart(),
             self.title.into_into_dart().into_dart(),
+            self.assessment.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -1641,6 +1732,30 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::recipe::RecipeSummaryDto>
     for crate::api::recipe::RecipeSummaryDto
 {
     fn into_into_dart(self) -> crate::api::recipe::RecipeSummaryDto {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::recipe::RestrictionAssessmentDto {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.rule_version.into_into_dart().into_dart(),
+            self.restrictions_checked.into_into_dart().into_dart(),
+            self.lines_checked.into_into_dart().into_dart(),
+            self.conflicts.into_into_dart().into_dart(),
+            self.wording_only.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::recipe::RestrictionAssessmentDto
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::recipe::RestrictionAssessmentDto>
+    for crate::api::recipe::RestrictionAssessmentDto
+{
+    fn into_into_dart(self) -> crate::api::recipe::RestrictionAssessmentDto {
         self
     }
 }
@@ -1708,6 +1823,16 @@ impl SseEncode for bool {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
         serializer.cursor.write_u8(self as _).unwrap();
+    }
+}
+
+impl SseEncode for crate::api::recipe::ConflictDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <crate::api::restrictions::RestrictionDto>::sse_encode(self.restriction, serializer);
+        <u32>::sse_encode(self.line_position, serializer);
+        <String>::sse_encode(self.line_name, serializer);
+        <String>::sse_encode(self.term, serializer);
     }
 }
 
@@ -1817,6 +1942,16 @@ impl SseEncode for Vec<String> {
         <i32>::sse_encode(self.len() as _, serializer);
         for item in self {
             <String>::sse_encode(item, serializer);
+        }
+    }
+}
+
+impl SseEncode for Vec<crate::api::recipe::ConflictDto> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(self.len() as _, serializer);
+        for item in self {
+            <crate::api::recipe::ConflictDto>::sse_encode(item, serializer);
         }
     }
 }
@@ -1946,6 +2081,16 @@ impl SseEncode for Option<crate::api::recipe::RecipeDto> {
     }
 }
 
+impl SseEncode for Option<crate::api::recipe::RestrictionAssessmentDto> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <bool>::sse_encode(self.is_some(), serializer);
+        if let Some(value) = self {
+            <crate::api::recipe::RestrictionAssessmentDto>::sse_encode(value, serializer);
+        }
+    }
+}
+
 impl SseEncode for Option<u32> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -2009,6 +2154,10 @@ impl SseEncode for crate::api::recipe::RecipeDto {
         <Vec<crate::api::recipe::IngredientLineDto>>::sse_encode(self.lines, serializer);
         <crate::api::recipe::RecipeProvenanceDto>::sse_encode(self.provenance, serializer);
         <Option<String>>::sse_encode(self.archived_at, serializer);
+        <Option<crate::api::recipe::RestrictionAssessmentDto>>::sse_encode(
+            self.assessment,
+            serializer,
+        );
     }
 }
 
@@ -2027,6 +2176,18 @@ impl SseEncode for crate::api::recipe::RecipeSummaryDto {
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
         <String>::sse_encode(self.id, serializer);
         <String>::sse_encode(self.title, serializer);
+        <crate::api::recipe::RestrictionAssessmentDto>::sse_encode(self.assessment, serializer);
+    }
+}
+
+impl SseEncode for crate::api::recipe::RestrictionAssessmentDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <u32>::sse_encode(self.rule_version, serializer);
+        <u32>::sse_encode(self.restrictions_checked, serializer);
+        <u32>::sse_encode(self.lines_checked, serializer);
+        <Vec<crate::api::recipe::ConflictDto>>::sse_encode(self.conflicts, serializer);
+        <Vec<String>>::sse_encode(self.wording_only, serializer);
     }
 }
 

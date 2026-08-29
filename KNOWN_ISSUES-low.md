@@ -571,3 +571,26 @@ Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-orch-14-2026-
 - **`ArchivedRecipesScreen._restore` returns silently on a null household id** (`lib/features/recipes/recipe_list_screen.dart:70`) -- a bare early return with the `Restore` button still enabled, so the tap reads as a broken button; `RecipeFormScreen` disables Save on the same condition (`recipe_form_screen.dart:360`) and `RecipeDetailScreen` takes the id off the DTO. Near-unreachable, since `archivedRecipesProvider.build` awaits the household first. Fix: gate `onPressed` on the id, or take it from the DTO as the detail screen does.
   Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-orch-14-2026-08-29T0911-2a9d.md
   **Status:** OPEN -- deferred at the orch/14 pass-1 fix round, deliberately. Two of the review's three suggested directions are unavailable or unpinnable: taking the id off the DTO is impossible because `RecipeSummaryDto` carries only `id` and `title` (`lib/src/rust/api/recipe.dart:260`-`264`), unlike the full `RecipeDto` the detail screen holds; and both gating `onPressed` and adding the `describeFailure` snackbar are behaviour-preserving in every state the app can reach, because `ArchivedRecipesNotifier.build` awaits `householdProvider.selectAsync(...)` before the list renders. Pinning either would need a fake that omits that await and so contradicts production. Gating `onPressed` is the only shape available without widening the bridge DTO; revisit when a caller can reach the archived list without a resolved household.
+
+## orch/16 -- 2026-08-29
+
+Source: /home/davidlinux/.claude/reviews/impl-handoff-orch-16-2026-08-29T1022-c507.md
+Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-orch-16-2026-08-29T1040-68c3.md
+
+### LOW
+
+- **Exception windows are located in the unmasked `hay`, so overlapping exceptions would over-mask** (`rust/crates/food-domain/src/restriction.rs:371`) -- unreachable on the current table (all nine exceptions are two tokens; neither `milk` nor `butter` is any phrase's first token), but adding `"butter milk"` or `"milk chocolate"` would silently clear the shared token and suppress a warning -- the false-negative direction invariant 10 forbids. The safety property is an accident of the data, not a guard. Fix: a synthetic overlapping-pair test, or locate windows against `masked`.
+  Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-orch-16-2026-08-29T1040-68c3.md
+  **Status:** OPEN
+
+---
+
+- **`first_term` re-tokenises every static term on every call** (`rust/crates/food-domain/src/restriction.rs:387`) -- `contains_phrase(&masked, &tokens(term))` allocates a `Vec<String>` plus a `String` per token, per term, per line, per restriction: ~225 tokenisations per ingredient line with all 11 kinds set, against the 18 `hay` clones the handoff names as its performance risk (Known Risk 9 points at the cheaper one). No correctness impact; comfortable at MVP library sizes. Fix: all but six terms are single tokens -- compare against the token slice directly and keep the phrase path for the rest.
+  Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-orch-16-2026-08-29T1040-68c3.md
+  **Status:** OPEN
+
+---
+
+- **`restrictionCopySamples` is a test fixture living in `lib/`, and the copy module imports a screen** (`lib/features/recipes/restriction_warnings.dart:37`) -- read only by `test/restriction_warnings_test.dart:16` yet shipped in the release binary; it is also the only production reference to the DTO's `linePosition` and `ruleVersion`. The same file imports `features/restrictions/restrictions_screen.dart` for `describeRestriction` alone, making a pure copy module depend on a screen. Fix: build the sample list in the test from the exported constants; lift `describeRestriction` into a non-screen module.
+  Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-orch-16-2026-08-29T1040-68c3.md
+  **Status:** OPEN

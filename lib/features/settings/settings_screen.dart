@@ -7,7 +7,7 @@ import 'package:meal_mate/features/household/household_screen.dart';
 import 'package:meal_mate/features/planning/planning_cycle.dart';
 import 'package:meal_mate/features/planning/planning_provider.dart';
 import 'package:meal_mate/features/restrictions/restrictions_provider.dart';
-import 'package:meal_mate/features/restrictions/restrictions_screen.dart';
+import 'package:meal_mate/features/restrictions/restriction_copy.dart';
 import 'package:meal_mate/features/settings/health_provider.dart';
 
 class SettingsScreen extends ConsumerWidget {

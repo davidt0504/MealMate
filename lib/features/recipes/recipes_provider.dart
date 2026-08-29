@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:meal_mate/features/household/household_provider.dart';
 import 'package:meal_mate/features/planning/planning_cycle.dart';
+import 'package:meal_mate/features/restrictions/restrictions_provider.dart';
 import 'package:meal_mate/src/rust/api/recipe.dart';
 
 /// The household's active recipe library. Every write goes through here, so the list a
@@ -11,10 +12,17 @@ import 'package:meal_mate/src/rust/api/recipe.dart';
 class RecipeLibraryNotifier extends AsyncNotifier<List<RecipeSummaryDto>> {
   @override
   Future<List<RecipeSummaryDto>> build() async {
+    // The assessment inside every summary is computed from the stored restriction set, so a
+    // restriction save must re-list (AC-3); `recipeDetailProvider` watches this library.
+    // Registered before the household await, not after: a `ref` call on the far side of an
+    // async gap can land on an element the household emission has already outdated, which
+    // asserts in debug and can register the dependency against the stale element in release.
+    final restrictions = ref.watch(restrictionsProvider.future);
     // Only the id, for the reason `RestrictionsNotifier` records.
     final householdId = await ref.watch(
       householdProvider.selectAsync((h) => h.id),
     );
+    await restrictions;
     return fetchRecipes(householdId);
   }
 
@@ -83,11 +91,22 @@ final recipeLibraryProvider =
 class ArchivedRecipesNotifier extends AsyncNotifier<List<RecipeSummaryDto>> {
   @override
   Future<List<RecipeSummaryDto>> build() async {
+    // Same reason as the library, on both counts: the archived list's warnings must not go
+    // stale, and the watch is registered before the gap rather than after it.
+    final restrictions = ref.watch(restrictionsProvider.future);
     final householdId = await ref.watch(
       householdProvider.selectAsync((h) => h.id),
     );
-    return listArchivedRecipes(householdId: householdId);
+    await restrictions;
+    return fetchArchived(householdId);
   }
+
+  /// The bridge call behind an overridable seam, as `RecipeLibraryNotifier.fetchRecipes` is,
+  /// so a test can run the real `build` — including the restriction watch above, which is
+  /// otherwise free to be deleted without failing anything.
+  @protected
+  Future<List<RecipeSummaryDto>> fetchArchived(String householdId) =>
+      listArchivedRecipes(householdId: householdId);
 }
 
 final archivedRecipesProvider =
@@ -101,10 +120,11 @@ final recipeDetailProvider = FutureProvider.family<RecipeDto?, String>((
   ref,
   recipeId,
 ) async {
+  // Before the gap, as in the notifiers above.
+  ref.watch(recipeLibraryProvider);
   final householdId = await ref.watch(
     householdProvider.selectAsync((h) => h.id),
   );
-  ref.watch(recipeLibraryProvider);
   return loadRecipe(householdId: householdId, recipeId: recipeId);
 });
 

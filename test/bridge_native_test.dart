@@ -10,7 +10,7 @@ import 'package:meal_mate/src/rust/api/recipe.dart';
 import 'package:meal_mate/src/rust/api/restrictions.dart';
 import 'package:meal_mate/src/rust/frb_generated.dart';
 import 'package:meal_mate/features/recipes/recipe_fields.dart';
-import 'package:meal_mate/features/restrictions/restrictions_screen.dart';
+import 'package:meal_mate/features/restrictions/restriction_copy.dart';
 
 void main() {
   setUpAll(() async => RustLib.init());
@@ -412,6 +412,47 @@ void main() {
     expect((await listArchivedRecipes(householdId: h.id)).single.id, saved.id);
     final again = await loadRecipe(householdId: h.id, recipeId: saved.id);
     expect(again?.archivedAt, '2026-08-29');
+  });
+
+  // MVP-009 AC-3, across the bridge: the assessment follows the stored restriction set.
+  test('a saved recipe reports its restriction assessment and it follows the restriction set', () async {
+    await openDatabase(dbPath: await tempDb());
+    final h = await bootstrapHousehold();
+    await saveRestrictions(
+      householdId: h.id,
+      restrictions: const [RestrictionDto.known(kind: 'dairy')],
+    );
+    final saved = await saveRecipe(
+      recipe: recipeFor(h.id, const [
+        IngredientLineDto(
+          originalText: '1 tbsp butter',
+          name: 'butter',
+          quantity: QuantityDto.unknown(),
+          unit: UnitDto.none(),
+          optional: false,
+        ),
+      ]),
+    );
+    final a = saved.assessment!;
+    expect(a.restrictionsChecked, 1);
+    expect(a.linesChecked, 1);
+    expect(a.conflicts.single.term, 'butter');
+    expect(a.conflicts.single.lineName, 'butter');
+    expect(a.conflicts.single.linePosition, 0);
+    expect(
+      a.conflicts.single.restriction,
+      const RestrictionDto.known(kind: 'dairy'),
+    );
+    final listed = await listRecipes(householdId: h.id);
+    expect(listed.single.assessment.conflicts.single.term, 'butter');
+    await saveRestrictions(householdId: h.id, restrictions: const []);
+    final again = await loadRecipe(householdId: h.id, recipeId: saved.id);
+    expect(again!.assessment!.conflicts, isEmpty);
+    expect(again.assessment!.restrictionsChecked, 0);
+    expect(
+      (await listRecipes(householdId: h.id)).single.assessment.conflicts,
+      isEmpty,
+    );
   });
 
   test('a non-civil archive date is a typed Planning error', () async {

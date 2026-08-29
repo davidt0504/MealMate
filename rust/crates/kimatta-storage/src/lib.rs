@@ -1,15 +1,17 @@
 //! Rust-owned SQLite (PRD v3 §12): foreign keys on, explicit migrations, transactions.
 #![forbid(unsafe_code)]
 
+use std::collections::HashMap;
 use std::path::Path;
 
 pub use food_domain::{
-    format_civil_date, parse_civil_date, CivilDate, CustomIngredient, CustomIngredientId,
-    HouseholdRestrictions, Ingredient, IngredientId, IngredientLine, IngredientRef, MealScope,
-    MealSlot, MemberPreference, MemberPreferences, PlanningCycle, PlanningError, PreferenceError,
-    ProvenanceKind, Quantity, QuantityRange, Rational, Recipe, RecipeError, RecipeId,
-    RecipeProvenance, Restriction, RestrictionError, RestrictionKind, Sentiment, Unit, UnitKind,
-    DEFAULT_CYCLE_DAYS, MAX_CYCLE_DAYS, MIN_CYCLE_DAYS,
+    assess, format_civil_date, parse_civil_date, CivilDate, Conflict, CustomIngredient,
+    CustomIngredientId, HouseholdRestrictions, Ingredient, IngredientId, IngredientLine,
+    IngredientRef, MealScope, MealSlot, MemberPreference, MemberPreferences, PlanningCycle,
+    PlanningError, PreferenceError, ProvenanceKind, Quantity, QuantityRange, Rational, Recipe,
+    RecipeError, RecipeId, RecipeProvenance, Restriction, RestrictionAssessment, RestrictionError,
+    RestrictionKind, Sentiment, Unit, UnitKind, DEFAULT_CYCLE_DAYS, MAX_CYCLE_DAYS, MIN_CYCLE_DAYS,
+    RULE_VERSION,
 };
 pub use household_core::{Household, HouseholdId, HouseholdMember, IdError, MemberId};
 pub use rusqlite::Connection;
@@ -851,11 +853,13 @@ pub fn list_custom_ingredients(
     items
 }
 
-/// `(id, title)` of a recipe, for listing without loading its lines.
+/// `(id, title)` of a recipe plus its line names, for listing without loading whole recipes.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RecipeSummary {
     pub id: RecipeId,
     pub title: String,
+    /// Line names in position order, for restriction assessment without loading whole recipes.
+    pub line_names: Vec<String>,
 }
 
 /// A recipe as stored, with its archive marker. `archived_at` is library/UX lifecycle state,
@@ -1222,7 +1226,7 @@ pub fn list_recipes(
         }
     };
     let mut stmt = conn.prepare(sql)?;
-    let summaries = stmt
+    let mut summaries = stmt
         .query_map(params![household.as_str()], |r| {
             Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?))
         })?
@@ -1231,10 +1235,32 @@ pub fn list_recipes(
             Ok(RecipeSummary {
                 id: RecipeId::new(id)?,
                 title,
+                line_names: Vec::new(),
             })
         })
-        .collect();
-    summaries
+        .collect::<Result<Vec<_>, StorageError>>()?;
+    // One query for every listed recipe's line names, not one per recipe: MVP-009 assesses
+    // every summary on each listing.
+    let mut lines = conn.prepare(
+        "SELECT l.recipe_id, l.name FROM recipe_ingredient_line l
+         JOIN recipe r ON r.id = l.recipe_id
+         WHERE r.household_id = ?1 AND (r.archived_at IS NULL) = ?2
+         ORDER BY l.recipe_id, l.position",
+    )?;
+    let mut by_recipe: HashMap<String, Vec<String>> = HashMap::new();
+    for row in lines.query_map(
+        params![household.as_str(), listing == RecipeListing::Active],
+        |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)),
+    )? {
+        let (recipe_id, name) = row?;
+        by_recipe.entry(recipe_id).or_default().push(name);
+    }
+    for summary in &mut summaries {
+        if let Some(names) = by_recipe.remove(summary.id.as_str()) {
+            summary.line_names = names;
+        }
+    }
+    Ok(summaries)
 }
 
 /// Sets `archived_at` to `at` on an active recipe. Idempotent: an already-archived recipe
@@ -2084,6 +2110,10 @@ mod tests {
         IngredientLine::new(original, name, None, quantity, unit, None, false).unwrap()
     }
 
+    fn text_line(name: &str) -> IngredientLine {
+        line(name, name, Quantity::Unknown, Unit::None)
+    }
+
     fn full_line(
         original: &str,
         name: &str,
@@ -2284,16 +2314,83 @@ mod tests {
                 RecipeSummary {
                     id: RecipeId::new("r2").unwrap(),
                     title: "Apple pie".to_owned(),
+                    line_names: vec![],
                 },
                 RecipeSummary {
                     id: RecipeId::new("r3").unwrap(),
                     title: "Apple pie".to_owned(),
+                    line_names: vec![],
                 },
                 RecipeSummary {
                     id: RecipeId::new("r1").unwrap(),
                     title: "Zucchini bake".to_owned(),
+                    line_names: vec![],
                 },
             ]
+        );
+    }
+
+    // --- MVP-009: line names on summaries -------------------------------------------------
+
+    fn line_names(conn: &Connection, household: &str, listing: RecipeListing) -> Vec<Vec<String>> {
+        list_recipes(conn, &HouseholdId::new(household).unwrap(), listing)
+            .unwrap()
+            .into_iter()
+            .map(|s| s.line_names)
+            .collect()
+    }
+
+    #[test]
+    fn list_recipes_carries_line_names_in_position_order() {
+        let mut conn = open(":memory:").unwrap();
+        seed_for_recipes(&mut conn, "h");
+        save_recipe(&mut conn, &recipe("h", "r", three_lines())).unwrap();
+        assert_eq!(
+            line_names(&conn, "h", RecipeListing::Active),
+            vec![vec!["flour", "nana's mix", "something"]]
+        );
+    }
+
+    /// Two households and an archived recipe: names never cross a household or the archive
+    /// marker, and a listing's names line up with its own summaries.
+    #[test]
+    fn line_names_are_household_and_listing_scoped() {
+        let mut conn = open(":memory:").unwrap();
+        seed_for_recipes(&mut conn, "h1");
+        seed(&mut conn, "h2");
+        save_recipe(&mut conn, &recipe("h1", "a", vec![text_line("butter")])).unwrap();
+        save_recipe(&mut conn, &recipe("h1", "b", vec![text_line("peanuts")])).unwrap();
+        save_recipe(&mut conn, &recipe("h2", "c", vec![text_line("shrimp")])).unwrap();
+        archive_recipe(
+            &mut conn,
+            &HouseholdId::new("h1").unwrap(),
+            &RecipeId::new("b").unwrap(),
+            parse_civil_date("2026-08-29").unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            line_names(&conn, "h1", RecipeListing::Active),
+            vec![vec!["butter"]]
+        );
+        assert_eq!(
+            line_names(&conn, "h1", RecipeListing::Archived),
+            vec![vec!["peanuts"]]
+        );
+        assert_eq!(
+            line_names(&conn, "h2", RecipeListing::Active),
+            vec![vec!["shrimp"]]
+        );
+        assert!(line_names(&conn, "h2", RecipeListing::Archived).is_empty());
+    }
+
+    #[test]
+    fn a_stub_recipe_has_no_line_names() {
+        let mut conn = open(":memory:").unwrap();
+        seed(&mut conn, "h");
+        save_recipe(&mut conn, &recipe("h", "r", vec![])).unwrap();
+        assert_eq!(
+            line_names(&conn, "h", RecipeListing::Active),
+            vec![Vec::<String>::new()]
         );
     }
 
