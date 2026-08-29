@@ -1,14 +1,18 @@
 //! Food domain types (PRD v3 §8). Depends on the household kernel, never the reverse.
 #![forbid(unsafe_code)]
 
+pub mod preference;
 pub mod recipe;
+pub mod restriction;
 
 use household_core::HouseholdId;
 use jiff::Span;
 use thiserror::Error;
 
 pub use jiff::civil::Date as CivilDate; // re-exported so dependents need no jiff dependency
+pub use preference::*;
 pub use recipe::*;
+pub use restriction::*;
 
 pub const DEFAULT_CYCLE_DAYS: u32 = 7;
 pub const MIN_CYCLE_DAYS: u32 = 1;

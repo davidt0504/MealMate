@@ -8,7 +8,7 @@ import 'error.dart';
 
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `rename_in`, `to_dto`
+// These functions are ignored because they are not marked as `pub`: `complete_in`, `rename_in`, `to_dto`
 
 /// Returns the local household, creating an anonymous one-person household on the first
 /// call (invariants 1 and 8). Later calls and later launches return the same ids.
@@ -24,15 +24,32 @@ Future<HouseholdDto> renameHousehold({
   name: name,
 );
 
+/// Marks the local household onboarded, and returns it. Idempotent, so the button cannot fail
+/// merely because it was already pressed.
+Future<HouseholdDto> completeOnboarding({required String householdId}) =>
+    RustLib.instance.api.crateApiHouseholdCompleteOnboarding(
+      householdId: householdId,
+    );
+
 class HouseholdDto {
   final String id;
   final String? name;
   final List<MemberDto> members;
 
-  const HouseholdDto({required this.id, this.name, required this.members});
+  /// Whether first run has been completed. Flutter's first-run gate reads this and nothing
+  /// else, so "have we welcomed this user" is a Rust-owned durable fact (invariant 17).
+  final bool onboarded;
+
+  const HouseholdDto({
+    required this.id,
+    this.name,
+    required this.members,
+    required this.onboarded,
+  });
 
   @override
-  int get hashCode => id.hashCode ^ name.hashCode ^ members.hashCode;
+  int get hashCode =>
+      id.hashCode ^ name.hashCode ^ members.hashCode ^ onboarded.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -41,7 +58,8 @@ class HouseholdDto {
           runtimeType == other.runtimeType &&
           id == other.id &&
           name == other.name &&
-          members == other.members;
+          members == other.members &&
+          onboarded == other.onboarded;
 }
 
 class MemberDto {

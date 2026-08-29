@@ -4,16 +4,23 @@ import 'package:go_router/go_router.dart';
 import 'package:meal_mate/app/placeholder_screen.dart';
 import 'package:meal_mate/app/shell.dart';
 import 'package:meal_mate/features/household/household_screen.dart';
+import 'package:meal_mate/features/onboarding/welcome_screen.dart';
+import 'package:meal_mate/features/planning/cycle_editor_screen.dart';
+import 'package:meal_mate/features/restrictions/restrictions_screen.dart';
 import 'package:meal_mate/features/settings/settings_screen.dart';
 
 /// Plan is home: the product's default state is "this week is covered" (PRD v3 §15).
 const homeLocation = '/plan';
+
+/// First run. Outside the shell, so no navigation bar is shown while it is up.
+const welcomeLocation = '/welcome';
 
 GoRouter buildRouter({String initialLocation = homeLocation}) => GoRouter(
   initialLocation: initialLocation,
   restorationScopeId: 'router',
   errorBuilder: (context, state) => _NotFoundScreen(uri: state.uri),
   routes: [
+    GoRoute(path: welcomeLocation, builder: (_, _) => const WelcomeScreen()),
     StatefulShellRoute.indexedStack(
       restorationScopeId: 'shell',
       builder: (context, state, shell) => AppShell(navigationShell: shell),
@@ -92,6 +99,14 @@ GoRouter buildRouter({String initialLocation = homeLocation}) => GoRouter(
                 GoRoute(
                   path: 'household',
                   builder: (_, _) => const HouseholdScreen(),
+                ),
+                GoRoute(
+                  path: 'cycle',
+                  builder: (_, _) => const CycleEditorScreen(),
+                ),
+                GoRoute(
+                  path: 'restrictions',
+                  builder: (_, _) => const RestrictionsScreen(),
                 ),
               ],
             ),

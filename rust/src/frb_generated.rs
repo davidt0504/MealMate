@@ -39,7 +39,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.13.0";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = 563915109;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = 1348893926;
 
 // Section: executor
 
@@ -106,6 +106,39 @@ fn wire__crate__api__household__bootstrap_household_impl(
             move |context| {
                 transform_result_sse::<_, crate::api::error::KimattaError>((move || {
                     let output_ok = crate::api::household::bootstrap_household()?;
+                    std::result::Result::Ok(output_ok)
+                })())
+            }
+        },
+    )
+}
+fn wire__crate__api__household__complete_onboarding_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "complete_onboarding",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_household_id = <String>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, crate::api::error::KimattaError>((move || {
+                    let output_ok = crate::api::household::complete_onboarding(api_household_id)?;
                     std::result::Result::Ok(output_ok)
                 })())
             }
@@ -212,6 +245,39 @@ fn wire__crate__api__health__init_app_impl(
         },
     )
 }
+fn wire__crate__api__restrictions__known_restriction_kinds_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "known_restriction_kinds",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, ()>((move || {
+                    let output_ok =
+                        Ok::<_, ()>(crate::api::restrictions::known_restriction_kinds())?;
+                    std::result::Result::Ok(output_ok)
+                })())
+            }
+        },
+    )
+}
 fn wire__crate__api__recipe__list_custom_ingredients_impl(
     port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
@@ -307,6 +373,39 @@ fn wire__crate__api__recipe__load_recipe_impl(
                 transform_result_sse::<_, crate::api::error::KimattaError>((move || {
                     let output_ok =
                         crate::api::recipe::load_recipe(api_household_id, api_recipe_id)?;
+                    std::result::Result::Ok(output_ok)
+                })())
+            }
+        },
+    )
+}
+fn wire__crate__api__restrictions__load_restrictions_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "load_restrictions",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_household_id = <String>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, crate::api::error::KimattaError>((move || {
+                    let output_ok = crate::api::restrictions::load_restrictions(api_household_id)?;
                     std::result::Result::Ok(output_ok)
                 })())
             }
@@ -456,6 +555,44 @@ fn wire__crate__api__recipe__save_recipe_impl(
         },
     )
 }
+fn wire__crate__api__restrictions__save_restrictions_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "save_restrictions",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_household_id = <String>::sse_decode(&mut deserializer);
+            let api_restrictions =
+                <Vec<crate::api::restrictions::RestrictionDto>>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, crate::api::error::KimattaError>((move || {
+                    let output_ok = crate::api::restrictions::save_restrictions(
+                        api_household_id,
+                        api_restrictions,
+                    )?;
+                    std::result::Result::Ok(output_ok)
+                })())
+            }
+        },
+    )
+}
 
 // Section: dart2rust
 
@@ -508,10 +645,12 @@ impl SseDecode for crate::api::household::HouseholdDto {
         let mut var_id = <String>::sse_decode(deserializer);
         let mut var_name = <Option<String>>::sse_decode(deserializer);
         let mut var_members = <Vec<crate::api::household::MemberDto>>::sse_decode(deserializer);
+        let mut var_onboarded = <bool>::sse_decode(deserializer);
         return crate::api::household::HouseholdDto {
             id: var_id,
             name: var_name,
             members: var_members,
+            onboarded: var_onboarded,
         };
     }
 }
@@ -592,6 +731,12 @@ impl SseDecode for crate::api::error::KimattaError {
             4 => {
                 let mut var_message = <String>::sse_decode(deserializer);
                 return crate::api::error::KimattaError::Recipe {
+                    message: var_message,
+                };
+            }
+            5 => {
+                let mut var_message = <String>::sse_decode(deserializer);
+                return crate::api::error::KimattaError::Restriction {
                     message: var_message,
                 };
             }
@@ -687,6 +832,20 @@ impl SseDecode for Vec<crate::api::recipe::RecipeSummaryDto> {
         let mut ans_ = Vec::with_capacity(len_ as usize);
         for idx_ in 0..len_ {
             ans_.push(<crate::api::recipe::RecipeSummaryDto>::sse_decode(
+                deserializer,
+            ));
+        }
+        return ans_;
+    }
+}
+
+impl SseDecode for Vec<crate::api::restrictions::RestrictionDto> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut len_ = <i32>::sse_decode(deserializer);
+        let mut ans_ = Vec::with_capacity(len_ as usize);
+        for idx_ in 0..len_ {
+            ans_.push(<crate::api::restrictions::RestrictionDto>::sse_decode(
                 deserializer,
             ));
         }
@@ -869,6 +1028,26 @@ impl SseDecode for crate::api::recipe::RecipeSummaryDto {
     }
 }
 
+impl SseDecode for crate::api::restrictions::RestrictionDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut tag_ = <i32>::sse_decode(deserializer);
+        match tag_ {
+            0 => {
+                let mut var_kind = <String>::sse_decode(deserializer);
+                return crate::api::restrictions::RestrictionDto::Known { kind: var_kind };
+            }
+            1 => {
+                let mut var_text = <String>::sse_decode(deserializer);
+                return crate::api::restrictions::RestrictionDto::Other { text: var_text };
+            }
+            _ => {
+                unimplemented!("");
+            }
+        }
+    }
+}
+
 impl SseDecode for u32 {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -926,27 +1105,48 @@ fn pde_ffi_dispatcher_primary_impl(
         2 => {
             wire__crate__api__household__bootstrap_household_impl(port, ptr, rust_vec_len, data_len)
         }
-        4 => wire__crate__api__planning__ensure_planning_cycle_impl(
+        3 => {
+            wire__crate__api__household__complete_onboarding_impl(port, ptr, rust_vec_len, data_len)
+        }
+        5 => wire__crate__api__planning__ensure_planning_cycle_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        5 => wire__crate__api__health__init_app_impl(port, ptr, rust_vec_len, data_len),
-        6 => wire__crate__api__recipe__list_custom_ingredients_impl(
+        6 => wire__crate__api__health__init_app_impl(port, ptr, rust_vec_len, data_len),
+        7 => wire__crate__api__restrictions__known_restriction_kinds_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        7 => wire__crate__api__recipe__list_recipes_impl(port, ptr, rust_vec_len, data_len),
-        8 => wire__crate__api__recipe__load_recipe_impl(port, ptr, rust_vec_len, data_len),
-        9 => wire__crate__api__health__open_database_impl(port, ptr, rust_vec_len, data_len),
-        10 => wire__crate__api__household__rename_household_impl(port, ptr, rust_vec_len, data_len),
-        11 => {
+        8 => wire__crate__api__recipe__list_custom_ingredients_impl(
+            port,
+            ptr,
+            rust_vec_len,
+            data_len,
+        ),
+        9 => wire__crate__api__recipe__list_recipes_impl(port, ptr, rust_vec_len, data_len),
+        10 => wire__crate__api__recipe__load_recipe_impl(port, ptr, rust_vec_len, data_len),
+        11 => wire__crate__api__restrictions__load_restrictions_impl(
+            port,
+            ptr,
+            rust_vec_len,
+            data_len,
+        ),
+        12 => wire__crate__api__health__open_database_impl(port, ptr, rust_vec_len, data_len),
+        13 => wire__crate__api__household__rename_household_impl(port, ptr, rust_vec_len, data_len),
+        14 => {
             wire__crate__api__planning__save_planning_cycle_impl(port, ptr, rust_vec_len, data_len)
         }
-        12 => wire__crate__api__recipe__save_recipe_impl(port, ptr, rust_vec_len, data_len),
+        15 => wire__crate__api__recipe__save_recipe_impl(port, ptr, rust_vec_len, data_len),
+        16 => wire__crate__api__restrictions__save_restrictions_impl(
+            port,
+            ptr,
+            rust_vec_len,
+            data_len,
+        ),
         _ => unreachable!(),
     }
 }
@@ -959,7 +1159,7 @@ fn pde_ffi_dispatcher_sync_impl(
 ) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
     // Codec=Pde (Serialization + dispatch), see doc to use other codecs
     match func_id {
-        3 => wire__crate__api__health__core_version_impl(ptr, rust_vec_len, data_len),
+        4 => wire__crate__api__health__core_version_impl(ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
@@ -1017,6 +1217,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::household::HouseholdDto {
             self.id.into_into_dart().into_dart(),
             self.name.into_into_dart().into_dart(),
             self.members.into_into_dart().into_dart(),
+            self.onboarded.into_into_dart().into_dart(),
         ]
         .into_dart()
     }
@@ -1099,6 +1300,9 @@ impl flutter_rust_bridge::IntoDart for crate::api::error::KimattaError {
             }
             crate::api::error::KimattaError::Recipe { message } => {
                 [4.into_dart(), message.into_into_dart().into_dart()].into_dart()
+            }
+            crate::api::error::KimattaError::Restriction { message } => {
+                [5.into_dart(), message.into_into_dart().into_dart()].into_dart()
             }
             _ => {
                 unimplemented!("");
@@ -1293,6 +1497,33 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::recipe::RecipeSummaryDto>
     }
 }
 // Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::restrictions::RestrictionDto {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        match self {
+            crate::api::restrictions::RestrictionDto::Known { kind } => {
+                [0.into_dart(), kind.into_into_dart().into_dart()].into_dart()
+            }
+            crate::api::restrictions::RestrictionDto::Other { text } => {
+                [1.into_dart(), text.into_into_dart().into_dart()].into_dart()
+            }
+            _ => {
+                unimplemented!("");
+            }
+        }
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::restrictions::RestrictionDto
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::restrictions::RestrictionDto>
+    for crate::api::restrictions::RestrictionDto
+{
+    fn into_into_dart(self) -> crate::api::restrictions::RestrictionDto {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
 impl flutter_rust_bridge::IntoDart for crate::api::recipe::UnitDto {
     fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
         match self {
@@ -1356,6 +1587,7 @@ impl SseEncode for crate::api::household::HouseholdDto {
         <String>::sse_encode(self.id, serializer);
         <Option<String>>::sse_encode(self.name, serializer);
         <Vec<crate::api::household::MemberDto>>::sse_encode(self.members, serializer);
+        <bool>::sse_encode(self.onboarded, serializer);
     }
 }
 
@@ -1418,6 +1650,10 @@ impl SseEncode for crate::api::error::KimattaError {
             }
             crate::api::error::KimattaError::Recipe { message } => {
                 <i32>::sse_encode(4, serializer);
+                <String>::sse_encode(message, serializer);
+            }
+            crate::api::error::KimattaError::Restriction { message } => {
+                <i32>::sse_encode(5, serializer);
                 <String>::sse_encode(message, serializer);
             }
             _ => {
@@ -1493,6 +1729,16 @@ impl SseEncode for Vec<crate::api::recipe::RecipeSummaryDto> {
         <i32>::sse_encode(self.len() as _, serializer);
         for item in self {
             <crate::api::recipe::RecipeSummaryDto>::sse_encode(item, serializer);
+        }
+    }
+}
+
+impl SseEncode for Vec<crate::api::restrictions::RestrictionDto> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(self.len() as _, serializer);
+        for item in self {
+            <crate::api::restrictions::RestrictionDto>::sse_encode(item, serializer);
         }
     }
 }
@@ -1632,6 +1878,25 @@ impl SseEncode for crate::api::recipe::RecipeSummaryDto {
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
         <String>::sse_encode(self.id, serializer);
         <String>::sse_encode(self.title, serializer);
+    }
+}
+
+impl SseEncode for crate::api::restrictions::RestrictionDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        match self {
+            crate::api::restrictions::RestrictionDto::Known { kind } => {
+                <i32>::sse_encode(0, serializer);
+                <String>::sse_encode(kind, serializer);
+            }
+            crate::api::restrictions::RestrictionDto::Other { text } => {
+                <i32>::sse_encode(1, serializer);
+                <String>::sse_encode(text, serializer);
+            }
+            _ => {
+                unimplemented!("");
+            }
+        }
     }
 }
 

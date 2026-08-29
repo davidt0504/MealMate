@@ -445,3 +445,38 @@ Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-orch-10-2026-
 - **No index on `recipe_ingredient_line`'s two ingredient foreign keys** (`rust/crates/kimatta-storage/src/lib.rs:129`) -- `ingredient_id` and `custom_ingredient_id` are deliberately `NO ACTION`, so every `ingredient`/`custom_ingredient` delete full-scans the line table to prove no child references it; they are also MVP-009/MVP-015's join keys. Migration 3 indexes `custom_ingredient(household_id)` and `recipe(household_id)`, so the omission is asymmetric with its own siblings. Fix: add both indexes to migration 3 now, while no shipped database has reached v3; afterwards it costs a fourth migration.
   Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-orch-10-2026-08-29T0230-130e.md
   **Status:** RESOLVED -- fixed in the orch/10 fix pass 2026-08-29; both indexes added to migration 3, pinned by `the_line_ingredient_foreign_keys_are_indexed`.
+
+## orch/12 -- 2026-08-29
+
+Source: /home/davidlinux/.claude/reviews/impl-handoff-orch-12-2026-08-29T0423-be39.md
+Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-orch-12-2026-08-29T0439-99c7.md
+
+### LOW
+
+- **Restrictions editor edit affordances stay live during an in-flight save** (`lib/features/restrictions/restrictions_screen.dart:88`) -- `_saving` gates only the Save button (:180), so a checkbox, `Add` or chip-delete tapped during the await is silently discarded when `_save` re-seeds `_known`/`_other` from the returned set. Fix: disable the three affordances while `_saving`, or drop the post-save re-seed.
+  Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-orch-12-2026-08-29T0439-99c7.md
+  **Status:** RESOLVED -- fixed in the orch/12 fix pass 2026-08-29; the checkbox list, `Add` and chip delete are disabled while `_saving`, keeping the post-save re-seed so the form still shows what storage actually kept. Pinned by `the edit affordances are disabled while a save is in flight`, confirmed red pre-fix.
+
+---
+
+- **`_pending` discards the stored first-seen restriction order** (`lib/features/restrictions/restrictions_screen.dart:75`) -- emits checked known kinds in vocabulary order then free text, destroying the order `HouseholdRestrictions` documents preserving at `rust/crates/food-domain/src/restriction.rs:109`; the Settings subtitle re-renders reordered after any save. Fix: build from one ordered pending list, or soften the domain comment.
+  Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-orch-12-2026-08-29T0439-99c7.md
+  **Status:** OPEN
+
+---
+
+- **`load_restrictions` accepts an absent household where `save_restrictions` rejects it** (`rust/crates/kimatta-storage/src/lib.rs:568`) -- no `require_household`, so a bogus id returns an empty set that `lib/features/settings/settings_screen.dart:60` renders as the affirmative `None set — nothing is filtered out.`; the sibling `load_member_preferences` (:692) does check. Unreachable until MVP-009 holds an id from elsewhere. Fix: add `require_household`, or record the asymmetry where MVP-009 reads it.
+  Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-orch-12-2026-08-29T0439-99c7.md
+  **Status:** OPEN
+
+---
+
+- **Corrupt preference rows lose the coordinates corrupt restriction rows keep** (`rust/crates/kimatta-storage/src/lib.rs:702`) -- `restriction_from_row` reports `CorruptRestriction { household, position, kind, text }` (:611), but the preference loader maps straight into transparent `StorageError::Preference`, so a bad row surfaces as `unknown sentiment "liek"` with no member and no position. Fix: a `CorruptPreference { member, position, sentiment, subject }` variant mirroring `CorruptRestriction`.
+  Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-orch-12-2026-08-29T0439-99c7.md
+  **Status:** OPEN
+
+---
+
+- **Free text duplicating a known restriction token is stored twice** (`lib/features/restrictions/restrictions_screen.dart:190`) -- `_add` dedups only within `_other`, and `is_same` (`rust/crates/food-domain/src/restriction.rs:101`) never collapses a `Known`/`Other` pair, so Peanuts checked plus typed `peanuts` yields `Peanuts, peanuts` in Settings and a double match for MVP-009. Fix: reject free text matching a token or label in `kinds` and tick that checkbox instead.
+  Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-orch-12-2026-08-29T0439-99c7.md
+  **Status:** RESOLVED -- fixed in the orch/12 fix pass 2026-08-29; `_add` now takes `kinds` and matches the trimmed lowercase entry against each token and its label, ticking that checkbox instead of adding a chip. Pinned by `free text naming a known kind ticks its box instead of adding a chip`, which also covers the already-ticked case, confirmed red pre-fix.

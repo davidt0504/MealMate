@@ -7,7 +7,9 @@ import 'package:meal_mate/src/rust/api/health.dart';
 import 'package:meal_mate/src/rust/api/household.dart';
 import 'package:meal_mate/src/rust/api/planning.dart';
 import 'package:meal_mate/src/rust/api/recipe.dart';
+import 'package:meal_mate/src/rust/api/restrictions.dart';
 import 'package:meal_mate/src/rust/frb_generated.dart';
+import 'package:meal_mate/features/restrictions/restrictions_screen.dart';
 
 void main() {
   setUpAll(() async => RustLib.init());
@@ -35,9 +37,9 @@ void main() {
     );
   });
 
-  test('open_database migrates a real database to schema v3', () async {
+  test('open_database migrates a real database to schema v4', () async {
     final report = await openDatabase(dbPath: await tempDb());
-    expect(report.schemaVersion, 3);
+    expect(report.schemaVersion, 4);
   });
 
   test('storage failure surfaces as KimattaError_Storage', () async {
@@ -80,6 +82,18 @@ void main() {
     expect((await bootstrapHousehold()).name, 'Casa');
     final cleared = await renameHousehold(householdId: h.id, name: '  ');
     expect(cleared.name, isNull);
+  });
+
+  test('onboarding completes once and survives reopening the file', () async {
+    final path = await tempDb();
+    await openDatabase(dbPath: path);
+    final h = await bootstrapHousehold();
+    expect(h.onboarded, isFalse);
+    expect((await completeOnboarding(householdId: h.id)).onboarded, isTrue);
+    // Idempotent: a second tap is a no-op write, not an error.
+    expect((await completeOnboarding(householdId: h.id)).onboarded, isTrue);
+    await openDatabase(dbPath: path);
+    expect((await bootstrapHousehold()).onboarded, isTrue);
   });
 
   test('rename of a foreign id is rejected and changes nothing', () async {
@@ -140,6 +154,66 @@ void main() {
       ),
       throwsA(isA<KimattaError_Planning>()),
     );
+  });
+
+  test('a saved restriction set survives reopening the same file', () async {
+    final path = await tempDb();
+    await openDatabase(dbPath: path);
+    final h = await bootstrapHousehold();
+    expect(await loadRestrictions(householdId: h.id), isEmpty);
+    const sent = [
+      RestrictionDto.known(kind: 'peanuts'),
+      RestrictionDto.other(text: 'nightshades'),
+    ];
+    expect(await saveRestrictions(householdId: h.id, restrictions: sent), sent);
+    await openDatabase(dbPath: path);
+    expect(await loadRestrictions(householdId: h.id), sent);
+  });
+
+  test('an empty save clears the restriction set', () async {
+    await openDatabase(dbPath: await tempDb());
+    final h = await bootstrapHousehold();
+    await saveRestrictions(
+      householdId: h.id,
+      restrictions: const [RestrictionDto.known(kind: 'dairy')],
+    );
+    expect(
+      await saveRestrictions(householdId: h.id, restrictions: const []),
+      isEmpty,
+    );
+    expect(await loadRestrictions(householdId: h.id), isEmpty);
+  });
+
+  test('an unknown restriction kind is a typed Restriction error', () async {
+    await openDatabase(dbPath: await tempDb());
+    final h = await bootstrapHousehold();
+    await expectLater(
+      () => saveRestrictions(
+        householdId: h.id,
+        restrictions: const [RestrictionDto.known(kind: 'nightshades')],
+      ),
+      throwsA(isA<KimattaError_Restriction>()),
+    );
+    expect(await loadRestrictions(householdId: h.id), isEmpty);
+  });
+
+  // Buys back the compile-time exhaustiveness the token-string DTO costs (the `UnitDto`
+  // convention `rust/src/api/recipe.rs:26-27` records). A kind added in Rust without a Dart
+  // label fails here rather than rendering `tree_nuts` to a user.
+  test('every known restriction kind has a Dart label', () async {
+    final kinds = await knownRestrictionKinds();
+    expect(kinds, isNotEmpty);
+    for (final kind in kinds) {
+      expect(
+        restrictionLabel(kind),
+        isNot(kind),
+        reason: '$kind has no label in restrictionLabel',
+      );
+      expect(
+        describeRestriction(RestrictionDto.known(kind: kind)),
+        restrictionLabel(kind),
+      );
+    }
   });
 
   test('a different file is a different household', () async {

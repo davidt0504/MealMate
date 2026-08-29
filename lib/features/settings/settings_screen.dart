@@ -6,6 +6,8 @@ import 'package:meal_mate/features/household/household_provider.dart';
 import 'package:meal_mate/features/household/household_screen.dart';
 import 'package:meal_mate/features/planning/planning_cycle.dart';
 import 'package:meal_mate/features/planning/planning_provider.dart';
+import 'package:meal_mate/features/restrictions/restrictions_provider.dart';
+import 'package:meal_mate/features/restrictions/restrictions_screen.dart';
 import 'package:meal_mate/features/settings/health_provider.dart';
 
 class SettingsScreen extends ConsumerWidget {
@@ -39,8 +41,6 @@ class SettingsScreen extends ConsumerWidget {
             trailing: const Icon(Icons.chevron_right),
             onTap: () => context.go('/settings/household'),
           ),
-          // Read-only: no onTap, no chevron. Editing the cycle is MVP-006 AC-2's,
-          // and an edit affordance here would duplicate it.
           ListTile(
             title: const Text('Planning cycle'),
             subtitle: Text(switch (ref.watch(planningCycleProvider)) {
@@ -51,6 +51,24 @@ class SettingsScreen extends ConsumerWidget {
               ),
               _ => 'Loading planning cycle…',
             }),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => context.go('/settings/cycle'),
+          ),
+          ListTile(
+            title: const Text('Restrictions'),
+            subtitle: Text(switch (ref.watch(restrictionsProvider)) {
+              AsyncData(value: final list) when list.isEmpty =>
+                'None set — nothing is filtered out.',
+              AsyncData(:final value) =>
+                value.map(describeRestriction).join(', '),
+              AsyncError(:final error) => describeFailure(
+                error,
+                subject: 'Restrictions',
+              ),
+              _ => 'Loading restrictions…',
+            }),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => context.go('/settings/restrictions'),
           ),
           ListTile(title: const Text('Diagnostics'), subtitle: Text(line)),
         ],

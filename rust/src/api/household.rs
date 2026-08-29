@@ -14,6 +14,9 @@ pub struct HouseholdDto {
     pub id: String,
     pub name: Option<String>,
     pub members: Vec<MemberDto>,
+    /// Whether first run has been completed. Flutter's first-run gate reads this and nothing
+    /// else, so "have we welcomed this user" is a Rust-owned durable fact (invariant 17).
+    pub onboarded: bool,
 }
 
 /// Returns the local household, creating an anonymous one-person household on the first
@@ -67,10 +70,31 @@ fn rename_in(
     })
 }
 
+/// Marks the local household onboarded, and returns it. Idempotent, so the button cannot fail
+/// merely because it was already pressed.
+pub fn complete_onboarding(household_id: String) -> Result<HouseholdDto, KimattaError> {
+    let id = HouseholdId::new(household_id)?;
+    let record = crate::db::with(|conn| complete_in(conn, &id))?;
+    Ok(to_dto(record))
+}
+
+/// Split out from the command for the same reason `rename_in` is: it can be tested with more
+/// than one household present without installing the process-wide connection, which
+/// `db.rs`'s `with_no_connection_is_not_open` needs to stay uninstalled.
+fn complete_in(conn: &mut Connection, id: &HouseholdId) -> Result<HouseholdRecord, KimattaError> {
+    kimatta_storage::mark_onboarded(conn, id)?;
+    kimatta_storage::load_household_by_id(conn, id)?.ok_or_else(|| KimattaError::Storage {
+        // Unreachable for the same reason `rename_in`'s twin is: `mark_onboarded` already
+        // returns `NoSuchHousehold` when the UPDATE changes no rows.
+        message: "household vanished after completing onboarding".into(),
+    })
+}
+
 fn to_dto(record: HouseholdRecord) -> HouseholdDto {
     HouseholdDto {
         id: record.household.id.as_str().to_owned(),
         name: record.household.name,
+        onboarded: record.onboarded,
         members: record
             .members
             .into_iter()
@@ -112,6 +136,31 @@ mod tests {
         assert_eq!(record.household.name.as_deref(), Some("Casa"));
         assert_eq!(record.members.len(), 1);
         assert_eq!(record.members[0].id.as_str(), "m-h2");
+    }
+
+    /// Idempotent and scoped: the button cannot fail merely because it was pressed twice, and
+    /// completing one household's first run must not complete another's.
+    #[test]
+    fn complete_onboarding_is_idempotent_and_scoped_to_the_named_id() {
+        let mut conn = kimatta_storage::open(":memory:").unwrap();
+        seed(&mut conn, "h1");
+        seed(&mut conn, "h2");
+        let id = HouseholdId::new("h2").unwrap();
+        assert!(!onboarded_of(&conn, &id));
+        let record = complete_in(&mut conn, &id).unwrap();
+        assert_eq!(record.household.id.as_str(), "h2");
+        assert!(record.onboarded);
+        // A second tap is a no-op write, not an error.
+        assert!(complete_in(&mut conn, &id).unwrap().onboarded);
+        let other = HouseholdId::new("h1").unwrap();
+        assert!(!onboarded_of(&conn, &other));
+    }
+
+    fn onboarded_of(conn: &Connection, id: &HouseholdId) -> bool {
+        kimatta_storage::load_household_by_id(conn, id)
+            .unwrap()
+            .unwrap()
+            .onboarded
     }
 
     #[test]

@@ -13,6 +13,19 @@ pub enum KimattaError {
     Planning { message: String },
     #[error("invalid recipe input: {message}")]
     Recipe { message: String },
+    #[error("invalid restriction input: {message}")]
+    Restriction { message: String },
+}
+
+/// Same scope rule as the `Planning` conversion below: a `RestrictionError` raised while
+/// parsing bridge arguments; one raised inside storage arrives as `StorageError::Restriction`
+/// and stays `Storage`.
+impl From<kimatta_storage::RestrictionError> for KimattaError {
+    fn from(e: kimatta_storage::RestrictionError) -> Self {
+        KimattaError::Restriction {
+            message: e.to_string(),
+        }
+    }
 }
 
 /// Same scope rule as the `Planning` conversion below: a `RecipeError` raised while parsing
