@@ -9,16 +9,16 @@ pub use food_domain::starter::{
     StarterRecipe,
 };
 pub use food_domain::{
-    assess, base_factor, derive_shopping_list, format_civil_date, parse_civil_date, CivilDate,
-    Conflict, Contribution, CustomIngredient, CustomIngredientId, HouseholdRestrictions,
+    assess, base_factor, derive_shopping_list, format_civil_date, parse_civil_date, quantity_token,
+    CivilDate, Conflict, Contribution, CustomIngredient, CustomIngredientId, HouseholdRestrictions,
     IdentityInfo, Ingredient, IngredientId, IngredientLine, IngredientRef, LineStatus,
     MealComponent, MealScope, MealSlot, MemberPreference, MemberPreferences, PlannedMeal,
     PlannedMealError, PlannedMealId, PlanningCycle, PlanningError, PreferenceError, ProvenanceKind,
     Quantity, QuantityRange, Rational, Recipe, RecipeError, RecipeId, RecipeProvenance,
     RecipeRights, Restriction, RestrictionAssessment, RestrictionError, RestrictionKind,
-    RightsBasis, Sentiment, SeparateReason, ShoppingGroup, ShoppingInput, ShoppingLine,
-    ShoppingList, Unit, UnitFamily, UnitKind, WriteSource, DEFAULT_CYCLE_DAYS, MAX_CYCLE_DAYS,
-    MIN_CYCLE_DAYS, RULE_VERSION, SHOPPING_ALGORITHM_VERSION,
+    RightsBasis, Sentiment, SeparateReason, ShoppingError, ShoppingGroup, ShoppingInput,
+    ShoppingLine, ShoppingList, ShoppingManualItemId, Unit, UnitFamily, UnitKind, WriteSource,
+    DEFAULT_CYCLE_DAYS, MAX_CYCLE_DAYS, MIN_CYCLE_DAYS, RULE_VERSION, SHOPPING_ALGORITHM_VERSION,
 };
 pub use household_core::{Household, HouseholdId, HouseholdMember, IdError, MemberId};
 pub use rusqlite::Connection;
@@ -138,6 +138,10 @@ pub enum StorageError {
         scale_numer: Option<u32>,
         scale_denom: Option<u32>,
     },
+    #[error("no shopping item {0} in this household")]
+    NoSuchShoppingItem(String),
+    #[error(transparent)]
+    Shopping(#[from] ShoppingError),
 }
 
 // Two consts: `M` has drop glue, so an inline `&[M::up(..)]` argument is not promoted
@@ -352,6 +356,41 @@ const MIGRATION_ARRAY: &[M] = &[
     CREATE INDEX pantry_item_ingredient ON pantry_item(ingredient_id);
     CREATE INDEX pantry_item_custom_ingredient
         ON pantry_item(custom_ingredient_id);",
+    ),
+    // Shopping-list overlay (MVP-016). The list itself is never stored — it is re-derived on
+    // every read — so these rows are the *only* durable shopping state, and each one is a
+    // user action on one derived line. `shopping_line_state` is keyed by the cycle window as
+    // well as the line key: a check belongs to this trip, not to the identity forever, so a
+    // cycle-settings edit (length/anchor) orphans every window's rows — an accepted
+    // limitation, and the rows are kept rather than deleted. `checked` is a plain boolean
+    // despite the pantry's no-`present` rule: it records that the user ticked this list, not
+    // an inventory claim. `checked_against` is the quantity token the tick was made against,
+    // present iff `checked`, so a later read can report a changed amount instead of keeping a
+    // check against a different number. A row with every flag off says nothing and is refused;
+    // storage deletes instead. `shopping_manual_item` is household-scoped with no window, so
+    // an unbought item carries into the next cycle.
+    M::up(
+        "CREATE TABLE shopping_line_state (
+        household_id TEXT NOT NULL REFERENCES household(id) ON DELETE CASCADE,
+        from_date TEXT NOT NULL,
+        to_date TEXT NOT NULL,
+        line_key TEXT NOT NULL CHECK (line_key <> ''),
+        checked INTEGER NOT NULL CHECK (checked IN (0, 1)),
+        checked_against TEXT,
+        hidden INTEGER NOT NULL CHECK (hidden IN (0, 1)),
+        restored INTEGER NOT NULL CHECK (restored IN (0, 1)),
+        CHECK (checked + hidden + restored > 0),
+        CHECK ((checked = 1) = (checked_against IS NOT NULL)),
+        PRIMARY KEY (household_id, from_date, to_date, line_key)
+    ) STRICT;
+    CREATE TABLE shopping_manual_item (
+        id TEXT PRIMARY KEY,
+        household_id TEXT NOT NULL REFERENCES household(id) ON DELETE CASCADE,
+        name TEXT NOT NULL CHECK (trim(name, char(32, 9, 10, 11, 12, 13)) <> ''),
+        note TEXT,
+        checked INTEGER NOT NULL CHECK (checked IN (0, 1))
+    ) STRICT;
+    CREATE INDEX shopping_manual_item_household ON shopping_manual_item(household_id);",
     ),
 ];
 pub const MIGRATIONS: Migrations<'static> = Migrations::from_slice(MIGRATION_ARRAY);
@@ -1145,12 +1184,49 @@ pub fn set_pantry_mark(
 ) -> Result<PantryEntry, StorageError> {
     let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
     require_household(&tx, household)?;
-    check_ingredient_ref(&tx, household, ingredient)?;
+    let (entry, _) = set_pantry_mark_in(&tx, household, ingredient, marked)?;
+    tx.commit()?;
+    Ok(entry)
+}
+
+/// Marks or unmarks every identity in `ingredients` in one IMMEDIATE transaction and returns
+/// only the refs whose row actually changed — so a caller undoing a bulk mark sends exactly
+/// that set back and never clears a mark that predated it (MVP-016 purchased→pantry). Any
+/// failure (an absent or foreign identity) rolls the whole batch back.
+pub fn set_pantry_marks(
+    conn: &mut Connection,
+    household: &HouseholdId,
+    ingredients: &[IngredientRef],
+    marked: bool,
+) -> Result<Vec<IngredientRef>, StorageError> {
+    let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    require_household(&tx, household)?;
+    let mut changed = Vec::new();
+    for ingredient in ingredients {
+        let (_, did_change) = set_pantry_mark_in(&tx, household, ingredient, marked)?;
+        if did_change {
+            changed.push(ingredient.clone());
+        }
+    }
+    tx.commit()?;
+    Ok(changed)
+}
+
+/// The body `set_pantry_mark` and `set_pantry_marks` share; the caller owns the transaction
+/// and has already checked the household. The `bool` is whether a row was inserted or
+/// deleted — `false` when the mark was already in the requested state.
+fn set_pantry_mark_in(
+    tx: &Transaction<'_>,
+    household: &HouseholdId,
+    ingredient: &IngredientRef,
+    marked: bool,
+) -> Result<(PantryEntry, bool), StorageError> {
+    check_ingredient_ref(tx, household, ingredient)?;
     let (catalog_id, custom_id) = match ingredient {
         IngredientRef::Catalog(id) => (Some(id.as_str()), None),
         IngredientRef::Custom(id) => (None, Some(id.as_str())),
     };
-    if marked {
+    let changed = if marked {
         // Untargeted `DO NOTHING`: a targeted `ON CONFLICT(household_id, ingredient_id)` will
         // not prepare against a partial index unless the index's WHERE clause is repeated.
         // Untargeted still propagates the CHECK violation, which is the wanted behaviour.
@@ -1158,14 +1234,14 @@ pub fn set_pantry_mark(
             "INSERT INTO pantry_item (household_id, ingredient_id, custom_ingredient_id)
              VALUES (?1, ?2, ?3) ON CONFLICT DO NOTHING",
             params![household.as_str(), catalog_id, custom_id],
-        )?;
+        )?
     } else {
         tx.execute(
             "DELETE FROM pantry_item
              WHERE household_id = ?1 AND ingredient_id IS ?2 AND custom_ingredient_id IS ?3",
             params![household.as_str(), catalog_id, custom_id],
-        )?;
-    }
+        )?
+    };
     let (name, aliases) = match ingredient {
         IngredientRef::Catalog(id) => (
             tx.query_row(
@@ -1173,7 +1249,7 @@ pub fn set_pantry_mark(
                 params![id.as_str()],
                 |r| r.get::<_, String>(0),
             )?,
-            load_aliases(&tx, id)?,
+            load_aliases(tx, id)?,
         ),
         IngredientRef::Custom(id) => (
             tx.query_row(
@@ -1184,13 +1260,15 @@ pub fn set_pantry_mark(
             Vec::new(),
         ),
     };
-    tx.commit()?;
-    Ok(PantryEntry {
-        ingredient: ingredient.clone(),
-        name,
-        aliases,
-        marked,
-    })
+    Ok((
+        PantryEntry {
+            ingredient: ingredient.clone(),
+            name,
+            aliases,
+            marked,
+        },
+        changed == 1,
+    ))
 }
 
 /// `(id, title)` of a recipe plus its line names, for listing without loading whole recipes.
@@ -2304,6 +2382,266 @@ pub fn load_shopping_list(
     Ok(derive_shopping_list(&input))
 }
 
+/// One derived line's user state for one cycle window (MVP-016). `checked_against` is the
+/// `quantity_token` the check was made against, `Some` iff `checked`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ShoppingLineState {
+    pub key: String,
+    pub checked: bool,
+    pub checked_against: Option<String>,
+    pub hidden: bool,
+    pub restored: bool,
+}
+
+impl ShoppingLineState {
+    fn is_blank(&self) -> bool {
+        !self.checked && !self.hidden && !self.restored
+    }
+}
+
+/// Every stored line state for `household` over exactly `from..=to`, in key order. A window
+/// that differs in either bound reads none — the rows are window-keyed by design.
+pub fn list_shopping_line_states(
+    conn: &Connection,
+    household: &HouseholdId,
+    from: CivilDate,
+    to: CivilDate,
+) -> Result<Vec<ShoppingLineState>, StorageError> {
+    let mut stmt = conn.prepare(
+        "SELECT line_key, checked, checked_against, hidden, restored FROM shopping_line_state
+         WHERE household_id = ?1 AND from_date = ?2 AND to_date = ?3 ORDER BY line_key",
+    )?;
+    let rows = stmt
+        .query_map(
+            params![
+                household.as_str(),
+                format_civil_date(from),
+                format_civil_date(to)
+            ],
+            |r| {
+                Ok(ShoppingLineState {
+                    key: r.get(0)?,
+                    checked: r.get(1)?,
+                    checked_against: r.get(2)?,
+                    hidden: r.get(3)?,
+                    restored: r.get(4)?,
+                })
+            },
+        )?
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(rows)
+}
+
+/// Upserts one line's state and returns what was stored. A state with every flag off is a
+/// row that says nothing, so it is deleted instead of written and returned as-is;
+/// both halves of the `checked` ⇔ `checked_against` pair are enforced here, so it can never
+/// drift: `checked_against` is forced to `None` when `checked` is off, and a check with no
+/// token is `Shopping(CheckWithoutQuantity)` rather than the table CHECK's untyped failure.
+/// A blank key is `Shopping(BlankKey)`. Both rejections land before any write.
+pub fn set_shopping_line_state(
+    conn: &mut Connection,
+    household: &HouseholdId,
+    from: CivilDate,
+    to: CivilDate,
+    state: &ShoppingLineState,
+) -> Result<ShoppingLineState, StorageError> {
+    if state.key.trim().is_empty() {
+        return Err(StorageError::Shopping(ShoppingError::BlankKey));
+    }
+    if state.checked && state.checked_against.is_none() {
+        return Err(StorageError::Shopping(ShoppingError::CheckWithoutQuantity));
+    }
+    let stored = ShoppingLineState {
+        key: state.key.clone(),
+        checked: state.checked,
+        checked_against: if state.checked {
+            state.checked_against.clone()
+        } else {
+            None
+        },
+        hidden: state.hidden,
+        restored: state.restored,
+    };
+    let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    require_household(&tx, household)?;
+    let (from, to) = (format_civil_date(from), format_civil_date(to));
+    if stored.is_blank() {
+        tx.execute(
+            "DELETE FROM shopping_line_state
+             WHERE household_id = ?1 AND from_date = ?2 AND to_date = ?3 AND line_key = ?4",
+            params![household.as_str(), from, to, stored.key],
+        )?;
+    } else {
+        tx.execute(
+            "INSERT INTO shopping_line_state
+             (household_id, from_date, to_date, line_key, checked, checked_against, hidden,
+              restored)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+             ON CONFLICT(household_id, from_date, to_date, line_key) DO UPDATE SET
+                 checked = excluded.checked,
+                 checked_against = excluded.checked_against,
+                 hidden = excluded.hidden,
+                 restored = excluded.restored",
+            params![
+                household.as_str(),
+                from,
+                to,
+                stored.key,
+                stored.checked,
+                stored.checked_against,
+                stored.hidden,
+                stored.restored,
+            ],
+        )?;
+    }
+    tx.commit()?;
+    Ok(stored)
+}
+
+/// A household-owned item the user typed rather than a recipe derived (MVP-016). Fully
+/// editable, since nothing derives it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ShoppingManualItem {
+    pub id: ShoppingManualItemId,
+    pub household_id: HouseholdId,
+    pub name: String,
+    pub note: Option<String>,
+    pub checked: bool,
+}
+
+/// Exactly this household's manual items, case-insensitively by name then id — the pantry's
+/// collation, for the pantry's reason.
+pub fn list_shopping_manual_items(
+    conn: &Connection,
+    household: &HouseholdId,
+) -> Result<Vec<ShoppingManualItem>, StorageError> {
+    let mut stmt = conn.prepare(
+        "SELECT id, name, note, checked FROM shopping_manual_item
+         WHERE household_id = ?1 ORDER BY name COLLATE NOCASE, id",
+    )?;
+    let rows = stmt
+        .query_map(params![household.as_str()], |r| {
+            Ok((
+                r.get::<_, String>(0)?,
+                r.get::<_, String>(1)?,
+                r.get::<_, Option<String>>(2)?,
+                r.get::<_, bool>(3)?,
+            ))
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
+    rows.into_iter()
+        .map(|(id, name, note, checked)| {
+            Ok(ShoppingManualItem {
+                id: ShoppingManualItemId::new(id)?,
+                household_id: household.clone(),
+                name,
+                note,
+                checked,
+            })
+        })
+        .collect()
+}
+
+/// Inserts or wholly replaces the item and returns what was stored: the name trimmed (blank
+/// is `Shopping(BlankName)` before any write) and a blank note mapped to `None`. An existing
+/// id owned by another household is `NoSuchShoppingItem`, never hijacked.
+pub fn save_shopping_manual_item(
+    conn: &mut Connection,
+    item: &ShoppingManualItem,
+) -> Result<ShoppingManualItem, StorageError> {
+    let name = item.name.trim();
+    if name.is_empty() {
+        return Err(StorageError::Shopping(ShoppingError::BlankName));
+    }
+    let stored = ShoppingManualItem {
+        id: item.id.clone(),
+        household_id: item.household_id.clone(),
+        name: name.to_owned(),
+        note: item
+            .note
+            .as_deref()
+            .map(str::trim)
+            .filter(|n| !n.is_empty())
+            .map(str::to_owned),
+        checked: item.checked,
+    };
+    let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    require_household(&tx, &stored.household_id)?;
+    let owner: Option<String> = tx
+        .query_row(
+            "SELECT household_id FROM shopping_manual_item WHERE id = ?1",
+            params![stored.id.as_str()],
+            |r| r.get(0),
+        )
+        .optional()?;
+    if owner.is_some_and(|o| o != stored.household_id.as_str()) {
+        return Err(StorageError::NoSuchShoppingItem(
+            stored.id.as_str().to_owned(),
+        ));
+    }
+    tx.execute(
+        "INSERT INTO shopping_manual_item (id, household_id, name, note, checked)
+         VALUES (?1, ?2, ?3, ?4, ?5)
+         ON CONFLICT(id) DO UPDATE SET
+             name = excluded.name, note = excluded.note, checked = excluded.checked",
+        params![
+            stored.id.as_str(),
+            stored.household_id.as_str(),
+            stored.name,
+            stored.note,
+            stored.checked,
+        ],
+    )?;
+    tx.commit()?;
+    Ok(stored)
+}
+
+/// Removes exactly this household's item; absent or foreign is `NoSuchShoppingItem`.
+pub fn delete_shopping_manual_item(
+    conn: &mut Connection,
+    household: &HouseholdId,
+    id: &ShoppingManualItemId,
+) -> Result<(), StorageError> {
+    let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    let changed = tx.execute(
+        "DELETE FROM shopping_manual_item WHERE id = ?1 AND household_id = ?2",
+        params![id.as_str(), household.as_str()],
+    )?;
+    if changed == 0 {
+        return Err(StorageError::NoSuchShoppingItem(id.as_str().to_owned()));
+    }
+    tx.commit()?;
+    Ok(())
+}
+
+/// "Start over" for one window, in one transaction: every line state of that window goes,
+/// and every *checked* manual item goes. Unchecked manual items carry — they were not
+/// bought, and the reset is about this trip, not the household's list of wants.
+pub fn reset_shopping_list(
+    conn: &mut Connection,
+    household: &HouseholdId,
+    from: CivilDate,
+    to: CivilDate,
+) -> Result<(), StorageError> {
+    let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    require_household(&tx, household)?;
+    tx.execute(
+        "DELETE FROM shopping_line_state
+         WHERE household_id = ?1 AND from_date = ?2 AND to_date = ?3",
+        params![
+            household.as_str(),
+            format_civil_date(from),
+            format_civil_date(to)
+        ],
+    )?;
+    tx.execute(
+        "DELETE FROM shopping_manual_item WHERE household_id = ?1 AND checked = 1",
+        params![household.as_str()],
+    )?;
+    tx.commit()?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use household_core::{HouseholdId, MemberId};
@@ -2479,7 +2817,7 @@ mod tests {
     /// on-device v1→v2 migration (PRD §12: tested from representative prior versions); since
     /// v4 it proves v1→latest end to end.
     #[test]
-    fn an_existing_v1_database_migrates_to_v8_without_losing_data() {
+    fn an_existing_v1_database_migrates_to_v9_without_losing_data() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("kimatta.db");
         {
@@ -2494,7 +2832,7 @@ mod tests {
             .unwrap();
         }
         let conn = open(&path).unwrap();
-        assert_eq!(schema_version(&conn).unwrap(), 8);
+        assert_eq!(schema_version(&conn).unwrap(), 9);
         assert_eq!(count(&conn, "household"), 1);
         assert_eq!(count(&conn, "household_member"), 2);
         assert_eq!(count(&conn, "planning_cycle"), 0);
@@ -2708,16 +3046,16 @@ mod tests {
     }
 
     #[test]
-    fn empty_db_migrates_to_v8() {
+    fn empty_db_migrates_to_v9() {
         let conn = open(":memory:").unwrap();
-        assert_eq!(schema_version(&conn).unwrap(), 8);
+        assert_eq!(schema_version(&conn).unwrap(), 9);
     }
 
     // --- Step 4: schema v3 -----------------------------------------------------------------
 
     /// Test-level stand-in for the on-device v2→v3 migration, as the v1 test is for v1→v2.
     #[test]
-    fn an_existing_v2_database_migrates_to_v8_without_losing_data() {
+    fn an_existing_v2_database_migrates_to_v9_without_losing_data() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("kimatta.db");
         {
@@ -2738,7 +3076,7 @@ mod tests {
             .unwrap();
         }
         let conn = open(&path).unwrap();
-        assert_eq!(schema_version(&conn).unwrap(), 8);
+        assert_eq!(schema_version(&conn).unwrap(), 9);
         assert_eq!(count(&conn, "household"), 1);
         assert_eq!(count(&conn, "planning_cycle"), 1);
         assert_eq!(count(&conn, "planning_meal_slot"), 2);
@@ -2751,7 +3089,7 @@ mod tests {
     /// theirs. A recipe is saved at v3 so the migration is proved not to disturb the tables
     /// migration 3 introduced, not merely the household one it alters.
     #[test]
-    fn an_existing_v3_database_migrates_to_v8_without_losing_data() {
+    fn an_existing_v3_database_migrates_to_v9_without_losing_data() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("kimatta.db");
         {
@@ -2763,7 +3101,7 @@ mod tests {
             insert_pre_v6_recipe(&raw, "h", "r");
         }
         let conn = open(&path).unwrap();
-        assert_eq!(schema_version(&conn).unwrap(), 8);
+        assert_eq!(schema_version(&conn).unwrap(), 9);
         assert_eq!(count(&conn, "household"), 1);
         assert_eq!(count(&conn, "household_member"), 1);
         assert_eq!(count(&conn, "recipe"), 1);
@@ -2777,7 +3115,7 @@ mod tests {
     /// test: a recipe saved at v4 must survive the `ALTER TABLE`s that add `archived_at` (v5)
     /// and `prep_minutes`/the rights columns (v6).
     #[test]
-    fn an_existing_v4_database_migrates_to_v8_without_losing_data() {
+    fn an_existing_v4_database_migrates_to_v9_without_losing_data() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("kimatta.db");
         {
@@ -2789,7 +3127,7 @@ mod tests {
             insert_pre_v6_recipe(&raw, "h", "r");
         }
         let conn = open(&path).unwrap();
-        assert_eq!(schema_version(&conn).unwrap(), 8);
+        assert_eq!(schema_version(&conn).unwrap(), 9);
         assert_eq!(count(&conn, "household"), 1);
         assert_eq!(count(&conn, "recipe"), 1);
         assert_eq!(count(&conn, "household_restriction"), 0);
@@ -4139,7 +4477,7 @@ mod tests {
             insert_household(&mut conn, &household("h"), &[member("m", "h")]).unwrap();
         }
         let conn = open(&path).unwrap();
-        assert_eq!(schema_version(&conn).unwrap(), 8);
+        assert_eq!(schema_version(&conn).unwrap(), 9);
         assert_eq!(count(&conn, "household"), 1);
         assert_eq!(count(&conn, "household_member"), 1);
         let on: i32 = conn
@@ -4731,7 +5069,7 @@ mod tests {
     }
 
     #[test]
-    fn an_existing_v5_database_migrates_to_v8_without_losing_data() {
+    fn an_existing_v5_database_migrates_to_v9_without_losing_data() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("kimatta.db");
         {
@@ -4743,7 +5081,7 @@ mod tests {
             insert_pre_v6_recipe(&raw, "h", "r");
         }
         let conn = open(&path).unwrap();
-        assert_eq!(schema_version(&conn).unwrap(), 8);
+        assert_eq!(schema_version(&conn).unwrap(), 9);
         assert_eq!(count(&conn, "household"), 1);
         assert_eq!(count(&conn, "recipe"), 1);
         assert_eq!(load(&conn, "h", "r").unwrap().title(), "Recipe r");
@@ -4770,7 +5108,7 @@ mod tests {
     /// predecessors: a recipe saved at v6 must survive the two new tables, which touch nothing
     /// that exists.
     #[test]
-    fn an_existing_v6_database_migrates_to_v8_without_losing_data() {
+    fn an_existing_v6_database_migrates_to_v9_without_losing_data() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("kimatta.db");
         {
@@ -4782,7 +5120,7 @@ mod tests {
             save_recipe(&mut raw, &recipe("h", "r", vec![])).unwrap();
         }
         let conn = open(&path).unwrap();
-        assert_eq!(schema_version(&conn).unwrap(), 8);
+        assert_eq!(schema_version(&conn).unwrap(), 9);
         assert_eq!(count(&conn, "household"), 1);
         assert_eq!(count(&conn, "recipe"), 1);
         assert_eq!(load(&conn, "h", "r").unwrap().title(), "Recipe r");
@@ -6258,7 +6596,7 @@ mod tests {
     /// Test-level stand-in for the on-device v7→v8 migration, in the pattern of its
     /// predecessors: everything saved at v7 must survive a migration that only adds a table.
     #[test]
-    fn an_existing_v7_database_migrates_to_v8_without_losing_data() {
+    fn an_existing_v7_database_migrates_to_v9_without_losing_data() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("kimatta.db");
         {
@@ -6270,7 +6608,7 @@ mod tests {
             save_recipe(&mut raw, &recipe("h", "r", vec![])).unwrap();
         }
         let conn = open(&path).unwrap();
-        assert_eq!(schema_version(&conn).unwrap(), 8);
+        assert_eq!(schema_version(&conn).unwrap(), 9);
         assert_eq!(count(&conn, "household"), 1);
         assert_eq!(count(&conn, "recipe"), 1);
         assert_eq!(load(&conn, "h", "r").unwrap().title(), "Recipe r");
@@ -6640,6 +6978,629 @@ mod tests {
             .query_row("SELECT household_id FROM pantry_item", [], |r| r.get(0))
             .unwrap();
         assert_eq!(survivor, "h2");
+    }
+
+    // --- MVP-016 step 3: schema v9, shopping line states and manual items ----------------
+
+    const RAW_LINE_STATE: &str = "INSERT INTO shopping_line_state
+        (household_id, from_date, to_date, line_key, checked, checked_against, hidden, restored)
+        VALUES (?1, '2026-08-29', '2026-09-04', ?2, ?3, ?4, ?5, ?6)";
+
+    /// Test-level stand-in for the on-device v8→v9 migration, in the pattern of its
+    /// predecessors: everything saved at v8 must survive a migration that only adds tables.
+    #[test]
+    fn an_existing_v8_database_migrates_to_v9_without_losing_data() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("kimatta.db");
+        {
+            let mut raw = Connection::open(&path).unwrap();
+            MIGRATIONS.to_version(&mut raw, 8).unwrap();
+            assert_eq!(schema_version(&raw).unwrap(), 8);
+            raw.pragma_update(None, "foreign_keys", "ON").unwrap();
+            seed_for_pantry(&mut raw, "h");
+            set_pantry_mark(&mut raw, &hid("h"), &catalog_ref("flour"), true).unwrap();
+        }
+        let conn = open(&path).unwrap();
+        assert_eq!(schema_version(&conn).unwrap(), 9);
+        assert_eq!(count(&conn, "household"), 1);
+        assert_eq!(count(&conn, "pantry_item"), 1);
+        assert_eq!(count(&conn, "shopping_line_state"), 0);
+        assert_eq!(count(&conn, "shopping_manual_item"), 0);
+    }
+
+    /// Adversarial: an all-false row is a row that says nothing, and storage deletes rather
+    /// than writes one; the CHECK is what stops a raw write from leaving one behind.
+    #[test]
+    fn a_shopping_line_state_row_with_no_flag_set_is_rejected() {
+        let mut conn = open(":memory:").unwrap();
+        seed(&mut conn, "h");
+        let err = conn
+            .execute(
+                RAW_LINE_STATE,
+                params!["h", "m:x", 0, Option::<String>::None, 0, 0],
+            )
+            .unwrap_err();
+        assert!(err.to_string().contains("CHECK constraint failed"), "{err}");
+        let blank = conn
+            .execute(
+                RAW_LINE_STATE,
+                params!["h", "", 0, Option::<String>::None, 1, 0],
+            )
+            .unwrap_err();
+        assert!(
+            blank.to_string().contains("CHECK constraint failed"),
+            "{blank}"
+        );
+        assert_eq!(count(&conn, "shopping_line_state"), 0);
+    }
+
+    /// Adversarial: a check without the amount it was made against cannot be compared later,
+    /// and an amount without a check is stale data; both shapes are refused.
+    #[test]
+    fn a_checked_line_state_without_its_quantity_is_rejected() {
+        let mut conn = open(":memory:").unwrap();
+        seed(&mut conn, "h");
+        let err = conn
+            .execute(
+                RAW_LINE_STATE,
+                params!["h", "m:x", 1, Option::<String>::None, 0, 0],
+            )
+            .unwrap_err();
+        assert!(err.to_string().contains("CHECK constraint failed"), "{err}");
+        let stale = conn
+            .execute(
+                RAW_LINE_STATE,
+                params!["h", "m:x", 0, Some("exact:1/1|none"), 1, 0],
+            )
+            .unwrap_err();
+        assert!(
+            stale.to_string().contains("CHECK constraint failed"),
+            "{stale}"
+        );
+        conn.execute(
+            RAW_LINE_STATE,
+            params!["h", "m:x", 1, Some("exact:1/1|none"), 0, 0],
+        )
+        .unwrap();
+        assert_eq!(count(&conn, "shopping_line_state"), 1);
+    }
+
+    #[test]
+    fn a_blank_manual_item_name_is_rejected() {
+        let mut conn = open(":memory:").unwrap();
+        seed(&mut conn, "h");
+        for name in ["", " \t\n"] {
+            let err = conn
+                .execute(
+                    "INSERT INTO shopping_manual_item (id, household_id, name, note, checked)
+                     VALUES ('mi', 'h', ?1, NULL, 0)",
+                    params![name],
+                )
+                .unwrap_err();
+            assert!(err.to_string().contains("CHECK constraint failed"), "{err}");
+        }
+        assert_eq!(count(&conn, "shopping_manual_item"), 0);
+    }
+
+    #[test]
+    fn deleting_a_household_cascades_to_its_shopping_rows() {
+        let mut conn = open(":memory:").unwrap();
+        seed(&mut conn, "h");
+        seed(&mut conn, "h2");
+        for h in ["h", "h2"] {
+            conn.execute(
+                RAW_LINE_STATE,
+                params![h, "m:x", 1, Some("exact:1/1|none"), 0, 0],
+            )
+            .unwrap();
+            conn.execute(
+                "INSERT INTO shopping_manual_item (id, household_id, name, note, checked)
+                 VALUES (?1, ?2, 'batteries', NULL, 0)",
+                params![format!("mi-{h}"), h],
+            )
+            .unwrap();
+        }
+        conn.execute("DELETE FROM household WHERE id = 'h'", [])
+            .unwrap();
+        assert_eq!(count(&conn, "shopping_line_state"), 1);
+        assert_eq!(count(&conn, "shopping_manual_item"), 1);
+        let survivor: String = conn
+            .query_row("SELECT household_id FROM shopping_manual_item", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert_eq!(survivor, "h2");
+    }
+
+    // --- MVP-016 steps 4–6: line states, manual items, reset, bulk pantry marks ----------
+
+    fn d(raw: &str) -> CivilDate {
+        parse_civil_date(raw).unwrap()
+    }
+
+    fn checked(key: &str, against: &str) -> ShoppingLineState {
+        ShoppingLineState {
+            key: key.to_owned(),
+            checked: true,
+            checked_against: Some(against.to_owned()),
+            hidden: false,
+            restored: false,
+        }
+    }
+
+    fn flags(key: &str, hidden: bool, restored: bool) -> ShoppingLineState {
+        ShoppingLineState {
+            key: key.to_owned(),
+            checked: false,
+            checked_against: None,
+            hidden,
+            restored,
+        }
+    }
+
+    fn states(conn: &Connection, household: &str, from: &str, to: &str) -> Vec<ShoppingLineState> {
+        list_shopping_line_states(conn, &hid(household), d(from), d(to)).unwrap()
+    }
+
+    fn set_state(
+        conn: &mut Connection,
+        household: &str,
+        from: &str,
+        to: &str,
+        state: &ShoppingLineState,
+    ) -> ShoppingLineState {
+        set_shopping_line_state(conn, &hid(household), d(from), d(to), state).unwrap()
+    }
+
+    fn item(id: &str, household: &str, name: &str, checked: bool) -> ShoppingManualItem {
+        ShoppingManualItem {
+            id: ShoppingManualItemId::new(id).unwrap(),
+            household_id: hid(household),
+            name: name.to_owned(),
+            note: None,
+            checked,
+        }
+    }
+
+    fn item_names(conn: &Connection, household: &str) -> Vec<String> {
+        list_shopping_manual_items(conn, &hid(household))
+            .unwrap()
+            .into_iter()
+            .map(|i| i.name)
+            .collect()
+    }
+
+    #[test]
+    fn a_line_state_persists_and_reads_back() {
+        let mut conn = open(":memory:").unwrap();
+        seed(&mut conn, "h");
+        let stored = set_state(
+            &mut conn,
+            "h",
+            "2026-08-29",
+            "2026-09-04",
+            &checked("m:catalog:flour:volume_us:req:known", "exact:2/1|known:cup"),
+        );
+        assert!(stored.checked);
+        assert_eq!(
+            stored.checked_against.as_deref(),
+            Some("exact:2/1|known:cup")
+        );
+        let hidden = set_state(
+            &mut conn,
+            "h",
+            "2026-08-29",
+            "2026-09-04",
+            &flags("s:pm-1:0:0", true, false),
+        );
+        assert!(hidden.hidden);
+        let read = states(&conn, "h", "2026-08-29", "2026-09-04");
+        assert_eq!(read, vec![stored.clone(), hidden]);
+        // A re-save replaces the row rather than adding one, and unchecking drops the token
+        // even when the caller left it in place.
+        let mut unchecked = stored.clone();
+        unchecked.checked = false;
+        unchecked.restored = true;
+        let restored = set_state(&mut conn, "h", "2026-08-29", "2026-09-04", &unchecked);
+        assert_eq!(restored.checked_against, None);
+        assert!(restored.restored);
+        assert_eq!(count(&conn, "shopping_line_state"), 2);
+    }
+
+    #[test]
+    fn clearing_every_flag_removes_the_row() {
+        let mut conn = open(":memory:").unwrap();
+        seed(&mut conn, "h");
+        set_state(
+            &mut conn,
+            "h",
+            "2026-08-29",
+            "2026-09-04",
+            &checked("m:x", "unknown|none"),
+        );
+        assert_eq!(count(&conn, "shopping_line_state"), 1);
+        let cleared = set_state(
+            &mut conn,
+            "h",
+            "2026-08-29",
+            "2026-09-04",
+            &flags("m:x", false, false),
+        );
+        assert_eq!(cleared, flags("m:x", false, false));
+        assert_eq!(count(&conn, "shopping_line_state"), 0);
+        // Clearing an absent row is a no-op, never an error.
+        set_state(
+            &mut conn,
+            "h",
+            "2026-08-29",
+            "2026-09-04",
+            &flags("m:x", false, false),
+        );
+        let err = set_shopping_line_state(
+            &mut conn,
+            &hid("h"),
+            d("2026-08-29"),
+            d("2026-09-04"),
+            &checked("  ", "unknown|none"),
+        )
+        .unwrap_err();
+        assert!(
+            matches!(err, StorageError::Shopping(ShoppingError::BlankKey)),
+            "{err:?}"
+        );
+    }
+
+    /// The other half of the `checked` ⇔ `checked_against` pair: the function rejects the
+    /// shape itself rather than letting it reach the table CHECK as an untyped `Sqlite`.
+    #[test]
+    fn a_check_without_its_quantity_is_a_typed_error_not_a_check_violation() {
+        let mut conn = open(":memory:").unwrap();
+        seed(&mut conn, "h");
+        let err = set_shopping_line_state(
+            &mut conn,
+            &hid("h"),
+            d("2026-08-29"),
+            d("2026-09-04"),
+            &ShoppingLineState {
+                key: "m:x".to_owned(),
+                checked: true,
+                checked_against: None,
+                hidden: false,
+                restored: false,
+            },
+        )
+        .unwrap_err();
+        assert!(
+            matches!(
+                err,
+                StorageError::Shopping(ShoppingError::CheckWithoutQuantity)
+            ),
+            "{err:?}"
+        );
+        assert_eq!(count(&conn, "shopping_line_state"), 0);
+    }
+
+    /// Adversarial: two households and two windows, each with a state under the same key.
+    #[test]
+    fn line_state_is_scoped_to_household_and_window() {
+        let mut conn = open(":memory:").unwrap();
+        seed(&mut conn, "h1");
+        seed(&mut conn, "h2");
+        set_state(
+            &mut conn,
+            "h1",
+            "2026-08-29",
+            "2026-09-04",
+            &checked("m:x", "unknown|none"),
+        );
+        set_state(
+            &mut conn,
+            "h2",
+            "2026-08-29",
+            "2026-09-04",
+            &flags("m:x", true, false),
+        );
+        set_state(
+            &mut conn,
+            "h1",
+            "2026-09-05",
+            "2026-09-11",
+            &flags("m:x", false, true),
+        );
+        assert_eq!(
+            states(&conn, "h1", "2026-08-29", "2026-09-04"),
+            vec![checked("m:x", "unknown|none")]
+        );
+        assert_eq!(
+            states(&conn, "h2", "2026-08-29", "2026-09-04"),
+            vec![flags("m:x", true, false)]
+        );
+        assert_eq!(
+            states(&conn, "h1", "2026-09-05", "2026-09-11"),
+            vec![flags("m:x", false, true)]
+        );
+        // Clearing h2's row leaves h1's two untouched.
+        set_state(
+            &mut conn,
+            "h2",
+            "2026-08-29",
+            "2026-09-04",
+            &flags("m:x", false, false),
+        );
+        assert_eq!(count(&conn, "shopping_line_state"), 2);
+    }
+
+    /// Decision 3 pin: states are keyed by the exact window, so a window that moved by a
+    /// cycle-settings edit reads none — and the rows are still there, not deleted.
+    #[test]
+    fn a_changed_window_reads_no_states() {
+        let mut conn = open(":memory:").unwrap();
+        seed(&mut conn, "h");
+        set_state(
+            &mut conn,
+            "h",
+            "2026-08-29",
+            "2026-09-04",
+            &checked("m:x", "unknown|none"),
+        );
+        assert!(states(&conn, "h", "2026-08-30", "2026-09-05").is_empty());
+        assert!(states(&conn, "h", "2026-08-29", "2026-09-05").is_empty());
+        assert_eq!(count(&conn, "shopping_line_state"), 1);
+    }
+
+    #[test]
+    fn line_state_for_an_absent_household_is_rejected() {
+        let mut conn = open(":memory:").unwrap();
+        let err = set_shopping_line_state(
+            &mut conn,
+            &hid("ghost"),
+            d("2026-08-29"),
+            d("2026-09-04"),
+            &checked("m:x", "unknown|none"),
+        )
+        .unwrap_err();
+        assert!(matches!(err, StorageError::NoSuchHousehold(_)), "{err:?}");
+        assert_eq!(count(&conn, "shopping_line_state"), 0);
+    }
+
+    /// AC-2: a check survives a restart.
+    #[test]
+    fn line_state_persists_across_reopen() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("kimatta.db");
+        {
+            let mut conn = open(&path).unwrap();
+            seed(&mut conn, "h");
+            set_state(
+                &mut conn,
+                "h",
+                "2026-08-29",
+                "2026-09-04",
+                &checked("m:x", "unknown|none"),
+            );
+            save_shopping_manual_item(&mut conn, &item("mi-1", "h", "batteries", false)).unwrap();
+        }
+        let conn = open(&path).unwrap();
+        assert_eq!(
+            states(&conn, "h", "2026-08-29", "2026-09-04"),
+            vec![checked("m:x", "unknown|none")]
+        );
+        assert_eq!(item_names(&conn, "h"), vec!["batteries"]);
+    }
+
+    #[test]
+    fn a_manual_item_saves_and_lists() {
+        let mut conn = open(":memory:").unwrap();
+        seed(&mut conn, "h");
+        let mut raw = item("mi-1", "h", "  batteries ", false);
+        raw.note = Some("  AA  ".to_owned());
+        let stored = save_shopping_manual_item(&mut conn, &raw).unwrap();
+        assert_eq!(stored.name, "batteries");
+        assert_eq!(stored.note.as_deref(), Some("AA"));
+        assert_eq!(
+            list_shopping_manual_items(&conn, &hid("h")).unwrap(),
+            vec![stored]
+        );
+        // A blank note is `None`, not an empty string.
+        let mut blank_note = item("mi-2", "h", "foil", true);
+        blank_note.note = Some("  ".to_owned());
+        assert_eq!(
+            save_shopping_manual_item(&mut conn, &blank_note)
+                .unwrap()
+                .note,
+            None
+        );
+    }
+
+    #[test]
+    fn saving_an_existing_id_replaces_it() {
+        let mut conn = open(":memory:").unwrap();
+        seed(&mut conn, "h");
+        save_shopping_manual_item(&mut conn, &item("mi-1", "h", "batteries", false)).unwrap();
+        let replaced =
+            save_shopping_manual_item(&mut conn, &item("mi-1", "h", "candles", true)).unwrap();
+        assert!(replaced.checked);
+        assert_eq!(item_names(&conn, "h"), vec!["candles"]);
+        assert_eq!(count(&conn, "shopping_manual_item"), 1);
+        delete_shopping_manual_item(&mut conn, &hid("h"), &replaced.id).unwrap();
+        assert_eq!(count(&conn, "shopping_manual_item"), 0);
+        let err = delete_shopping_manual_item(&mut conn, &hid("h"), &replaced.id).unwrap_err();
+        assert!(
+            matches!(err, StorageError::NoSuchShoppingItem(_)),
+            "{err:?}"
+        );
+    }
+
+    /// Adversarial: h2 can neither overwrite nor delete h1's item by naming its id.
+    #[test]
+    fn a_manual_item_of_another_household_cannot_be_replaced_or_deleted() {
+        let mut conn = open(":memory:").unwrap();
+        seed(&mut conn, "h1");
+        seed(&mut conn, "h2");
+        let original = item("mi-1", "h1", "batteries", false);
+        save_shopping_manual_item(&mut conn, &original).unwrap();
+        let err =
+            save_shopping_manual_item(&mut conn, &item("mi-1", "h2", "hijack", true)).unwrap_err();
+        assert!(
+            matches!(err, StorageError::NoSuchShoppingItem(_)),
+            "{err:?}"
+        );
+        let err = delete_shopping_manual_item(
+            &mut conn,
+            &hid("h2"),
+            &ShoppingManualItemId::new("mi-1").unwrap(),
+        )
+        .unwrap_err();
+        assert!(
+            matches!(err, StorageError::NoSuchShoppingItem(_)),
+            "{err:?}"
+        );
+        assert_eq!(
+            list_shopping_manual_items(&conn, &hid("h1")).unwrap(),
+            vec![original]
+        );
+        assert!(list_shopping_manual_items(&conn, &hid("h2"))
+            .unwrap()
+            .is_empty());
+    }
+
+    #[test]
+    fn manual_items_are_ordered_case_insensitively() {
+        let mut conn = open(":memory:").unwrap();
+        seed(&mut conn, "h");
+        for (id, name) in [("a", "candles"), ("b", "Batteries"), ("c", "apples")] {
+            save_shopping_manual_item(&mut conn, &item(id, "h", name, false)).unwrap();
+        }
+        assert_eq!(
+            item_names(&conn, "h"),
+            vec!["apples", "Batteries", "candles"]
+        );
+    }
+
+    #[test]
+    fn reset_clears_this_windows_states_and_only_checked_items() {
+        let mut conn = open(":memory:").unwrap();
+        seed(&mut conn, "h");
+        seed(&mut conn, "h2");
+        set_state(
+            &mut conn,
+            "h",
+            "2026-08-29",
+            "2026-09-04",
+            &checked("m:x", "unknown|none"),
+        );
+        set_state(
+            &mut conn,
+            "h",
+            "2026-09-05",
+            "2026-09-11",
+            &flags("m:x", true, false),
+        );
+        set_state(
+            &mut conn,
+            "h2",
+            "2026-08-29",
+            "2026-09-04",
+            &flags("m:x", true, false),
+        );
+        save_shopping_manual_item(&mut conn, &item("mi-1", "h", "bought", true)).unwrap();
+        save_shopping_manual_item(&mut conn, &item("mi-2", "h", "still wanted", false)).unwrap();
+        save_shopping_manual_item(&mut conn, &item("mi-3", "h2", "theirs", true)).unwrap();
+        reset_shopping_list(&mut conn, &hid("h"), d("2026-08-29"), d("2026-09-04")).unwrap();
+        assert!(states(&conn, "h", "2026-08-29", "2026-09-04").is_empty());
+        assert_eq!(states(&conn, "h", "2026-09-05", "2026-09-11").len(), 1);
+        assert_eq!(states(&conn, "h2", "2026-08-29", "2026-09-04").len(), 1);
+        assert_eq!(item_names(&conn, "h"), vec!["still wanted"]);
+        assert_eq!(item_names(&conn, "h2"), vec!["theirs"]);
+        let err = reset_shopping_list(&mut conn, &hid("ghost"), d("2026-08-29"), d("2026-09-04"))
+            .unwrap_err();
+        assert!(matches!(err, StorageError::NoSuchHousehold(_)), "{err:?}");
+    }
+
+    #[test]
+    fn a_blank_manual_name_is_rejected_before_any_write() {
+        let mut conn = open(":memory:").unwrap();
+        for name in ["", "  \t"] {
+            // The ghost household would be `NoSuchHousehold` if the name check came second.
+            let err = save_shopping_manual_item(&mut conn, &item("mi-1", "ghost", name, false))
+                .unwrap_err();
+            assert!(
+                matches!(err, StorageError::Shopping(ShoppingError::BlankName)),
+                "{err:?}"
+            );
+        }
+        assert_eq!(count(&conn, "shopping_manual_item"), 0);
+    }
+
+    /// One foreign custom ref in the batch fails the whole batch: the earlier catalog mark
+    /// is rolled back too.
+    #[test]
+    fn bulk_marks_land_in_one_transaction_or_not_at_all() {
+        let mut conn = open(":memory:").unwrap();
+        seed_for_pantry(&mut conn, "h");
+        seed_for_pantry(&mut conn, "h2");
+        let err = set_pantry_marks(
+            &mut conn,
+            &hid("h"),
+            &[catalog_ref("flour"), custom_ref("c-h2")],
+            true,
+        )
+        .unwrap_err();
+        assert!(
+            matches!(err, StorageError::CustomIngredientHouseholdMismatch { .. }),
+            "{err:?}"
+        );
+        assert_eq!(count(&conn, "pantry_item"), 0);
+        let err =
+            set_pantry_marks(&mut conn, &hid("ghost"), &[catalog_ref("flour")], true).unwrap_err();
+        assert!(matches!(err, StorageError::NoSuchHousehold(_)), "{err:?}");
+    }
+
+    /// R2-4 pin: a pre-existing mark is not in the returned set, so an undo that sends the
+    /// returned set back leaves it in place.
+    #[test]
+    fn bulk_marking_returns_only_the_refs_it_changed() {
+        let mut conn = open(":memory:").unwrap();
+        seed_for_pantry(&mut conn, "h");
+        set_pantry_mark(&mut conn, &hid("h"), &catalog_ref("flour"), true).unwrap();
+        let changed = set_pantry_marks(
+            &mut conn,
+            &hid("h"),
+            &[catalog_ref("flour"), custom_ref("c-h")],
+            true,
+        )
+        .unwrap();
+        assert_eq!(changed, vec![custom_ref("c-h")]);
+        assert_eq!(count(&conn, "pantry_item"), 2);
+        let undone = set_pantry_marks(&mut conn, &hid("h"), &changed, false).unwrap();
+        assert_eq!(undone, vec![custom_ref("c-h")]);
+        assert_eq!(marked_names(&pantry(&conn, "h")), vec!["flour"]);
+    }
+
+    #[test]
+    fn bulk_marking_is_idempotent_and_reversible() {
+        let mut conn = open(":memory:").unwrap();
+        seed_for_pantry(&mut conn, "h");
+        let refs = [catalog_ref("flour"), custom_ref("c-h")];
+        assert_eq!(
+            set_pantry_marks(&mut conn, &hid("h"), &refs, true).unwrap(),
+            refs.to_vec()
+        );
+        assert!(set_pantry_marks(&mut conn, &hid("h"), &refs, true)
+            .unwrap()
+            .is_empty());
+        assert_eq!(count(&conn, "pantry_item"), 2);
+        assert_eq!(
+            set_pantry_marks(&mut conn, &hid("h"), &refs, false).unwrap(),
+            refs.to_vec()
+        );
+        assert!(set_pantry_marks(&mut conn, &hid("h"), &refs, false)
+            .unwrap()
+            .is_empty());
+        assert_eq!(count(&conn, "pantry_item"), 0);
+        assert!(set_pantry_marks(&mut conn, &hid("h"), &[], true)
+            .unwrap()
+            .is_empty());
     }
 
     // --- MVP-015 step 4: the shopping snapshot -------------------------------------------

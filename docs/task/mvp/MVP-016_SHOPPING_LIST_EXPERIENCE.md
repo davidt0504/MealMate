@@ -48,6 +48,7 @@ Turn the shopping projection into a fast, editable, household-owned list grouped
 ## Decision gates
 
 - Resolve regeneration/manual-edit precedence before implementing destructive replacement.
+- Resolved 2026-08-29 (plan): live derivation + per-line overlay; merge by default, overwrite only by explicit reset; checks carry the quantity they were made against and are shown as changed rather than kept when it differs; a cycle-settings edit orphans window-keyed line states (accepted limitation, pinned by test); manual items are household-scoped and carry across cycles; line states are retained per window indefinitely with no purge — re-deriving a past window resurrects that window's own checks, which is by design, and the volume (~1,600 rows/year) does not justify a retention policy yet.
 
 ## Acceptance criteria
 
@@ -60,7 +61,7 @@ Turn the shopping projection into a fast, editable, household-owned list grouped
 
 | Criterion | Required evidence |
 |---|---|
-| AC-1 | Integration test against MVP-015 fixtures |
+| AC-1 | Rust integration test against the MVP-015 bridge-test seeding helpers (`rust/src/api/shopping.rs` `open_seeded`/`save_recipe`/`plan`), **plus** a widget test asserting group headings and the per-line omission/`separate_reason` explanations |
 | AC-2 | Restart/regeneration tests |
 | AC-3 | State-transition tests |
 | AC-4 | Rust household-scoping tests, semantics check, fresh-context review |

@@ -2,6 +2,17 @@
 
 Additional LOW findings are tracked in `KNOWN_ISSUES-low.md`.
 
+## orch/31 -- 2026-08-29
+
+Full review: `wt/31/.orch/redteam-impl-handoff-orch-31-2026-08-29T2331-d2ca.md`
+
+### MEDIUM
+
+- **A pantry mark re-applied after being removed does not re-hide a line the user previously restored** (`lib/features/shopping/shopping_screen.dart:161`, cf. `lib/features/shopping/shopping_copy.dart:175`) -- residual of the `restored`-flag finding fixed in the same pass. `_setLine` now clamps `restored` to `false` unless the line's status is `omittedPantryMarked`, so an inert flag is dropped by the next write to that line; but the sequence *Add anyway → unmark the ingredient in Pantry → re-mark it* performs no line-state write between the unmark and the re-mark, so the clamp never fires and the stored `restored: true` still routes the line to **To buy** via `sectionFor`. The user sees a pantry mark that appears to have had no effect; the explain sheet's "Back to pantry" does render in that state and clears it. Closing it properly needs the pantry write path to clear `restored` for the ingredient's `m:` line keys — a cross-feature write into `shopping_line_state` coupled to the MVP-015 key format, on a card already approved Done — or a mark-generation stamp on the overlay row. It is also a defensible product reading that "Add anyway" is a durable statement of intent that a later mark should not silently overturn; that question should be settled before either implementation. Full review: `wt/31/.orch/redteam-impl-handoff-orch-31-2026-08-29T2331-d2ca.md`
+  **Status:** OPEN
+
+---
+
 ## integration -- 2026-08-29
 
 Full review: /home/davidlinux/.claude/reviews/redteam-mvp003-integration-verify-2026-08-28T1904-03fd.md

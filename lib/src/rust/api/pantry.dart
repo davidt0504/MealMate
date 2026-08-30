@@ -10,7 +10,7 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
 import 'recipe.dart';
 
-// These functions are ignored because they are not marked as `pub`: `list_in`, `set_in`, `to_dto`
+// These functions are ignored because they are not marked as `pub`: `list_in`, `set_in`, `set_many_in`, `to_dto`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `clone`, `eq`, `fmt`
 
 /// Everything this household can mark — the catalog plus its own custom ingredients — each
@@ -28,6 +28,19 @@ Future<PantryEntryDto> setPantryMark({
 }) => RustLib.instance.api.crateApiPantrySetPantryMark(
   householdId: householdId,
   ingredient: ingredient,
+  marked: marked,
+);
+
+/// Marks or unmarks every identity in one transaction and returns only the refs whose mark
+/// actually changed — the set an Undo sends back, so a pre-existing mark is never cleared
+/// (MVP-016 purchased→pantry). Any absent or foreign identity fails the whole batch.
+Future<List<IngredientRefDto>> setPantryMarks({
+  required String householdId,
+  required List<IngredientRefDto> ingredients,
+  required bool marked,
+}) => RustLib.instance.api.crateApiPantrySetPantryMarks(
+  householdId: householdId,
+  ingredients: ingredients,
   marked: marked,
 );
 

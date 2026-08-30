@@ -12,8 +12,58 @@ import 'planned_meals.dart';
 import 'planning.dart';
 import 'recipe.dart';
 
-// These functions are ignored because they are not marked as `pub`: `contribution_from_domain`, `derive_in`, `from_domain`, `group_from_domain`, `line_from_domain`, `reason_from_domain`, `status_from_domain`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
+// These functions are ignored because they are not marked as `pub`: `contribution_from_domain`, `delete_item_in`, `derive_in`, `from_domain`, `group_from_domain`, `item_from_domain`, `line_from_domain`, `load_view_in`, `reason_from_domain`, `reset_in`, `save_item_in`, `set_state_in`, `status_from_domain`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
+
+Future<ShoppingViewDto> loadShoppingView({
+  required String householdId,
+  required String fromDate,
+  required String toDate,
+}) => RustLib.instance.api.crateApiShoppingLoadShoppingView(
+  householdId: householdId,
+  fromDate: fromDate,
+  toDate: toDate,
+);
+
+/// Stores one line's state. The caller sends only the key and the flags: Rust re-derives the
+/// list and takes the token from the line that key names, so a check can never be bound to an
+/// amount the user did not see, and a key absent from the derivation is a typed error rather
+/// than an invisible row. Returns what was stored.
+Future<ShoppingLineStateDto> setShoppingLineState({
+  required String householdId,
+  required String fromDate,
+  required String toDate,
+  required ShoppingLineStateDto state,
+}) => RustLib.instance.api.crateApiShoppingSetShoppingLineState(
+  householdId: householdId,
+  fromDate: fromDate,
+  toDate: toDate,
+  state: state,
+);
+
+Future<ShoppingManualItemDto> saveShoppingManualItem({
+  required ShoppingManualItemDto item,
+}) => RustLib.instance.api.crateApiShoppingSaveShoppingManualItem(item: item);
+
+Future<void> deleteShoppingManualItem({
+  required String householdId,
+  required String itemId,
+}) => RustLib.instance.api.crateApiShoppingDeleteShoppingManualItem(
+  householdId: householdId,
+  itemId: itemId,
+);
+
+/// "Start over": clears this window's line states and the checked manual items; unchecked
+/// items and the derivation itself are untouched.
+Future<void> resetShoppingList({
+  required String householdId,
+  required String fromDate,
+  required String toDate,
+}) => RustLib.instance.api.crateApiShoppingResetShoppingList(
+  householdId: householdId,
+  fromDate: fromDate,
+  toDate: toDate,
+);
 
 /// Derives (never stores) the pantry-aware shopping projection for `from_date..=to_date`.
 /// Dates are caller-supplied civil dates: Rust never reads the clock (invariant 20).
@@ -162,6 +212,48 @@ class ShoppingLineDto {
           contributions == other.contributions;
 }
 
+/// One derived line's user state. `changed` and `checked_against` are output only: `changed`
+/// is `checked && checked_against != quantity_token(line)`, so a check made against a
+/// different amount is reported rather than silently kept (MVP-016 decision 2).
+class ShoppingLineStateDto {
+  final String key;
+  final bool checked;
+  final bool hidden;
+  final bool restored;
+  final bool changed;
+  final String? checkedAgainst;
+
+  const ShoppingLineStateDto({
+    required this.key,
+    required this.checked,
+    required this.hidden,
+    required this.restored,
+    required this.changed,
+    this.checkedAgainst,
+  });
+
+  @override
+  int get hashCode =>
+      key.hashCode ^
+      checked.hashCode ^
+      hidden.hashCode ^
+      restored.hashCode ^
+      changed.hashCode ^
+      checkedAgainst.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ShoppingLineStateDto &&
+          runtimeType == other.runtimeType &&
+          key == other.key &&
+          checked == other.checked &&
+          hidden == other.hidden &&
+          restored == other.restored &&
+          changed == other.changed &&
+          checkedAgainst == other.checkedAgainst;
+}
+
 /// `OmittedPantryMarked` lines are still returned in full so the UI can offer restore; a
 /// pantry mark suppresses a purchase but never proves quantity (invariant 6).
 enum ShoppingLineStatusDto { needed, omittedPantryMarked }
@@ -203,4 +295,76 @@ class ShoppingListDto {
           groups == other.groups &&
           nonRecipeComponents == other.nonRecipeComponents &&
           contributionCount == other.contributionCount;
+}
+
+/// A household-owned manual item; a blank `id` mints one, as `RecipeDto` does.
+class ShoppingManualItemDto {
+  final String id;
+  final String householdId;
+  final String name;
+  final String? note;
+  final bool checked;
+
+  const ShoppingManualItemDto({
+    required this.id,
+    required this.householdId,
+    required this.name,
+    this.note,
+    required this.checked,
+  });
+
+  @override
+  int get hashCode =>
+      id.hashCode ^
+      householdId.hashCode ^
+      name.hashCode ^
+      note.hashCode ^
+      checked.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ShoppingManualItemDto &&
+          runtimeType == other.runtimeType &&
+          id == other.id &&
+          householdId == other.householdId &&
+          name == other.name &&
+          note == other.note &&
+          checked == other.checked;
+}
+
+/// The derivation plus both overlays, read sequentially (not in one transaction): a write
+/// landing between the reads shows on the next refresh. States whose key is absent from the
+/// derivation are dropped from `line_states` — they stay in storage, and
+/// `orphaned_line_state_count` reports how many, so the screen can say that earlier edits no
+/// longer apply instead of silently losing them (the card's stop condition).
+class ShoppingViewDto {
+  final ShoppingListDto list;
+  final List<ShoppingLineStateDto> lineStates;
+  final List<ShoppingManualItemDto> manualItems;
+  final int orphanedLineStateCount;
+
+  const ShoppingViewDto({
+    required this.list,
+    required this.lineStates,
+    required this.manualItems,
+    required this.orphanedLineStateCount,
+  });
+
+  @override
+  int get hashCode =>
+      list.hashCode ^
+      lineStates.hashCode ^
+      manualItems.hashCode ^
+      orphanedLineStateCount.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ShoppingViewDto &&
+          runtimeType == other.runtimeType &&
+          list == other.list &&
+          lineStates == other.lineStates &&
+          manualItems == other.manualItems &&
+          orphanedLineStateCount == other.orphanedLineStateCount;
 }

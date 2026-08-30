@@ -13,6 +13,7 @@ import 'package:meal_mate/features/recipes/recipe_form_screen.dart';
 import 'package:meal_mate/features/recipes/recipe_list_screen.dart';
 import 'package:meal_mate/features/restrictions/restrictions_screen.dart';
 import 'package:meal_mate/features/settings/settings_screen.dart';
+import 'package:meal_mate/features/shopping/shopping_screen.dart';
 
 /// Plan is home: the product's default state is "this week is covered" (PRD v3 §15).
 const homeLocation = '/plan';
@@ -95,10 +96,7 @@ GoRouter buildRouter({String initialLocation = homeLocation}) => GoRouter(
           routes: [
             GoRoute(
               path: '/shopping',
-              builder: (_, _) => const PlaceholderScreen(
-                title: 'Shopping',
-                message: 'Your derived shopping list arrives with MVP-016.',
-              ),
+              builder: (_, _) => const ShoppingScreen(),
             ),
           ],
         ),

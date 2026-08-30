@@ -6,6 +6,9 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
+use household_core::IdError;
+use thiserror::Error;
+
 use crate::{
     CivilDate, IngredientRef, MealComponent, MealSlot, PlannedMeal, PlannedMealId, Quantity,
     QuantityRange, Rational, Recipe, RecipeId, Unit, UnitKind,
@@ -13,6 +16,67 @@ use crate::{
 
 /// Bump when a rule below changes what a given snapshot derives to (invariant 17).
 pub const SHOPPING_ALGORITHM_VERSION: u32 = 1;
+
+// Same shape as `recipe.rs`'s and `planned_meal.rs`'s: each module carries its own copy
+// because a `macro_rules!` is textually scoped and neither is exported.
+macro_rules! id_newtype {
+    ($name:ident) => {
+        #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+        pub struct $name(String);
+
+        impl $name {
+            /// Accepts the id verbatim; rejects empty/whitespace, never trims.
+            pub fn new(raw: impl Into<String>) -> Result<Self, IdError> {
+                let raw = raw.into();
+                if raw.trim().is_empty() {
+                    Err(IdError::Empty)
+                } else {
+                    Ok(Self(raw))
+                }
+            }
+
+            pub fn as_str(&self) -> &str {
+                &self.0
+            }
+        }
+    };
+}
+
+// A manual shopping item (MVP-016): household-scoped, not window-keyed, so "batteries, not
+// bought yet" carries into the next cycle.
+id_newtype!(ShoppingManualItemId);
+
+/// Validation failures on a caller-supplied shopping item or line state. Raised at the bridge
+/// before storage, and by storage as defence in depth.
+#[derive(Debug, Error, PartialEq, Eq)]
+pub enum ShoppingError {
+    #[error("shopping item name must not be blank")]
+    BlankName,
+    #[error("shopping line key must not be blank")]
+    BlankKey,
+    #[error("shopping line key {0:?} is not in the current list")]
+    UnknownLineKey(String),
+    #[error("a checked shopping line must carry the quantity it was checked against")]
+    CheckWithoutQuantity,
+}
+
+/// The canonical token of a line's quantity + unit, stored beside a check so a later read can
+/// tell whether the amount the user checked against is still the amount shown. Deterministic
+/// and injective over `(Quantity, Unit)`: `Rational` is gcd-normalised, and the `Other` text
+/// is escaped the way key segments are.
+pub fn quantity_token(quantity: &Quantity, unit: &Unit) -> String {
+    let amount = match quantity {
+        Quantity::Unknown => "unknown".to_owned(),
+        Quantity::Exact(r) => format!("exact:{r}"),
+        Quantity::Range(range) => format!("range:{}-{}", range.min(), range.max()),
+    };
+    let unit = match unit {
+        Unit::None => "none".to_owned(),
+        Unit::Known(kind) => format!("known:{}", kind.as_str()),
+        Unit::Other(text) => format!("other={}", escape_segment(text)),
+    };
+    format!("{amount}|{unit}")
+}
 
 /// The exact integer conversion families. Cross-system pairs (cup↔ml, oz↔g) are deliberately
 /// absent: 1 cup = 236.588 ml is not exact, and a guessed conversion is the card's stop
@@ -2007,5 +2071,59 @@ mod tests {
         assert!(lines
             .iter()
             .all(|l| l.separate_reason == Some(SeparateReason::UnitNotCombinable)));
+    }
+
+    // --- MVP-016 step 2: the quantity token and the manual-item id -------------------------
+
+    #[test]
+    fn quantity_token_distinguishes_every_shape() {
+        use crate::quantity_token;
+        let quantities = [exact(3, 2), range((1, 1), (2, 1)), Quantity::Unknown];
+        let units = [
+            Unit::None,
+            known(UnitKind::Cup),
+            Unit::Other("clove".into()),
+            Unit::Other("clo:ve".into()),
+        ];
+        let mut seen = std::collections::BTreeSet::new();
+        for q in &quantities {
+            for u in &units {
+                assert!(seen.insert(quantity_token(q, u)), "{q:?} {u:?} collided");
+            }
+        }
+        assert_eq!(seen.len(), 12);
+        assert_eq!(
+            quantity_token(&exact(3, 2), &known(UnitKind::Cup)),
+            "exact:3/2|known:cup"
+        );
+        assert_eq!(
+            quantity_token(&range((1, 1), (2, 1)), &Unit::None),
+            "range:1/1-2/1|none"
+        );
+        assert_eq!(
+            quantity_token(&Quantity::Unknown, &Unit::Other("clo:ve".into())),
+            "unknown|other=clo\\:ve"
+        );
+    }
+
+    #[test]
+    fn quantity_token_is_stable_for_equal_inputs() {
+        use crate::quantity_token;
+        // `2/4` normalises to `1/2` in `Rational::new`, so equal values yield equal tokens.
+        assert_eq!(
+            quantity_token(&exact(2, 4), &known(UnitKind::Gram)),
+            quantity_token(&exact(1, 2), &known(UnitKind::Gram))
+        );
+        assert_ne!(
+            quantity_token(&exact(1, 2), &known(UnitKind::Gram)),
+            quantity_token(&exact(1, 2), &known(UnitKind::Kilogram))
+        );
+    }
+
+    #[test]
+    fn a_blank_manual_item_id_is_rejected() {
+        use crate::ShoppingManualItemId;
+        assert!(ShoppingManualItemId::new("  ").is_err());
+        assert_eq!(ShoppingManualItemId::new("mi-1").unwrap().as_str(), "mi-1");
     }
 }

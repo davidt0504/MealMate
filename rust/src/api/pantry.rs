@@ -34,6 +34,32 @@ pub fn set_pantry_mark(
     crate::db::with(|conn| set_in(conn, &household_id, ingredient, marked))
 }
 
+/// Marks or unmarks every identity in one transaction and returns only the refs whose mark
+/// actually changed — the set an Undo sends back, so a pre-existing mark is never cleared
+/// (MVP-016 purchased→pantry). Any absent or foreign identity fails the whole batch.
+pub fn set_pantry_marks(
+    household_id: String,
+    ingredients: Vec<IngredientRefDto>,
+    marked: bool,
+) -> Result<Vec<IngredientRefDto>, KimattaError> {
+    crate::db::with(|conn| set_many_in(conn, &household_id, ingredients, marked))
+}
+
+pub(crate) fn set_many_in(
+    conn: &mut Connection,
+    household_id: &str,
+    ingredients: Vec<IngredientRefDto>,
+    marked: bool,
+) -> Result<Vec<IngredientRefDto>, KimattaError> {
+    let id = HouseholdId::new(household_id)?;
+    let refs = ingredients
+        .into_iter()
+        .map(ref_to_domain)
+        .collect::<Result<Vec<IngredientRef>, _>>()?;
+    let changed = kimatta_storage::set_pantry_marks(conn, &id, &refs, marked)?;
+    Ok(changed.iter().map(ref_from_domain).collect())
+}
+
 fn to_dto(entry: PantryEntry) -> PantryEntryDto {
     PantryEntryDto {
         ingredient: ref_from_domain(&entry.ingredient),

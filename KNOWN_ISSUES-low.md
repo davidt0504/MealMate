@@ -743,3 +743,94 @@ Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-orch-29-2026-
 - **Re-export rationale comment cites a name no item produces** (`rust/crates/food-domain/src/lib.rs:20`) -- the comment says a glob would expose `food_domain::derive`, but `shopping.rs` defines no `derive`; the function is `derive_shopping_list`, which a glob would re-export under that name. The stated reason for the explicit list describes nothing that could happen. Fix: state the real reason (a reviewable crate-root surface) or drop the comment.
   Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-orch-29-2026-08-29T2126-026f.md
   **Status:** OPEN
+
+---
+
+## orch/31 -- 2026-08-29
+
+Source: /home/davidlinux/.claude/reviews/impl-handoff-orch-31-2026-08-29T2229-6d2a.md
+Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-orch-31-2026-08-29T2237-2591.md
+
+### LOW
+
+- **`checked ⇔ checked_against` normalised in only one direction** (`rust/crates/kimatta-storage/src/lib.rs:2449`) -- the doc claims the pair "can never drift", but only `checked = false → checked_against = None` is forced; `checked = true` with no token reaches the INSERT and fails the table CHECK (`lib.rs:383`) as an untyped `Sqlite("CHECK constraint failed")`, unlike the typed blank-key case three lines above. Unreachable from the bridge today. Fix: reject the shape with a typed `ShoppingError` before the transaction, or narrow the doc comment.
+  Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-orch-31-2026-08-29T2237-2591.md
+  **Status:** RESOLVED 2026-08-29 -- `set_shopping_line_state` now rejects `checked = true` with no token as `Shopping(CheckWithoutQuantity)` before the transaction, and the doc comment names both directions; pinned by `a_check_without_its_quantity_is_a_typed_error_not_a_check_violation`.
+
+---
+
+- **No retention or purge for past windows' shopping line states** (`rust/crates/kimatta-storage/src/lib.rs:2615`) -- rows are keyed `(household, from, to, line_key)` and the only deletes are this window's rows and the household cascade, so every past cycle window persists forever. Volume is negligible (~1,600 rows/year); the edge is that re-deriving an old window resurrects last month's checks unmarked as stale. Fix: document the unbounded retention in the card, or purge windows older than N cycles.
+  Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-orch-31-2026-08-29T2237-2591.md
+  **Status:** RESOLVED 2026-08-29 -- documentation branch taken: the MVP-016 card's resolved-decisions line now states that line states are retained per window indefinitely and that re-deriving a past window resurrects that window's own checks by design. No purge was added; deleting user data needs a retention policy no PRD or decision record sets.
+
+---
+
+## orch/31 -- 2026-08-29
+
+Source: rust/src/api/shopping.rs
+Full review: /home/davidlinux/.claude/reviews/redteam-api-shopping-2026-08-29T2300-7c38.md
+
+### LOW
+
+- **`set_shopping_line_state` accepts two input fields it silently discards** (`rust/src/api/shopping.rs:70`) -- the command reuses its output DTO, so callers must supply `changed` and `checked_against`; neither is read (line 192 overwrites the token, `changed` is never referenced), so a client passing a stale token gets no error. Fix: take the four used fields as parameters, or document output-only on the type as well as the command.
+  Full review: /home/davidlinux/.claude/reviews/redteam-api-shopping-2026-08-29T2300-7c38.md
+  **Status:** OPEN
+
+---
+
+- **Dead `pub(crate)` widening with a false "Shared with `shopping.rs`" doc** (`rust/src/api/recipe.rs:210`) -- `quantity_to_domain` and `unit_to_domain` (also `recipe.rs:244`) were widened and documented as shared, but grep shows their only call sites are `recipe.rs:292`/`:293`; `shopping.rs` imports only the `_from_domain` pair and computes the token from the domain line. Rust does not warn on unused visibility. Fix: revert both to private and drop the two doc lines.
+  Full review: /home/davidlinux/.claude/reviews/redteam-api-shopping-2026-08-29T2300-7c38.md
+  **Status:** RESOLVED 2026-08-29 -- both reverted to private and the two doc lines dropped (MVP-016 Flutter round).
+
+---
+
+- **`delete_item_in` skips the household existence check its four siblings make** (`rust/src/api/shopping.rs:227`) -- `kimatta_storage::delete_shopping_manual_item` (`kimatta-storage/src/lib.rs:2600`) goes straight to the DELETE, so a nonexistent household id yields "no shopping item mi-1 in this household" — naming the item when the household is the wrong thing. Diagnostics only. Fix: add `require_household` before the DELETE.
+  Full review: /home/davidlinux/.claude/reviews/redteam-api-shopping-2026-08-29T2300-7c38.md
+  **Status:** OPEN
+
+---
+
+- **`hidden` and `restored` can both be true, and neither field is defined** (`rust/src/api/shopping.rs:171`) -- `clearing` tests only "no flag set" and the table CHECK is `checked + hidden + restored > 0`, so a row carrying both opposites stores fine; the DTO doc documents `changed`/`checked_against` but never says what `hidden` or `restored` mean, leaving rendering undefined. Fix: reject the pair with a typed `ShoppingError` at `set_state_in`, or document precedence on the DTO.
+  Full review: /home/davidlinux/.claude/reviews/redteam-api-shopping-2026-08-29T2300-7c38.md
+  **Status:** OPEN
+
+---
+
+- **Every non-clearing line-state write re-derives the whole window** (`rust/src/api/shopping.rs:175`) -- `set_state_in` runs a full `load_shopping_list` to read one token, so checking off N lines costs N derivations plus N transactions, with no batch form (unlike `set_pantry_marks`); the derive and write are separate transactions, so a concurrent planner edit binds a stale token. Fix: measure first; if it matters, batch the write or wrap derive+write in one transaction.
+  Full review: /home/davidlinux/.claude/reviews/redteam-api-shopping-2026-08-29T2300-7c38.md
+  **Status:** OPEN
+
+## orch/31 -- 2026-08-29
+
+Source: /home/davidlinux/.claude/reviews/impl-handoff-orch-31-2026-08-29T2323-144d.md
+Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-orch-31-2026-08-29T2331-d2ca.md
+
+### LOW
+
+- **`describeCheckedAgainst` breaks its own verbatim-fallback contract** (`lib/features/shopping/shopping_copy.dart:82`) -- `_fraction` returns its input unchanged on an unsplittable body, so the `null` sentinel never fires for an `exact:`/`range:` prefix and garbage is relabelled with a unit ("was 1.5 cup") instead of falling back verbatim as the docstring at `:52` promises. Fix: make `_fraction` return `String?` and propagate `null`; add an `exact:1.5|known:cup` copy test.
+  Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-orch-31-2026-08-29T2331-d2ca.md
+  **Status:** OPEN
+
+---
+
+- **"Start over" confirmation under-counts what it clears** (`lib/features/shopping/shopping_screen.dart:197`) -- `resetBody` counts the filtered `line_states` (orphans dropped at `rust/src/api/shopping.rs:124`), but `reset_shopping_list` deletes every row for the window (`rust/crates/kimatta-storage/src/lib.rs:2628`), so the dialog states a smaller number than the action removes. Fix: add `orphanedLineStateCount` to the first argument, or reword to describe what the user can see.
+  Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-orch-31-2026-08-29T2331-d2ca.md
+  **Status:** OPEN
+
+---
+
+- **"Add anyway" silently discards an existing check** (`lib/features/shopping/shopping_screen.dart:387`) -- the Already-have row sends `checked: false` unconditionally, and a line reaches that section still carrying `checked: true` (the key is status-independent), so restoring a line the user had checked and pushed to the pantry drops the check and its token invisibly. Fix: pass `view.stateFor(line.key)?.checked ?? false` as the sibling "Put back" already does for `restored`.
+  Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-orch-31-2026-08-29T2331-d2ca.md
+  **Status:** OPEN
+
+---
+
+- **`_writing` survives a cycle change and a write can outlive its notifier** (`lib/features/shopping/shopping_screen.dart:106`) -- the set is never cleared when `_offset` changes and line keys carry no window bound, so the same key renders disabled in the next cycle; `shoppingProvider` is `autoDispose.family`, so the in-flight write's `_republish` then throws on a disposed notifier and reports a failure for a write that succeeded. Fix: clear `_writing` on offset change and no-op `_republish` when unmounted.
+  Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-orch-31-2026-08-29T2331-d2ca.md
+  **Status:** OPEN
+
+---
+
+- **New-item `_write` key is dead and "Add item" is never disabled** (`lib/features/shopping/shopping_screen.dart:235`) -- a save keyed `existing?.id ?? ''` is never consulted (`_manualRow` guards on `item.id`, the Add button has no guard), and Rust mints a fresh id per blank-id save, so a double submit creates two identical items. Fix: guard the Add button on `_writing.contains('')`, or drop the empty key and disable the button for the save.
+  Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-orch-31-2026-08-29T2331-d2ca.md
+  **Status:** OPEN
