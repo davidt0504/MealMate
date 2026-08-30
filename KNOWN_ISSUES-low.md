@@ -667,3 +667,41 @@ Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-orch-25-2026-
 - **Unreachable `householdId == null` guard disables every pantry row silently** (`lib/features/pantry/pantry_screen.dart:126`) -- `_body` runs only in `pantryProvider`'s `AsyncData` arm and `PantryNotifier.build` awaits the household id first, so the null arm cannot fire; if the provider graph ever changed it would make every switch inert with no message. Fix: drop the null arm, or render an explicit message instead of silently disabling the controls.
   Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-orch-25-2026-08-29T1633-ef03.md
   **Status:** OPEN
+
+---
+
+## orch/27 -- 2026-08-29
+
+Source: /home/davidlinux/.claude/reviews/impl-handoff-orch-27-2026-08-29T1752-c55a.md
+Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-orch-27-2026-08-29T1804-63bd.md
+
+### LOW
+
+- **`CycleOverflow` names two different anchors for the same failure** (`rust/crates/food-domain/src/lib.rs:228`) -- `window_containing`'s `overflow` closure reports the *stored* anchor for its three early guards while the terminal `Self::new` reports the *computed* window anchor, so the error's `anchor` field means different things depending on which guard fired. The test matches only the variant. Fix: report the requested window's anchor consistently, or carry the offset in the variant.
+  Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-orch-27-2026-08-29T1804-63bd.md
+  **Status:** OPEN
+
+---
+
+- **The `maxTabPresses` rationale still describes the `/plan` placeholder** (`test/app_test.dart:781`) -- "two presses today, since Plan contributes only `Cover My Week`" predates `PlannerScreen`, whose app bar alone adds two `IconButton`s ahead of it, plus per-cell Add buttons and lock switches. The bound of 12 still holds, so the comment misleads without failing. Fix: restate the count against the planner's leading focusables, or drop the number and keep the bounded-traversal rationale.
+  Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-orch-27-2026-08-29T1804-63bd.md
+  **Status:** OPEN
+
+---
+
+- **Planner strings outside `planner_copy.dart` escape the safety-honesty pin** (`lib/features/planning/planner_screen.dart:451`) -- `'No recipes in your library yet.'`, the confirm-dialog body (:161) and the sheet headings live in the widget file, so `plannerCopySamples` -- documented as "Every string the planner renders" -- never feeds them to the invariant-10 assurance regex. Today's strings all pass; nothing stops a future one. Fix: move them into `planner_copy.dart` and sample them.
+  Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-orch-27-2026-08-29T1804-63bd.md
+  **Status:** OPEN
+
+---
+
+## orch/27 -- 2026-08-29
+
+Source: /home/davidlinux/.claude/reviews/impl-handoff-orch-27-2026-08-29T1841-520a.md
+Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-orch-27-2026-08-29T1900-494b.md
+
+### LOW
+
+- **Per-cell action controls carry no cell context for a screen reader** (`lib/features/planning/planner_screen.dart:298`) -- every cell renders an identically-labelled `Add`, and the component menu's `Move…`/`Scale…`/`Remove` repeat per component; the `Card` has a `ValueKey` but no `Semantics` container, so explore-by-touch announces "Add" seven times with no day or slot. `labeledTapTargetGuideline` passes, so no test sees it. Fix: wrap each cell in `Semantics(container: true, label: '$date · ${slotLabel(slot)}')` and sample the label from `planner_copy.dart`.
+  Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-orch-27-2026-08-29T1900-494b.md
+  **Status:** OPEN

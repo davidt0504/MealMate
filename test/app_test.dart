@@ -12,8 +12,11 @@ import 'package:meal_mate/features/settings/health_provider.dart';
 import 'package:meal_mate/src/rust/api/error.dart';
 import 'package:meal_mate/src/rust/api/health.dart';
 import 'package:meal_mate/src/rust/api/household.dart';
+import 'package:meal_mate/features/planning/planner_copy.dart';
+import 'package:meal_mate/features/planning/planner_provider.dart';
 import 'package:meal_mate/features/planning/planning_cycle.dart';
 import 'package:meal_mate/features/planning/planning_provider.dart';
+import 'package:meal_mate/src/rust/api/planned_meals.dart';
 import 'package:meal_mate/features/recipes/recipes_provider.dart';
 import 'package:meal_mate/features/recipes/restriction_warnings.dart';
 import 'package:meal_mate/features/pantry/pantry_copy.dart';
@@ -516,6 +519,117 @@ class _FakePantryNotifier extends PantryNotifier {
   }
 }
 
+/// The *real* `PlannerNotifier` with only its five bridge seams replaced, as
+/// `_FakePantryNotifier` is: its own `build`, `refresh`, `save`, `setLock` and `delete` run,
+/// so the republish logic is what every planner widget assertion verifies.
+class _FakePlannerNotifier extends PlannerNotifier {
+  _FakePlannerNotifier({
+    this.window,
+    this.meals,
+    this.save_,
+    this.lock,
+    this.delete_,
+    this.seenWindow,
+  });
+
+  final FutureOr<PlanningCycleDto> Function(int offset)? window;
+
+  /// Records what `_fetch` anchored the read to. Separate from [window] so the existing
+  /// `cycleWindow:` hooks keep their one-argument shape.
+  final void Function(String today, int offset)? seenWindow;
+  final FutureOr<List<PlannedMealDto>> Function()? meals;
+  final Future<PlannedMealDto> Function(PlannedMealDto)? save_;
+  final Future<PlannedMealDto> Function(String, String, bool)? lock;
+  final Future<void> Function(String, String)? delete_;
+
+  @override
+  Future<PlanningCycleDto> fetchWindow(
+    String householdId,
+    String today,
+    int offset,
+  ) async {
+    seenWindow?.call(today, offset);
+    return (window ?? (_) => okCycle)(offset);
+  }
+
+  @override
+  Future<List<PlannedMealDto>> fetchMeals(
+    String householdId,
+    String from,
+    String to,
+  ) async => (meals ?? () => const <PlannedMealDto>[])();
+
+  @override
+  Future<PlannedMealDto> storeMeal(PlannedMealDto meal) {
+    final fake = save_;
+    if (fake == null) {
+      throw StateError('this test saves a meal without a `savePlanned:` hook');
+    }
+    return fake(meal);
+  }
+
+  @override
+  Future<PlannedMealDto> writeLock(
+    String householdId,
+    String mealId,
+    bool locked,
+  ) {
+    final fake = lock;
+    if (fake == null) {
+      throw StateError('this test locks a meal without a `lockPlanned:` hook');
+    }
+    return fake(householdId, mealId, locked);
+  }
+
+  @override
+  Future<void> removeMeal(String householdId, String mealId) {
+    final fake = delete_;
+    if (fake == null) {
+      throw StateError(
+        'this test deletes a meal without a `deletePlanned:` hook',
+      );
+    }
+    return fake(householdId, mealId);
+  }
+}
+
+/// The six kind tokens the real bridge returns (`known_meal_component_kinds`).
+const componentKindTokens = [
+  'recipe',
+  'leftovers',
+  'dining_out',
+  'frozen_quick',
+  'freeform',
+  'open',
+];
+
+/// A stored occurrence: `okSummary`'s recipe on the first dinner of `okCycle`.
+const okPlanned = PlannedMealDto(
+  id: 'pm-1',
+  householdId: 'h-1',
+  date: '2026-08-29',
+  slot: MealSlotDto.dinner,
+  components: [MealComponentDto(kind: 'recipe', recipeId: 'r-1')],
+  locked: false,
+);
+
+PlannedMealDto planned({
+  String id = 'pm-1',
+  String date = '2026-08-29',
+  MealSlotDto slot = MealSlotDto.dinner,
+  List<MealComponentDto> components = const [
+    MealComponentDto(kind: 'recipe', recipeId: 'r-1'),
+  ],
+  bool locked = false,
+}) => PlannedMealDto(
+  id: id,
+  householdId: 'h-1',
+  date: date,
+  slot: slot,
+  components: components,
+  locked: locked,
+);
+
 /// One catalog identity carrying an alias that is not a substring of its canonical name, and
 /// one custom identity, so alias search and the custom subtitle both have something to bite on.
 const chickpeasRef = IngredientRefDto.catalog(id: 'i-chickpeas');
@@ -599,8 +713,28 @@ Widget harness({
   Future<StarterInstallReportDto> Function(String)? starterInstall,
   FutureOr<List<PantryEntryDto>> Function()? pantry,
   Future<PantryEntryDto> Function(String, IngredientRefDto, bool)? setMark,
+  FutureOr<PlanningCycleDto> Function(int)? cycleWindow,
+  FutureOr<List<PlannedMealDto>> Function()? planner,
+  Future<PlannedMealDto> Function(PlannedMealDto)? savePlanned,
+  Future<PlannedMealDto> Function(String, String, bool)? lockPlanned,
+  Future<void> Function(String, String)? deletePlanned,
+  FutureOr<List<String>> Function()? componentKinds,
 }) => ProviderScope(
   overrides: [
+    // Unconditional: Plan is home, so every launch reaches the planner, and an un-overridden
+    // provider would reach the real bridge.
+    plannerProvider.overrideWith(
+      () => _FakePlannerNotifier(
+        window: cycleWindow,
+        meals: planner,
+        save_: savePlanned,
+        lock: lockPlanned,
+        delete_: deletePlanned,
+      ),
+    ),
+    mealComponentKindsProvider.overrideWith(
+      (_) async => (componentKinds ?? () => componentKindTokens)(),
+    ),
     // Unconditional, like every other bridge seam here: `App` subscribes to this on the
     // first frame, and an un-overridden provider would reach the real bridge, which
     // `flutter test` never initialises.
@@ -652,10 +786,13 @@ Widget harness({
 const labels = ['Recipes', 'Plan', 'Pantry', 'Shopping', 'Settings'];
 
 /// Upper bound for the traversal test. The bar is entered one press after the
-/// last focusable ahead of it — two presses today, since Plan contributes only
-/// `Cover My Week`. 12 leaves room for a real planner screen's controls before
-/// the traversal has diverged far enough that failing is the right answer.
-const maxTabPresses = 12;
+/// last focusable ahead of it, and Plan now contributes a count that scales with
+/// the window: two cycle arrows, `Cover My Week`, then per cell either `Add` or a
+/// lock switch and its component menus. Deliberately not restated as a number —
+/// pinning one is what went stale when the planner replaced the placeholder. The
+/// bound exists only to stop a broken traversal looping forever, so it is set
+/// well above any plausible count rather than just above today's.
+const maxTabPresses = 60;
 
 Finder tab(String label) =>
     find.descendant(of: find.byType(NavigationBar), matching: find.text(label));
@@ -927,7 +1064,7 @@ void main() {
 
     // Expected-to-pass: a brittleness fix, not a bug fix. Bounded traversal
     // rather than a fixed count, because how many focusables sit ahead of the
-    // bar depends on the Plan screen's tree, which MVP-013 replaces. What is
+    // bar depends on the Plan screen's tree, which MVP-013 has replaced. What is
     // asserted is that the bar is reachable at all, not where a magic number
     // happens to land.
     var reachedBar = false;
@@ -4096,6 +4233,951 @@ void main() {
     handle.dispose();
   });
 
+  // --- MVP-013: planner ---------------------------------------------------------------
+
+  Finder cell(String date, MealSlotDto slot) =>
+      find.byKey(ValueKey('cell:$date:${slot.name}'));
+  Finder inCell(String date, MealSlotDto slot, Finder matching) =>
+      find.descendant(of: cell(date, slot), matching: matching);
+  // `byType` matches the exact generic instantiation, which is private to the screen.
+  final menuButton = find.byWidgetPredicate((w) => w is PopupMenuButton);
+
+  /// Opens the overflow menu of the only component in a cell and picks one entry.
+  Future<void> pickAction(
+    WidgetTester tester,
+    String date,
+    MealSlotDto slot,
+    String action,
+  ) async {
+    await tester.tap(inCell(date, slot, menuButton));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(action).last);
+    await tester.pumpAndSettle();
+  }
+
+  group('PlannerNotifier', () {
+    /// `overrideWith` runs its argument once per family member, and a notifier instance binds
+    /// to exactly one element for its whole life (`arg` and `_element` are `late final`), so a
+    /// test that touches two offsets must hand over a factory rather than an instance — and
+    /// even a single-offset test must keep its element alive, since under `autoDispose` the
+    /// element is disposed the moment the read that built it lets go, and the next read builds
+    /// a *second* one that the same instance cannot bind to.
+    ///
+    /// [clock] replaces the wall clock the anchor is built and re-read from; it is called
+    /// once per read, so a counter closure hands out a different date each time.
+    ProviderContainer containerFrom(
+      PlannerNotifier Function() create, {
+      List<int> offsets = const [0],
+      String Function()? clock,
+    }) {
+      final container = ProviderContainer(
+        overrides: [
+          healthReportProvider.overrideWith((_) => okReport),
+          householdProvider.overrideWith(
+            () => _FakeHouseholdNotifier(() => okHousehold, null, null),
+          ),
+          planningCycleProvider.overrideWith(
+            () =>
+                _FakePlanningCycleNotifier(null, (_, a, l, s) async => okCycle),
+          ),
+          if (clock != null) plannerTodayProvider.overrideWith((_) => clock()),
+          plannerProvider.overrideWith(create),
+        ],
+      );
+      addTearDown(container.dispose);
+      for (final offset in offsets) {
+        container.listen(plannerProvider(offset), (_, _) {});
+      }
+      return container;
+    }
+
+    ProviderContainer containerWith(_FakePlannerNotifier notifier) =>
+        containerFrom(() => notifier);
+
+    test('save on an unseen id appends in date then slot order', () async {
+      final notifier = _FakePlannerNotifier(
+        meals: () => [planned(id: 'b', date: '2026-08-31')],
+        save_: (m) async => m,
+      );
+      final container = containerWith(notifier);
+      await container.read(plannerProvider(0).future);
+      await notifier.save(
+        planned(id: 'c', date: '2026-08-30', slot: MealSlotDto.lunch),
+      );
+      await notifier.save(
+        planned(id: 'a', date: '2026-08-30', slot: MealSlotDto.breakfast),
+      );
+      final ids = container
+          .read(plannerProvider(0))
+          .value!
+          .meals
+          .map((m) => m.id);
+      expect(ids, ['a', 'c', 'b']);
+    });
+
+    test('save on a known id replaces it and re-sorts a move', () async {
+      final notifier = _FakePlannerNotifier(
+        meals: () => [planned(id: 'a'), planned(id: 'b', date: '2026-08-30')],
+        save_: (m) async => m,
+      );
+      final container = containerWith(notifier);
+      await container.read(plannerProvider(0).future);
+      await notifier.save(planned(id: 'a', date: '2026-09-01'));
+      final meals = container.read(plannerProvider(0)).value!.meals;
+      expect(meals.map((m) => m.id), ['b', 'a']);
+      expect(meals.last.date, '2026-09-01');
+    });
+
+    test('setLock republishes the stored lock state', () async {
+      final notifier = _FakePlannerNotifier(
+        meals: () => [planned()],
+        lock: (_, id, locked) async => planned(id: id, locked: locked),
+      );
+      final container = containerWith(notifier);
+      await container.read(plannerProvider(0).future);
+      await notifier.setLock('h-1', 'pm-1', true);
+      expect(
+        container.read(plannerProvider(0)).value!.meals.single.locked,
+        isTrue,
+      );
+    });
+
+    test('delete drops the occurrence', () async {
+      final notifier = _FakePlannerNotifier(
+        meals: () => [planned(id: 'a'), planned(id: 'b', date: '2026-08-30')],
+        delete_: (_, _) async {},
+      );
+      final container = containerWith(notifier);
+      await container.read(plannerProvider(0).future);
+      await notifier.delete('h-1', 'a');
+      expect(container.read(plannerProvider(0)).value!.meals.single.id, 'b');
+    });
+
+    test(
+      'a refresh that fails over a value returns the error unpublished',
+      () async {
+        var reads = 0;
+        final notifier = _FakePlannerNotifier(
+          meals: () =>
+              ++reads == 1 ? [planned()] : throw const KimattaError.notOpen(),
+        );
+        final container = containerWith(notifier);
+        await container.read(plannerProvider(0).future);
+        final error = await notifier.refresh();
+        expect(error, isA<KimattaError_NotOpen>());
+        expect(container.read(plannerProvider(0)).value!.meals, hasLength(1));
+      },
+    );
+
+    test(
+      'a cycle save re-runs build so the window follows the rhythm',
+      () async {
+        var windows = 0;
+        final notifier = _FakePlannerNotifier(
+          window: (_) {
+            windows++;
+            return okCycle;
+          },
+        );
+        final container = containerWith(notifier);
+        await container.read(plannerProvider(0).future);
+        expect(windows, 1);
+        await container
+            .read(planningCycleProvider.notifier)
+            .save(
+              'h-1',
+              anchorDate: '2026-09-01',
+              lengthDays: 3,
+              mealSlots: [MealSlotDto.dinner],
+            );
+        await container.read(plannerProvider(0).future);
+        expect(windows, 2);
+      },
+    );
+
+    test('every offset is anchored to the one shared today', () async {
+      var clockReads = 0;
+      final anchors = <String>[];
+      final container = ProviderContainer(
+        overrides: [
+          healthReportProvider.overrideWith((_) => okReport),
+          householdProvider.overrideWith(
+            () => _FakeHouseholdNotifier(() => okHousehold, null, null),
+          ),
+          planningCycleProvider.overrideWith(
+            () =>
+                _FakePlanningCycleNotifier(null, (_, a, l, s) async => okCycle),
+          ),
+          plannerTodayProvider.overrideWith((_) {
+            clockReads++;
+            return '1999-01-01';
+          }),
+          plannerProvider.overrideWith(
+            () => _FakePlannerNotifier(
+              seenWindow: (today, _) => anchors.add(today),
+            ),
+          ),
+        ],
+      );
+      addTearDown(container.dispose);
+      container.listen(plannerProvider(0), (_, _) {});
+      container.listen(plannerProvider(1), (_, _) {});
+      await container.read(plannerProvider(0).future);
+      await container.read(plannerProvider(1).future);
+      // Both offsets report the injected date, not the wall clock each build happened to see:
+      // the equality is what makes Previous/Next a sequence instead of two unrelated windows.
+      expect(anchors, ['1999-01-01', '1999-01-01']);
+      expect(clockReads, 1);
+    });
+
+    test(
+      'a refresh re-reads the clock so a stale anchor cannot persist',
+      () async {
+        var clockReads = 0;
+        final anchors = <String>[];
+        final container = ProviderContainer(
+          overrides: [
+            healthReportProvider.overrideWith((_) => okReport),
+            householdProvider.overrideWith(
+              () => _FakeHouseholdNotifier(() => okHousehold, null, null),
+            ),
+            planningCycleProvider.overrideWith(
+              () => _FakePlanningCycleNotifier(
+                null,
+                (_, a, l, s) async => okCycle,
+              ),
+            ),
+            plannerTodayProvider.overrideWith(
+              (_) => '1999-01-0${++clockReads}',
+            ),
+            plannerProvider.overrideWith(
+              () => _FakePlannerNotifier(
+                seenWindow: (today, _) => anchors.add(today),
+              ),
+            ),
+          ],
+        );
+        addTearDown(container.dispose);
+        container.listen(plannerProvider(0), (_, _) {});
+        await container.read(plannerProvider(0).future);
+        // The only affordance that re-reads the clock. Without it the shared anchor, being
+        // kept alive for the container, would hold a session open across a cycle boundary on
+        // last cycle's window with nothing able to correct it.
+        await container.read(plannerProvider(0).notifier).refresh();
+        expect(anchors, ['1999-01-01', '1999-01-02']);
+      },
+    );
+
+    test('a failed refresh leaves the anchor where it was', () async {
+      var clockReads = 0;
+      final anchors = <String>[];
+      var failing = false;
+      final container = containerFrom(
+        () => _FakePlannerNotifier(
+          window: (_) => failing ? throw const KimattaError.notOpen() : okCycle,
+          seenWindow: (today, _) => anchors.add(today),
+        ),
+        clock: () => '1999-01-0${++clockReads}',
+      );
+      await container.read(plannerProvider(0).future);
+      failing = true;
+      expect(
+        await container.read(plannerProvider(0).notifier).refresh(),
+        isA<KimattaError_NotOpen>(),
+      );
+      failing = false;
+      // Offset 1 is built only now, so what it anchors to is the anchor as the failed
+      // refresh left it rather than as it stood before.
+      container.listen(plannerProvider(1), (_, _) {});
+      await container.read(plannerProvider(1).future);
+      // The failed read tried '1999-01-02' but never committed it: the window on screen is
+      // still the one built from '1999-01-01', so Next has to be W+1 measured from that. A
+      // committed-anyway anchor would make this the *third* date and skip W+1 entirely.
+      expect(anchors, ['1999-01-01', '1999-01-02', '1999-01-01']);
+    });
+
+    test(
+      'a refresh that succeeds after a failed one commits the newer anchor',
+      () async {
+        var clockReads = 0;
+        final anchors = <String>[];
+        var failing = false;
+        final container = containerFrom(
+          () => _FakePlannerNotifier(
+            window: (_) =>
+                failing ? throw const KimattaError.notOpen() : okCycle,
+            seenWindow: (today, _) => anchors.add(today),
+          ),
+          clock: () => '1999-01-0${++clockReads}',
+        );
+        await container.read(plannerProvider(0).future);
+        final notifier = container.read(plannerProvider(0).notifier);
+        failing = true;
+        await notifier.refresh();
+        failing = false;
+        await notifier.refresh();
+        container.listen(plannerProvider(1), (_, _) {});
+        await container.read(plannerProvider(1).future);
+        // Holding the anchor back on failure must not strand it there: the next refresh that
+        // comes back is what the following offsets are measured from. Expected to pass on
+        // either side of the fix — it pins the half of the contract the fix must not break.
+        expect(anchors, [
+          '1999-01-01',
+          '1999-01-02',
+          '1999-01-03',
+          '1999-01-03',
+        ]);
+      },
+    );
+  });
+
+  testWidgets(
+    'the planner renders one cell per date and slot with Add and no weekday',
+    (tester) async {
+      useTallView(tester);
+      await tester.pumpWidget(harness());
+      await tester.pumpAndSettle();
+      expect(title('Plan'), findsOneWidget);
+      expect(find.text(windowHeading(okCycle)), findsOneWidget);
+      expect(find.text(plannerEmptyCopy), findsOneWidget);
+      for (final date in okCycle.dates) {
+        expect(
+          inCell(date, MealSlotDto.dinner, find.text('Add')),
+          findsOneWidget,
+        );
+        expect(
+          inCell(date, MealSlotDto.dinner, find.text(emptyCellCopy)),
+          findsOneWidget,
+        );
+      }
+      expect(find.byType(Card), findsNWidgets(7));
+      // The card's stop condition: no hard-coded weekday anywhere on the screen.
+      for (final day in ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']) {
+        expect(find.textContaining(day), findsNothing, reason: day);
+      }
+    },
+  );
+
+  testWidgets('adding a recipe from the picker saves one recipe component', (
+    tester,
+  ) async {
+    useTallView(tester);
+    final sent = <PlannedMealDto>[];
+    await tester.pumpWidget(
+      harness(
+        recipes: () => const [okSummary],
+        savePlanned: (m) async {
+          sent.add(m);
+          return planned(
+            id: 'pm-new',
+            date: m.date,
+            slot: m.slot,
+            components: m.components,
+          );
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(
+      inCell('2026-08-30', MealSlotDto.dinner, find.text('Add')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Pancakes'));
+    await tester.pumpAndSettle();
+    expect(sent.single.id, '');
+    expect(sent.single.date, '2026-08-30');
+    expect(sent.single.slot, MealSlotDto.dinner);
+    expect(sent.single.components, [
+      const MealComponentDto(kind: 'recipe', recipeId: 'r-1'),
+    ]);
+    expect(find.text(plannerEmptyCopy), findsNothing);
+    expect(
+      inCell('2026-08-30', MealSlotDto.dinner, find.text('Pancakes · 1×')),
+      findsOneWidget,
+    );
+  });
+
+  /// The sheet is driven with bare pumps, never `pumpAndSettle`: an unresolved section holds
+  /// a `CircularProgressIndicator`, which schedules frames forever.
+  Future<void> openPicker(WidgetTester tester) async {
+    await tester.tap(
+      inCell('2026-08-30', MealSlotDto.dinner, find.text('Add')),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+  }
+
+  testWidgets('the picker does not call an unread library empty', (
+    tester,
+  ) async {
+    useTallView(tester);
+    await tester.pumpWidget(
+      harness(recipes: () => Completer<List<RecipeSummaryDto>>().future),
+    );
+    await tester.pumpAndSettle();
+    await openPicker(tester);
+    // The first-run path: an empty plan builds no component tile, so the sheet is opened
+    // before anything has read the library. "You have no recipes" is then false, not merely
+    // incomplete.
+    expect(find.text(emptyLibraryCopy), findsNothing);
+    expect(find.byType(CircularProgressIndicator), findsWidgets);
+  });
+
+  testWidgets('the picker reports reads that failed rather than spinning', (
+    tester,
+  ) async {
+    useTallView(tester);
+    await tester.pumpWidget(
+      harness(
+        recipes: () => throw const KimattaError.notOpen(),
+        componentKinds: () => throw const KimattaError.notOpen(),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await openPicker(tester);
+    // A spinner over a failed read promises an arrival that is not coming, and with the kinds
+    // gone the sheet would offer no way to pick anything with no stated reason.
+    expect(find.text(libraryUnreadCopy), findsOneWidget);
+    expect(find.text(kindsUnreadCopy), findsOneWidget);
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+    expect(find.text(emptyLibraryCopy), findsNothing);
+  });
+
+  testWidgets('the picker still calls a resolved empty library empty', (
+    tester,
+  ) async {
+    useTallView(tester);
+    await tester.pumpWidget(harness(recipes: () => const []));
+    await tester.pumpAndSettle();
+    await openPicker(tester);
+    // Expected-to-pass: pins that distinguishing unresolved from empty did not trade one
+    // false statement for a permanent spinner over a library that really is empty.
+    expect(find.text(emptyLibraryCopy), findsOneWidget);
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+  });
+
+  testWidgets('Remove on the last component confirms and deletes the meal', (
+    tester,
+  ) async {
+    useTallView(tester);
+    final deleted = <String>[];
+    await tester.pumpWidget(
+      harness(
+        recipes: () => const [okSummary],
+        planner: () => [okPlanned],
+        deletePlanned: (_, id) async => deleted.add(id),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await pickAction(tester, '2026-08-29', MealSlotDto.dinner, 'Remove');
+    expect(find.text(removeLastComponentTitle), findsOneWidget);
+    await tester.tap(find.widgetWithText(FilledButton, 'Remove'));
+    await tester.pumpAndSettle();
+    expect(deleted, ['pm-1']);
+    expect(
+      inCell('2026-08-29', MealSlotDto.dinner, find.text(emptyCellCopy)),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets(
+    'Remove on one of two components re-saves without it, unconfirmed',
+    (tester) async {
+      useTallView(tester);
+      final sent = <PlannedMealDto>[];
+      await tester.pumpWidget(
+        harness(
+          recipes: () => const [okSummary],
+          planner: () => [
+            planned(
+              components: const [
+                MealComponentDto(kind: 'recipe', recipeId: 'r-1'),
+                MealComponentDto(kind: 'leftovers', note: 'chili'),
+              ],
+            ),
+          ],
+          savePlanned: (m) async {
+            sent.add(m);
+            return m;
+          },
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(menuButton.last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Remove').last);
+      await tester.pumpAndSettle();
+      expect(find.text(removeLastComponentTitle), findsNothing);
+      expect(sent.single.components, [
+        const MealComponentDto(kind: 'recipe', recipeId: 'r-1'),
+      ]);
+    },
+  );
+
+  testWidgets('Move lists only empty cells and re-saves with the chosen one', (
+    tester,
+  ) async {
+    useTallView(tester);
+    final sent = <PlannedMealDto>[];
+    await tester.pumpWidget(
+      harness(
+        recipes: () => const [okSummary],
+        planner: () => [okPlanned, planned(id: 'pm-2', date: '2026-08-30')],
+        savePlanned: (m) async {
+          sent.add(m);
+          return m;
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+    await pickAction(tester, '2026-08-29', MealSlotDto.dinner, 'Move…');
+    expect(find.text('2026-08-30 · Dinner'), findsNothing);
+    expect(find.text('2026-08-29 · Dinner'), findsNothing);
+    await tester.tap(find.text('2026-08-31 · Dinner'));
+    await tester.pumpAndSettle();
+    expect(sent.single.id, 'pm-1');
+    expect(sent.single.date, '2026-08-31');
+    expect(
+      inCell('2026-08-31', MealSlotDto.dinner, find.text('Pancakes · 1×')),
+      findsOneWidget,
+    );
+    expect(
+      inCell('2026-08-29', MealSlotDto.dinner, find.text(emptyCellCopy)),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('Move with no free cell says so', (tester) async {
+    useTallView(tester);
+    await tester.pumpWidget(
+      harness(
+        cycleWindow: (_) => const PlanningCycleDto(
+          householdId: 'h-1',
+          anchorDate: '2026-08-29',
+          lengthDays: 1,
+          mealSlots: [MealSlotDto.dinner],
+          dates: ['2026-08-29'],
+        ),
+        planner: () => [okPlanned],
+      ),
+    );
+    await tester.pumpAndSettle();
+    await pickAction(tester, '2026-08-29', MealSlotDto.dinner, 'Move…');
+    expect(find.text(noFreeSlotCopy), findsOneWidget);
+  });
+
+  testWidgets('Scale 1½× sends a 3/2 scale on the recipe component', (
+    tester,
+  ) async {
+    useTallView(tester);
+    final sent = <PlannedMealDto>[];
+    await tester.pumpWidget(
+      harness(
+        recipes: () => const [okSummary],
+        planner: () => [okPlanned],
+        savePlanned: (m) async {
+          sent.add(m);
+          return m;
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+    await pickAction(tester, '2026-08-29', MealSlotDto.dinner, 'Scale…');
+    await tester.tap(find.text('1½×'));
+    await tester.pumpAndSettle();
+    expect(
+      sent.single.components.single.scale,
+      const ScaleDto(numer: 3, denom: 2),
+    );
+    expect(find.text('Pancakes · 1½×'), findsOneWidget);
+  });
+
+  testWidgets('a non-recipe component offers no Scale', (tester) async {
+    useTallView(tester);
+    await tester.pumpWidget(
+      harness(
+        planner: () => [
+          planned(components: const [MealComponentDto(kind: 'dining_out')]),
+        ],
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Dining out'), findsOneWidget);
+    await tester.tap(menuButton);
+    await tester.pumpAndSettle();
+    expect(find.text('Scale…'), findsNothing);
+    expect(find.text('Move…'), findsOneWidget);
+  });
+
+  testWidgets(
+    'the lock switch writes the lock and is labelled by its meaning',
+    (tester) async {
+      useTallView(tester);
+      final sent = <(String, String, bool)>[];
+      await tester.pumpWidget(
+        harness(
+          recipes: () => const [okSummary],
+          planner: () => [okPlanned],
+          lockPlanned: (h, id, locked) async {
+            sent.add((h, id, locked));
+            return planned(locked: locked);
+          },
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.bySemanticsLabel(lockLabel(false)), findsOneWidget);
+      await tester.tap(find.byType(SwitchListTile));
+      await tester.pumpAndSettle();
+      expect(sent, [('h-1', 'pm-1', true)]);
+      expect(find.bySemanticsLabel(lockLabel(true)), findsOneWidget);
+      expect(
+        tester.widget<SwitchListTile>(find.byType(SwitchListTile)).value,
+        isTrue,
+      );
+    },
+  );
+
+  testWidgets('a locked meal keeps Add and the component menu enabled', (
+    tester,
+  ) async {
+    useTallView(tester);
+    await tester.pumpWidget(
+      harness(
+        recipes: () => const [okSummary],
+        planner: () => [planned(locked: true)],
+      ),
+    );
+    await tester.pumpAndSettle();
+    final add = inCell(
+      '2026-08-29',
+      MealSlotDto.dinner,
+      find.widgetWithText(FilledButton, 'Add'),
+    );
+    expect(tester.widget<FilledButton>(add).enabled, isTrue);
+    expect(tester.widget<PopupMenuButton>(menuButton).enabled, isTrue);
+  });
+
+  testWidgets(
+    'a component whose recipe conflicts shows the warning and opens it',
+    (tester) async {
+      useTallView(tester);
+      await tester.pumpWidget(
+        harness(
+          recipes: () => const [conflictSummary],
+          planner: () => [
+            planned(
+              components: const [
+                MealComponentDto(kind: 'recipe', recipeId: 'r-2'),
+              ],
+            ),
+          ],
+          recipe: (_) => okRecipeWithConflicts,
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text(summariseConflicts(dairyAssessment)), findsOneWidget);
+      await tester.tap(find.text('Butter toast · 1×'));
+      await tester.pumpAndSettle();
+      expect(title('Pancakes'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'open is offered for an empty cell and hidden beside a component',
+    (tester) async {
+      useTallView(tester);
+      await tester.pumpWidget(
+        harness(recipes: () => const [okSummary], planner: () => [okPlanned]),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(
+        inCell('2026-08-30', MealSlotDto.dinner, find.text('Add')),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text(kindLabel('open')), findsOneWidget);
+      // Dismiss the sheet by tapping the barrier, then open the occupied cell's picker.
+      await tester.tapAt(const Offset(10, 10));
+      await tester.pumpAndSettle();
+      await tester.tap(
+        inCell('2026-08-29', MealSlotDto.dinner, find.text('Add')),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text(kindLabel('leftovers')), findsOneWidget);
+      expect(find.text(kindLabel('open')), findsNothing);
+    },
+  );
+
+  testWidgets('freeform needs a note before it saves', (tester) async {
+    useTallView(tester);
+    final sent = <PlannedMealDto>[];
+    await tester.pumpWidget(
+      harness(
+        savePlanned: (m) async {
+          sent.add(m);
+          return planned(id: 'pm-f', components: m.components);
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(
+      inCell('2026-08-29', MealSlotDto.dinner, find.text('Add')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(kindLabel('freeform')));
+    await tester.pumpAndSettle();
+    expect(find.text(noteRequiredCopy), findsOneWidget);
+    expect(sent, isEmpty);
+    await tester.enterText(find.byType(TextField), ' tacos ');
+    await tester.tap(find.text(kindLabel('freeform')));
+    await tester.pumpAndSettle();
+    expect(
+      sent.single.components.single,
+      const MealComponentDto(kind: 'freeform', note: 'tacos'),
+    );
+  });
+
+  testWidgets('an archived recipe is marked and an unknown one is honest', (
+    tester,
+  ) async {
+    useTallView(tester);
+    await tester.pumpWidget(
+      harness(
+        archived: () => const [conflictSummary],
+        planner: () => [
+          planned(
+            components: const [
+              MealComponentDto(kind: 'recipe', recipeId: 'r-2'),
+            ],
+          ),
+          planned(
+            id: 'pm-2',
+            date: '2026-08-30',
+            components: const [
+              MealComponentDto(kind: 'recipe', recipeId: 'ghost'),
+            ],
+          ),
+        ],
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.text('${archivedRecipeCopy('Butter toast')} · 1×'),
+      findsOneWidget,
+    );
+    expect(find.text('$unknownRecipeCopy · 1×'), findsOneWidget);
+    // The assessment travels with the recipe, so archiving a recipe cannot quietly clear the
+    // warning on the meals it is still planned on (AC-2, invariant 10).
+    expect(find.text(summariseConflicts(dairyAssessment)), findsOneWidget);
+  });
+
+  testWidgets('an archived recipe\'s warning is still explainable in context', (
+    tester,
+  ) async {
+    useTallView(tester);
+    await tester.pumpWidget(
+      harness(
+        archived: () => const [conflictSummary],
+        planner: () => [
+          planned(
+            components: const [
+              MealComponentDto(kind: 'recipe', recipeId: 'r-2'),
+            ],
+          ),
+        ],
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(summariseConflicts(dairyAssessment)));
+    await tester.pumpAndSettle();
+    // `recipe:` is left at its default, which knows only `r-1`, so the detail's own honest
+    // arm is the assertion: reaching it at all is what proves the tile navigated.
+    expect(find.text('Recipe not found.'), findsOneWidget);
+    expect(title('Plan'), findsNothing);
+  });
+
+  testWidgets('an archived recipe without conflicts stays quiet and inert', (
+    tester,
+  ) async {
+    useTallView(tester);
+    await tester.pumpWidget(
+      harness(
+        archived: () => const [checkedCleanSummary],
+        planner: () => [
+          planned(
+            components: const [
+              MealComponentDto(kind: 'recipe', recipeId: 'r-3'),
+            ],
+          ),
+        ],
+      ),
+    );
+    await tester.pumpAndSettle();
+    // Expected-to-pass: pins that reaching the archived assessment did not make every
+    // archived tile a warning or a link — the conflict list is still what decides both.
+    expect(find.text('${archivedRecipeCopy('Rice')} · 1×'), findsOneWidget);
+    expect(find.textContaining('May conflict'), findsNothing);
+    await tester.tap(find.text('${archivedRecipeCopy('Rice')} · 1×'));
+    await tester.pumpAndSettle();
+    expect(title('Plan'), findsOneWidget);
+  });
+
+  testWidgets('a planned recipe says nothing while the library is unread', (
+    tester,
+  ) async {
+    useTallView(tester);
+    await tester.pumpWidget(
+      harness(
+        recipes: () => Completer<List<RecipeSummaryDto>>().future,
+        planner: () => [planned()],
+      ),
+    );
+    await tester.pumpAndSettle();
+    // The frame that paints a component is the frame that starts the library read, so this
+    // is every cold start — and `Recipe unavailable` there is a false statement about a
+    // recipe that is in the library, with the same missing conflict line beside it.
+    expect(find.text('$pendingRecipeCopy · 1×'), findsOneWidget);
+    expect(find.text('$unknownRecipeCopy · 1×'), findsNothing);
+  });
+
+  testWidgets('a planned recipe is honest when the library read fails', (
+    tester,
+  ) async {
+    useTallView(tester);
+    await tester.pumpWidget(
+      harness(
+        recipes: () => throw const KimattaError.notOpen(),
+        planner: () => [planned()],
+      ),
+    );
+    await tester.pumpAndSettle();
+    // A failure is not a slow read: nothing on this screen retries the library, so promising
+    // the name is on its way would be the same false statement in the other direction.
+    expect(find.text('$unreadRecipeCopy · 1×'), findsOneWidget);
+    expect(find.text('$pendingRecipeCopy · 1×'), findsNothing);
+    expect(find.text('$unknownRecipeCopy · 1×'), findsNothing);
+  });
+
+  testWidgets('the planner renders a load failure and Try again retries', (
+    tester,
+  ) async {
+    useTallView(tester);
+    var reads = 0;
+    await tester.pumpWidget(
+      harness(
+        planner: () => ++reads == 1
+            ? throw const KimattaError.notOpen()
+            : const <PlannedMealDto>[],
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.text(describeFailure(const KimattaError.notOpen(), subject: 'Plan')),
+      findsOneWidget,
+    );
+    expect(find.byType(Card), findsNothing);
+    await tester.tap(find.text('Try again'));
+    await tester.pumpAndSettle();
+    expect(find.byType(Card), findsNWidgets(7));
+  });
+
+  testWidgets('a failed planner save reports the reason in a snackbar', (
+    tester,
+  ) async {
+    useTallView(tester);
+    await tester.pumpWidget(
+      harness(
+        recipes: () => const [okSummary],
+        savePlanned: (_) async =>
+            throw const KimattaError.plannedMeal(message: 'occupied'),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(
+      inCell('2026-08-29', MealSlotDto.dinner, find.text('Add')),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Pancakes'));
+    await tester.pumpAndSettle();
+    expect(
+      find.descendant(
+        of: find.byType(SnackBar),
+        matching: find.text(
+          describeFailure(
+            const KimattaError.plannedMeal(message: 'occupied'),
+            subject: 'Plan',
+          ),
+        ),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      inCell('2026-08-29', MealSlotDto.dinner, find.text(emptyCellCopy)),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets(
+    'Previous and Next cycle request the neighbouring offsets and re-read on '
+    'return',
+    (tester) async {
+      useTallView(tester);
+      final offsets = <int>[];
+      await tester.pumpWidget(
+        harness(
+          cycleWindow: (offset) {
+            offsets.add(offset);
+            return okCycle;
+          },
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Previous cycle'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Next cycle'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Next cycle'));
+      await tester.pumpAndSettle();
+      // The second 0 is the `autoDispose` lifetime, not a redundant read: the screen watches
+      // one offset at a time, so paging away frees the one it left. What the re-read must
+      // *not* change is the anchor, which the notifier tests pin separately.
+      expect(offsets, [0, -1, 0, 1]);
+    },
+  );
+
+  testWidgets('the planner with a meal meets the accessibility guidelines', (
+    tester,
+  ) async {
+    usePixel5(tester);
+    await tester.pumpWidget(
+      harness(recipes: () => const [okSummary], planner: () => [okPlanned]),
+    );
+    await tester.pumpAndSettle();
+    await expectLater(tester, meetsGuideline(androidTapTargetGuideline));
+    await expectLater(tester, meetsGuideline(labeledTapTargetGuideline));
+    await expectLater(tester, meetsGuideline(textContrastGuideline));
+  });
+
+  testWidgets('the planner with a meal survives text scale 2.0', (
+    tester,
+  ) async {
+    usePixel5(tester);
+    tester.platformDispatcher.textScaleFactorTestValue = 2.0;
+    await tester.pumpWidget(
+      harness(
+        recipes: () => const [conflictSummary],
+        planner: () => [
+          planned(
+            components: const [
+              MealComponentDto(kind: 'recipe', recipeId: 'r-2'),
+            ],
+          ),
+        ],
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+  });
+
   // Keep this test last: the assertion it provokes leaves the element tree
   // half-updated, and every test pumped after it in the same file fails on a
   // framework "dependent is not our descendant" assertion (measured).
@@ -4103,12 +5185,15 @@ void main() {
     tester,
   ) async {
     usePixel5(tester);
-    await tester.pumpWidget(harness());
+    await tester.pumpWidget(harness(initial: '/shopping'));
     await tester.pumpAndSettle();
 
     // `App` carries no key, so this updates the existing element rather than
     // building a fresh one: `_router` is already built and the new location
-    // would otherwise be dropped in silence.
+    // would otherwise be dropped in silence. Provoked from Shopping, not Plan: the assertion
+    // is `App`'s and does not depend on the branch shown, but the half-updated tree it leaves
+    // makes the planner's focus scope report a second framework assertion during teardown,
+    // and a test that reports two exceptions fails regardless of `takeException` (MVP-013).
     await tester.pumpWidget(harness(initial: '/nope'));
     expect(tester.takeException(), isA<AssertionError>());
   });

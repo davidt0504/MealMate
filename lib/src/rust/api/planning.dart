@@ -8,7 +8,7 @@ import 'error.dart';
 
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These functions are ignored because they are not marked as `pub`: `ensure_in`, `save_in`, `slot_from_domain`, `slot_to_domain`, `to_dto`
+// These functions are ignored because they are not marked as `pub`: `ensure_in`, `save_in`, `slot_from_domain`, `slot_to_domain`, `to_dto`, `window_in`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `clone`, `eq`, `fmt`, `fmt`
 
 /// Returns the household's planning cycle, creating the dinner-only seven-day default
@@ -34,6 +34,20 @@ Future<PlanningCycleDto> savePlanningCycle({
   anchorDate: anchorDate,
   lengthDays: lengthDays,
   mealSlots: mealSlots,
+);
+
+/// The cycle window `offset_cycles` cycles away from the one containing `today` (offset 0 is
+/// the active window; the window before the anchor is reached with a negative offset). The
+/// stored anchor is the rhythm's phase, never the only week the household can see. `today`
+/// is caller-supplied for the reason `ensure_planning_cycle` gives.
+Future<PlanningCycleDto> planningCycleWindow({
+  required String householdId,
+  required String today,
+  required int offsetCycles,
+}) => RustLib.instance.api.crateApiPlanningPlanningCycleWindow(
+  householdId: householdId,
+  today: today,
+  offsetCycles: offsetCycles,
 );
 
 enum MealSlotDto { breakfast, lunch, dinner }

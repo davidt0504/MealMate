@@ -39,7 +39,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.13.0";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = 71441127;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -617872351;
 
 // Section: executor
 
@@ -755,6 +755,45 @@ fn wire__crate__api__health__open_database_impl(
             move |context| {
                 transform_result_sse::<_, crate::api::error::KimattaError>((move || {
                     let output_ok = crate::api::health::open_database(api_db_path)?;
+                    std::result::Result::Ok(output_ok)
+                })())
+            }
+        },
+    )
+}
+fn wire__crate__api__planning__planning_cycle_window_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "planning_cycle_window",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_household_id = <String>::sse_decode(&mut deserializer);
+            let api_today = <String>::sse_decode(&mut deserializer);
+            let api_offset_cycles = <i32>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, crate::api::error::KimattaError>((move || {
+                    let output_ok = crate::api::planning::planning_cycle_window(
+                        api_household_id,
+                        api_today,
+                        api_offset_cycles,
+                    )?;
                     std::result::Result::Ok(output_ok)
                 })())
             }
@@ -1873,26 +1912,32 @@ fn pde_ffi_dispatcher_primary_impl(
             data_len,
         ),
         21 => wire__crate__api__health__open_database_impl(port, ptr, rust_vec_len, data_len),
-        22 => wire__crate__api__household__rename_household_impl(port, ptr, rust_vec_len, data_len),
-        23 => wire__crate__api__recipe__restore_recipe_impl(port, ptr, rust_vec_len, data_len),
-        24 => wire__crate__api__planned_meals__save_planned_meal_impl(
+        22 => wire__crate__api__planning__planning_cycle_window_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        25 => {
+        23 => wire__crate__api__household__rename_household_impl(port, ptr, rust_vec_len, data_len),
+        24 => wire__crate__api__recipe__restore_recipe_impl(port, ptr, rust_vec_len, data_len),
+        25 => wire__crate__api__planned_meals__save_planned_meal_impl(
+            port,
+            ptr,
+            rust_vec_len,
+            data_len,
+        ),
+        26 => {
             wire__crate__api__planning__save_planning_cycle_impl(port, ptr, rust_vec_len, data_len)
         }
-        26 => wire__crate__api__recipe__save_recipe_impl(port, ptr, rust_vec_len, data_len),
-        27 => wire__crate__api__restrictions__save_restrictions_impl(
+        27 => wire__crate__api__recipe__save_recipe_impl(port, ptr, rust_vec_len, data_len),
+        28 => wire__crate__api__restrictions__save_restrictions_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        28 => wire__crate__api__pantry__set_pantry_mark_impl(port, ptr, rust_vec_len, data_len),
-        29 => wire__crate__api__planned_meals__set_planned_meal_lock_impl(
+        29 => wire__crate__api__pantry__set_pantry_mark_impl(port, ptr, rust_vec_len, data_len),
+        30 => wire__crate__api__planned_meals__set_planned_meal_lock_impl(
             port,
             ptr,
             rust_vec_len,

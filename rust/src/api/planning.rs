@@ -55,6 +55,18 @@ pub fn save_planning_cycle(
     crate::db::with(|conn| save_in(conn, &household_id, &anchor_date, length_days, &meal_slots))
 }
 
+/// The cycle window `offset_cycles` cycles away from the one containing `today` (offset 0 is
+/// the active window; the window before the anchor is reached with a negative offset). The
+/// stored anchor is the rhythm's phase, never the only week the household can see. `today`
+/// is caller-supplied for the reason `ensure_planning_cycle` gives.
+pub fn planning_cycle_window(
+    household_id: String,
+    today: String,
+    offset_cycles: i32,
+) -> Result<PlanningCycleDto, KimattaError> {
+    crate::db::with(|conn| window_in(conn, &household_id, &today, offset_cycles))
+}
+
 /// Split out from the command for the same reason `rename_in` is: it can be tested with more
 /// than one household present without installing the process-wide connection.
 fn ensure_in(
@@ -69,6 +81,19 @@ fn ensure_in(
     let default = PlanningCycle::default_for(id, anchor)?;
     let cycle = kimatta_storage::ensure_planning_cycle(conn, &default)?;
     Ok(to_dto(&cycle))
+}
+
+fn window_in(
+    conn: &mut Connection,
+    household_id: &str,
+    today: &str,
+    offset_cycles: i32,
+) -> Result<PlanningCycleDto, KimattaError> {
+    let id = HouseholdId::new(household_id)?;
+    let today = kimatta_storage::parse_civil_date(today)?;
+    let default = PlanningCycle::default_for(id, today)?;
+    let stored = kimatta_storage::ensure_planning_cycle(conn, &default)?;
+    Ok(to_dto(&stored.window_containing(today, offset_cycles)?))
 }
 
 fn save_in(
@@ -219,6 +244,27 @@ mod tests {
             .query_row("SELECT COUNT(*) FROM planning_cycle", [], |r| r.get(0))
             .unwrap();
         assert_eq!(rows, 0);
+    }
+
+    /// MVP-013: the window read materialises the same default `ensure_in` does, and offset 0
+    /// on the anchor day *is* that cycle. The calendar cases live in `food-domain`.
+    #[test]
+    fn window_at_the_anchor_equals_the_ensured_cycle() {
+        let mut conn = open_seeded(&["h"]);
+        let ensured = ensure_in(&mut conn, "h", "2026-08-29").unwrap();
+        let window = window_in(&mut conn, "h", "2026-08-29", 0).unwrap();
+        assert_eq!(window.household_id, ensured.household_id);
+        assert_eq!(window.anchor_date, ensured.anchor_date);
+        assert_eq!(window.length_days, ensured.length_days);
+        assert_eq!(window.meal_slots, ensured.meal_slots);
+        assert_eq!(window.dates, ensured.dates);
+        let next = window_in(&mut conn, "h", "2026-08-29", 1).unwrap();
+        assert_eq!(next.anchor_date, "2026-09-05");
+        assert_eq!(next.dates.len(), 7);
+        let rows: u32 = conn
+            .query_row("SELECT COUNT(*) FROM planning_cycle", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(rows, 1, "a window read never stores a shifted cycle");
     }
 
     #[test]
