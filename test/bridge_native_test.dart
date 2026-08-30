@@ -10,6 +10,7 @@ import 'package:meal_mate/src/rust/api/planned_meals.dart';
 import 'package:meal_mate/src/rust/api/planning.dart';
 import 'package:meal_mate/src/rust/api/recipe.dart';
 import 'package:meal_mate/src/rust/api/restrictions.dart';
+import 'package:meal_mate/src/rust/api/shopping.dart';
 import 'package:meal_mate/src/rust/api/starter.dart';
 import 'package:meal_mate/src/rust/frb_generated.dart';
 import 'package:meal_mate/features/recipes/recipe_fields.dart';
@@ -411,6 +412,128 @@ void main() {
     expect(again.marked, isTrue);
     expect(again.name, first.name);
   });
+
+  /// MVP-015 at the real bridge, and the only place the generated shopping decoders are ever
+  /// executed: `flutter_rust_bridge_codegen generate` proves codegen ran, not that
+  /// `Option<SeparateReasonDto>` and `Option<ScaleDto>` round-trip. Expected-to-pass — the
+  /// command already exists, so this cannot fail first; it is non-vacuous because it is the
+  /// only Dart caller of `deriveShoppingList` in the tree.
+  test(
+    'a derived shopping list groups a resolved line and omits a marked one',
+    () async {
+      await openDatabase(dbPath: await tempDb());
+      final h = await bootstrapHousehold();
+      await installStarterContent(householdId: h.id);
+      final catalog = await listPantry(householdId: h.id);
+      final a = catalog[0]; // stays Needed
+      final b = catalog[1]; // marked below, so omitted
+      await ensurePlanningCycle(
+        householdId: h.id,
+        defaultAnchorDate: '2026-08-30',
+      );
+      final saved = await saveRecipe(
+        recipe: recipeFor(h.id, [
+          IngredientLineDto(
+            originalText: '2 cup ${a.name}',
+            name: a.name,
+            ingredient: a.ingredient,
+            quantity: const QuantityDto.exact(numer: 2, denom: 1),
+            unit: const UnitDto.known(unit: 'cup'),
+            optional: false,
+          ),
+          IngredientLineDto(
+            originalText: '1 piece ${b.name}',
+            name: b.name,
+            ingredient: b.ingredient,
+            quantity: const QuantityDto.exact(numer: 1, denom: 1),
+            unit: const UnitDto.known(unit: 'piece'),
+            optional: false,
+          ),
+          const IngredientLineDto(
+            originalText: '1 piece mystery',
+            name: 'mystery',
+            quantity: QuantityDto.exact(numer: 1, denom: 1),
+            unit: UnitDto.known(unit: 'piece'),
+            optional: false,
+          ),
+        ]),
+      );
+      // Two recipe components of the same recipe, one scaled and one as-written, so both
+      // arms of the `Option<ScaleDto>` decoder carry a value on the way back.
+      await savePlannedMeal(
+        meal: PlannedMealDto(
+          id: '',
+          householdId: h.id,
+          date: '2026-08-30',
+          slot: MealSlotDto.dinner,
+          locked: false,
+          components: [
+            MealComponentDto(
+              kind: 'recipe',
+              recipeId: saved.id,
+              scale: const ScaleDto(numer: 2, denom: 1),
+            ),
+            MealComponentDto(kind: 'recipe', recipeId: saved.id),
+          ],
+        ),
+      );
+      await setPantryMark(
+        householdId: h.id,
+        ingredient: b.ingredient,
+        marked: true,
+      );
+
+      final list = await deriveShoppingList(
+        householdId: h.id,
+        fromDate: '2026-08-30',
+        toDate: '2026-08-30',
+      );
+      // Lines are nested inside store-category groups, and the unresolved ones are
+      // uncategorised, so they are guaranteed to sit in a different group from a and b.
+      final lines = [for (final g in list.groups) ...g.lines];
+      expect(list.algorithmVersion, greaterThan(0));
+      expect(list.contributionCount, 6);
+      expect(lines, hasLength(4));
+      expect(
+        lines.fold<int>(0, (n, l) => n + l.contributions.length),
+        6,
+        reason: 'every contribution is accounted for',
+      );
+
+      final merged = lines.firstWhere((l) => l.ingredient == a.ingredient);
+      expect(merged.key, startsWith('m:catalog:'));
+      expect(merged.quantity, const QuantityDto.exact(numer: 6, denom: 1));
+      expect(merged.unit, const UnitDto.known(unit: 'cup'));
+      expect(merged.status, ShoppingLineStatusDto.needed);
+      // Decode branch 1: a null `Option<SeparateReasonDto>`, the common case.
+      expect(merged.separateReason, isNull);
+      final scales = merged.contributions.map((c) => c.scale).toList();
+      expect(scales, hasLength(2));
+      // Decode branches 2 and 3: `Option<ScaleDto>` both ways, inside a nested list.
+      expect(scales.where((s) => s == null), hasLength(1));
+      expect(
+        scales.where((s) => s == const ScaleDto(numer: 2, denom: 1)),
+        hasLength(1),
+      );
+
+      final omitted = lines.firstWhere((l) => l.ingredient == b.ingredient);
+      expect(omitted.status, ShoppingLineStatusDto.omittedPantryMarked);
+      expect(
+        omitted.quantity,
+        const QuantityDto.exact(numer: 3, denom: 1),
+        reason: 'a mark suppresses a purchase without discarding the amount',
+      );
+
+      final unresolved = lines.where((l) => l.ingredient == null).toList();
+      expect(unresolved, hasLength(2));
+      for (final l in unresolved) {
+        expect(l.key, startsWith('s:'));
+        expect(l.name, 'mystery');
+        // Decode branch 4: a present `Option<SeparateReasonDto>`.
+        expect(l.separateReason, SeparateReasonDto.unresolved);
+      }
+    },
+  );
 
   test('a blank title is a typed Recipe error in Dart', () async {
     await openDatabase(dbPath: await tempDb());

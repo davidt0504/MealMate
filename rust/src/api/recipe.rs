@@ -223,7 +223,8 @@ fn quantity_to_domain(q: QuantityDto) -> Result<Quantity, KimattaError> {
     })
 }
 
-fn quantity_from_domain(q: Quantity) -> QuantityDto {
+/// Shared with `shopping.rs`, as `ref_from_domain` is with `pantry.rs`.
+pub(crate) fn quantity_from_domain(q: Quantity) -> QuantityDto {
     match q {
         Quantity::Unknown => QuantityDto::Unknown,
         Quantity::Exact(r) => QuantityDto::Exact {
@@ -247,7 +248,8 @@ fn unit_to_domain(u: UnitDto) -> Result<Unit, KimattaError> {
     })
 }
 
-fn unit_from_domain(u: &Unit) -> UnitDto {
+/// Shared with `shopping.rs`; see [`quantity_from_domain`].
+pub(crate) fn unit_from_domain(u: &Unit) -> UnitDto {
     match u {
         Unit::None => UnitDto::None,
         Unit::Known(kind) => UnitDto::Known {
@@ -441,7 +443,10 @@ fn custom_from_domain(c: &CustomIngredient) -> CustomIngredientDto {
 
 /// Split out from the commands, as `rename_in` and `save_in` are, so they can be tested with
 /// more than one household present without installing the process-wide connection.
-fn save_recipe_in(conn: &mut Connection, dto: RecipeDto) -> Result<RecipeDto, KimattaError> {
+pub(crate) fn save_recipe_in(
+    conn: &mut Connection,
+    dto: RecipeDto,
+) -> Result<RecipeDto, KimattaError> {
     // `dto.assessment` is dropped here with the rest of the request shell: `recipe_to_domain`
     // never reads it, so a fabricated verdict cannot reach storage or the read-back.
     let recipe = recipe_to_domain(dto)?;

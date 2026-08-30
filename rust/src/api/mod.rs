@@ -6,4 +6,5 @@ pub mod planned_meals;
 pub mod planning;
 pub mod recipe;
 pub mod restrictions;
+pub mod shopping;
 pub mod starter;
