@@ -733,6 +733,35 @@ void main() {
     ]);
   });
 
+  // MVP-013: expected-to-pass pin. The window read at offset 0 on the anchor day is the
+  // ensured cycle itself; the calendar cases are proven in `food-domain`.
+  test(
+    'the active cycle window on a fresh household is the ensured cycle',
+    () async {
+      await openDatabase(dbPath: await tempDb());
+      final h = await bootstrapHousehold();
+      final ensured = await ensurePlanningCycle(
+        householdId: h.id,
+        defaultAnchorDate: '2026-08-29',
+      );
+      final window = await planningCycleWindow(
+        householdId: h.id,
+        today: '2026-08-29',
+        offsetCycles: 0,
+      );
+      expect(window.anchorDate, ensured.anchorDate);
+      expect(window.lengthDays, ensured.lengthDays);
+      expect(window.mealSlots, ensured.mealSlots);
+      expect(window.dates, ensured.dates);
+      final next = await planningCycleWindow(
+        householdId: h.id,
+        today: '2026-08-29',
+        offsetCycles: 1,
+      );
+      expect(next.anchorDate, '2026-09-05');
+    },
+  );
+
   test('custom ingredients list only for their household', () async {
     await openDatabase(dbPath: await tempDb());
     final h = await bootstrapHousehold();

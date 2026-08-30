@@ -7,6 +7,7 @@ import 'package:meal_mate/features/household/household_screen.dart';
 import 'package:meal_mate/features/onboarding/welcome_screen.dart';
 import 'package:meal_mate/features/pantry/pantry_screen.dart';
 import 'package:meal_mate/features/planning/cycle_editor_screen.dart';
+import 'package:meal_mate/features/planning/planner_screen.dart';
 import 'package:meal_mate/features/recipes/recipe_detail_screen.dart';
 import 'package:meal_mate/features/recipes/recipe_form_screen.dart';
 import 'package:meal_mate/features/recipes/recipe_list_screen.dart';
@@ -68,14 +69,7 @@ GoRouter buildRouter({String initialLocation = homeLocation}) => GoRouter(
           routes: [
             GoRoute(
               path: '/plan',
-              builder: (context, _) => PlaceholderScreen(
-                title: 'Plan',
-                message: 'Manual planning arrives with MVP-013.',
-                action: FilledButton(
-                  onPressed: () => context.go('/plan/cover'),
-                  child: const Text('Cover My Week'),
-                ),
-              ),
+              builder: (_, _) => const PlannerScreen(),
               routes: [
                 GoRoute(
                   path: 'cover',

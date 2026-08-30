@@ -34,6 +34,21 @@ pub enum PlanningError {
     InvalidDate(String),
     #[error("a {length_days}-day cycle from {anchor} runs past the end of the calendar")]
     CycleOverflow { anchor: String, length_days: u32 },
+    /// Distinct from [`PlanningError::CycleOverflow`] because the cycle named here is *valid* —
+    /// it is the window `offset_cycles` away that cannot be represented. Reporting that as a
+    /// `CycleOverflow` carrying either anchor said something false: the stored anchor's cycle
+    /// does not run past the calendar, and the computed one is exactly what could not be
+    /// computed in the arithmetic failures. `anchor` is always the stored anchor here, so the
+    /// refused window is identified by the same three fields whichever guard fired.
+    #[error(
+        "a {length_days}-day cycle from {anchor} has no window {offset_cycles} cycles away: \
+         it runs past the end of the calendar"
+    )]
+    CycleWindowOverflow {
+        anchor: String,
+        length_days: u32,
+        offset_cycles: i32,
+    },
 }
 
 /// Meal slots in chronological order within a day. Declaration order is the canonical
@@ -213,6 +228,45 @@ impl PlanningCycle {
             }
         }
         dates
+    }
+
+    /// The cycle window `offset_cycles` cycles away from the one containing `today`; offset 0
+    /// is the active window. The anchor is the rhythm's phase, not the only visible week
+    /// (MVP-005 "rhythm"; PRD v3 §6.3 `get_active_cycle_view`). Windows before the anchor
+    /// are reached with a negative result of the division — `div_euclid` floors, so a `today`
+    /// one day before the anchor lands on the window that ends the day before it.
+    pub fn window_containing(
+        &self,
+        today: CivilDate,
+        offset_cycles: i32,
+    ) -> Result<Self, PlanningError> {
+        let overflow = || PlanningError::CycleWindowOverflow {
+            anchor: format_civil_date(self.anchor),
+            length_days: self.length_days,
+            offset_cycles,
+        };
+        let length = i64::from(self.length_days);
+        let elapsed = i64::from(self.anchor.until(today).map_err(|_| overflow())?.get_days());
+        let cycles = elapsed.div_euclid(length) + i64::from(offset_cycles);
+        // `try_days`, not `days`: the infallible builder panics past ±7,304,484 days, which an
+        // `i32::MAX` offset reaches long before `checked_add` gets to refuse it.
+        let span = Span::new()
+            .try_days(cycles.saturating_mul(length))
+            .map_err(|_| overflow())?;
+        let anchor = self.anchor.checked_add(span).map_err(|_| overflow())?;
+        // The last guard is the same failure class as the three above — a window that will not
+        // fit — so it is reported the same way. Matched on the variant rather than blanket
+        // `map_err`, so a length error (which `self` cannot have) would not be relabelled.
+        Self::new(
+            self.household_id.clone(),
+            anchor,
+            self.length_days,
+            self.scope.clone(),
+        )
+        .map_err(|e| match e {
+            PlanningError::CycleOverflow { .. } => overflow(),
+            other => other,
+        })
     }
 }
 
@@ -515,5 +569,111 @@ mod tests {
                 .dates(),
             vec![anchor]
         );
+    }
+
+    // --- MVP-013: the window containing a day ------------------------------------------
+
+    fn window_anchor(anchor: &str, length_days: u32, today: &str, offset: i32) -> String {
+        let window = cycle(anchor, length_days)
+            .window_containing(parse_civil_date(today).unwrap(), offset)
+            .unwrap();
+        assert_eq!(window.length_days(), length_days);
+        assert_eq!(window.scope(), cycle(anchor, length_days).scope());
+        format_civil_date(window.anchor())
+    }
+
+    #[test]
+    fn window_containing_the_anchor_is_the_stored_cycle() {
+        assert_eq!(
+            window_anchor("2026-08-29", 7, "2026-08-29", 0),
+            "2026-08-29"
+        );
+    }
+
+    #[test]
+    fn window_containing_a_mid_window_day_is_the_anchor_window() {
+        assert_eq!(
+            window_anchor("2026-08-29", 7, "2026-09-01", 0),
+            "2026-08-29"
+        );
+        // The last day of the window still belongs to it; the next day does not.
+        assert_eq!(
+            window_anchor("2026-08-29", 7, "2026-09-04", 0),
+            "2026-08-29"
+        );
+        assert_eq!(
+            window_anchor("2026-08-29", 7, "2026-09-05", 0),
+            "2026-09-05"
+        );
+    }
+
+    #[test]
+    fn window_containing_a_later_cycle_shifts_by_whole_cycles() {
+        assert_eq!(
+            window_anchor("2026-08-29", 7, "2026-09-05", 0),
+            "2026-09-05"
+        );
+        assert_eq!(
+            window_anchor("2026-08-29", 7, "2026-09-05", -1),
+            "2026-08-29"
+        );
+        assert_eq!(
+            window_anchor("2026-08-29", 3, "2026-09-10", 0),
+            "2026-09-10"
+        );
+    }
+
+    #[test]
+    fn window_containing_a_day_before_the_anchor_floors() {
+        assert_eq!(
+            window_anchor("2026-08-29", 7, "2026-08-28", 0),
+            "2026-08-22"
+        );
+        assert_eq!(
+            window_anchor("2026-08-29", 7, "2026-08-22", 0),
+            "2026-08-22"
+        );
+    }
+
+    #[test]
+    fn window_containing_crosses_a_year_boundary_by_calendar() {
+        assert_eq!(
+            window_anchor("2026-12-29", 7, "2026-12-29", 1),
+            "2027-01-05"
+        );
+        assert_eq!(
+            window_anchor("2024-02-26", 7, "2024-03-01", 0),
+            "2024-02-26"
+        );
+    }
+
+    #[test]
+    fn window_containing_reports_overflow_instead_of_panicking() {
+        let anchor = parse_civil_date("9999-12-20").unwrap();
+        let c = PlanningCycle::new(hid("h"), anchor, 7, MealScope::dinner_only()).unwrap();
+        // Offset 1 fails in the terminal `Self::new`, `i32::MAX` in the span arithmetic long
+        // before it. Asserting the whole error, not `{ .. }`: the two guards used to report
+        // different anchors for the same refusal, and a wildcard match cannot see that.
+        // Both name the *stored* anchor and the offset asked for — the cycle at 9999-12-20 is
+        // itself fine, which is why it is not a `CycleOverflow`.
+        assert_eq!(
+            c.window_containing(anchor, 1).unwrap_err(),
+            PlanningError::CycleWindowOverflow {
+                anchor: "9999-12-20".to_owned(),
+                length_days: 7,
+                offset_cycles: 1,
+            }
+        );
+        assert_eq!(
+            c.window_containing(anchor, i32::MAX).unwrap_err(),
+            PlanningError::CycleWindowOverflow {
+                anchor: "9999-12-20".to_owned(),
+                length_days: 7,
+                offset_cycles: i32::MAX,
+            }
+        );
+        // Offset 0 is a window like any other, so it never renders "0 cycles away" unless it
+        // genuinely refuses one; a representable window still succeeds.
+        assert!(c.window_containing(anchor, 0).is_ok());
     }
 }
