@@ -9,14 +9,16 @@ pub use food_domain::starter::{
     StarterRecipe,
 };
 pub use food_domain::{
-    assess, format_civil_date, parse_civil_date, CivilDate, Conflict, CustomIngredient,
-    CustomIngredientId, HouseholdRestrictions, Ingredient, IngredientId, IngredientLine,
-    IngredientRef, MealComponent, MealScope, MealSlot, MemberPreference, MemberPreferences,
-    PlannedMeal, PlannedMealError, PlannedMealId, PlanningCycle, PlanningError, PreferenceError,
-    ProvenanceKind, Quantity, QuantityRange, Rational, Recipe, RecipeError, RecipeId,
-    RecipeProvenance, RecipeRights, Restriction, RestrictionAssessment, RestrictionError,
-    RestrictionKind, RightsBasis, Sentiment, Unit, UnitKind, WriteSource, DEFAULT_CYCLE_DAYS,
-    MAX_CYCLE_DAYS, MIN_CYCLE_DAYS, RULE_VERSION,
+    assess, base_factor, derive_shopping_list, format_civil_date, parse_civil_date, CivilDate,
+    Conflict, Contribution, CustomIngredient, CustomIngredientId, HouseholdRestrictions,
+    IdentityInfo, Ingredient, IngredientId, IngredientLine, IngredientRef, LineStatus,
+    MealComponent, MealScope, MealSlot, MemberPreference, MemberPreferences, PlannedMeal,
+    PlannedMealError, PlannedMealId, PlanningCycle, PlanningError, PreferenceError, ProvenanceKind,
+    Quantity, QuantityRange, Rational, Recipe, RecipeError, RecipeId, RecipeProvenance,
+    RecipeRights, Restriction, RestrictionAssessment, RestrictionError, RestrictionKind,
+    RightsBasis, Sentiment, SeparateReason, ShoppingGroup, ShoppingInput, ShoppingLine,
+    ShoppingList, Unit, UnitFamily, UnitKind, WriteSource, DEFAULT_CYCLE_DAYS, MAX_CYCLE_DAYS,
+    MIN_CYCLE_DAYS, RULE_VERSION, SHOPPING_ALGORITHM_VERSION,
 };
 pub use household_core::{Household, HouseholdId, HouseholdMember, IdError, MemberId};
 pub use rusqlite::Connection;
@@ -1087,6 +1089,44 @@ pub fn list_pantry_entries(
             })
         })
         .collect::<Result<Vec<_>, StorageError>>()
+}
+
+/// Just the identities this household has marked — the derivation's only pantry need, where
+/// [`list_pantry_entries`] is the *browse* read that materialises the whole catalog and every
+/// alias to answer the same question.
+///
+/// One statement per kind rather than one row-shape match: each `WHERE` repeats the predicate
+/// of the partial unique index that covers it (`pantry_item_catalog` and `pantry_item_custom`
+/// are both household-leading), and neither has to decide what a row violating the table's
+/// CHECK would mean. That keeps the read exactly as forgiving as the browse query it replaces —
+/// a both-NULL row satisfies neither `EXISTS` there and neither predicate here.
+pub fn list_marked_pantry_refs(
+    conn: &Connection,
+    household: &HouseholdId,
+) -> Result<Vec<IngredientRef>, StorageError> {
+    // Collected as strings first: the id constructors do not return `rusqlite::Error`, so they
+    // cannot be applied inside the `query_map` closure.
+    let ids = |sql: &str| -> Result<Vec<String>, StorageError> {
+        let mut stmt = conn.prepare(sql)?;
+        let rows = stmt
+            .query_map(params![household.as_str()], |r| r.get::<_, String>(0))?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(rows)
+    };
+    let catalog = ids("SELECT ingredient_id FROM pantry_item
+          WHERE household_id = ?1 AND ingredient_id IS NOT NULL
+          ORDER BY ingredient_id")?;
+    let custom = ids("SELECT custom_ingredient_id FROM pantry_item
+          WHERE household_id = ?1 AND custom_ingredient_id IS NOT NULL
+          ORDER BY custom_ingredient_id")?;
+    let mut marked = Vec::with_capacity(catalog.len() + custom.len());
+    for id in catalog {
+        marked.push(IngredientRef::Catalog(IngredientId::new(&id)?));
+    }
+    for id in custom {
+        marked.push(IngredientRef::Custom(CustomIngredientId::new(&id)?));
+    }
+    Ok(marked)
 }
 
 /// Marks or unmarks one identity for one household in one IMMEDIATE transaction, and returns
@@ -2176,6 +2216,92 @@ pub fn list_planned_meals(
         .collect::<Result<Vec<_>, StorageError>>()?;
     meals.sort_by_key(|m| (m.date(), m.slot()));
     Ok(meals)
+}
+
+/// The derivation's input snapshot for `household` over `from..=to`, read in one transaction
+/// so meals, recipes, identities and pantry marks come from one consistent state. Archived
+/// recipes are included: an occurrence may still name one (MVP-012). Recipes are loaded once
+/// per distinct id, bounded by the distinct recipes in range.
+pub fn load_shopping_input(
+    conn: &mut Connection,
+    household: &HouseholdId,
+    from: CivilDate,
+    to: CivilDate,
+) -> Result<ShoppingInput, StorageError> {
+    let tx = conn.transaction()?;
+    require_household(&tx, household)?;
+    let meals = list_planned_meals(&tx, household, from, to)?;
+    let mut recipe_ids: Vec<&RecipeId> = meals
+        .iter()
+        .flat_map(|m| m.components().iter())
+        .filter_map(|c| match c {
+            MealComponent::Recipe { recipe_id, .. } => Some(recipe_id),
+            _ => None,
+        })
+        .collect();
+    recipe_ids.sort_by_key(|id| id.as_str());
+    recipe_ids.dedup();
+    let mut recipes = Vec::with_capacity(recipe_ids.len());
+    for id in recipe_ids {
+        if let Some(record) = load_recipe(&tx, household, id)? {
+            recipes.push(record.recipe);
+        }
+    }
+    let customs: HashMap<String, CustomIngredient> = list_custom_ingredients(&tx, household)?
+        .into_iter()
+        .map(|c| (c.id().as_str().to_owned(), c))
+        .collect();
+    let mut identities: Vec<(IngredientRef, IdentityInfo)> = Vec::new();
+    // Keyed by `(kind, id)` strings: `IngredientRef` carries no `Hash`, and a bare id would
+    // let a custom ingredient shadow a catalog one sharing its id string.
+    let mut seen: HashSet<(bool, String)> = HashSet::new();
+    for line in recipes.iter().flat_map(|r| r.lines().iter()) {
+        let Some(r) = line.ingredient() else {
+            continue;
+        };
+        let seen_key = match r {
+            IngredientRef::Catalog(id) => (true, id.as_str().to_owned()),
+            IngredientRef::Custom(id) => (false, id.as_str().to_owned()),
+        };
+        if !seen.insert(seen_key) {
+            continue;
+        }
+        let info = match r {
+            IngredientRef::Catalog(id) => load_ingredient(&tx, id)?.map(|i| IdentityInfo {
+                name: i.canonical_name().to_owned(),
+                store_category: i.store_category().map(str::to_owned),
+            }),
+            IngredientRef::Custom(id) => customs.get(id.as_str()).map(|c| IdentityInfo {
+                name: c.name().to_owned(),
+                store_category: c.store_category().map(str::to_owned),
+            }),
+        };
+        if let Some(info) = info {
+            identities.push((r.clone(), info));
+        }
+    }
+    let pantry_marked = list_marked_pantry_refs(&tx, household)?;
+    tx.commit()?;
+    Ok(ShoppingInput {
+        from,
+        to,
+        meals,
+        recipes,
+        identities,
+        pantry_marked,
+    })
+}
+
+/// `load_shopping_input` then `food_domain::derive_shopping_list`: the one read the bridge
+/// exposes. Never stores anything.
+pub fn load_shopping_list(
+    conn: &mut Connection,
+    household: &HouseholdId,
+    from: CivilDate,
+    to: CivilDate,
+) -> Result<ShoppingList, StorageError> {
+    let input = load_shopping_input(conn, household, from, to)?;
+    Ok(derive_shopping_list(&input))
 }
 
 #[cfg(test)]
@@ -6353,6 +6479,46 @@ mod tests {
         assert!(by_name("nana's mix").aliases.is_empty());
     }
 
+    /// The narrow read the shopping snapshot uses must agree with the browse read on which
+    /// identities are marked, and must be scoped just as tightly.
+    #[test]
+    fn list_marked_pantry_refs_returns_only_this_households_marked_identities() {
+        let mut conn = open(":memory:").unwrap();
+        seed_for_pantry(&mut conn, "h");
+        seed_for_pantry(&mut conn, "h2");
+        upsert_ingredient(&mut conn, &ingredient("sugar", "sugar", &[])).unwrap();
+        for r in [catalog_ref("flour"), custom_ref("c-h")] {
+            set_pantry_mark(&mut conn, &hid("h"), &r, true).unwrap();
+        }
+        // h2 marks a catalog identity h did not, and `sugar` stays unmarked everywhere.
+        set_pantry_mark(&mut conn, &hid("h2"), &catalog_ref("sugar"), true).unwrap();
+
+        assert_eq!(
+            list_marked_pantry_refs(&conn, &hid("h")).unwrap(),
+            vec![catalog_ref("flour"), custom_ref("c-h")]
+        );
+        assert_eq!(
+            list_marked_pantry_refs(&conn, &hid("h2")).unwrap(),
+            vec![catalog_ref("sugar")]
+        );
+        // The browse read is the authority it must reproduce.
+        assert_eq!(marked_names(&pantry(&conn, "h")), vec!["flour", "mix"]);
+    }
+
+    /// The contract [`list_pantry_entries`] states and [`load_shopping_input`] relied on
+    /// through it: no records reads as no records, and an absent household is not an error.
+    #[test]
+    fn list_marked_pantry_refs_of_an_empty_or_absent_pantry_is_empty() {
+        let mut conn = open(":memory:").unwrap();
+        seed_for_pantry(&mut conn, "h");
+        assert!(list_marked_pantry_refs(&conn, &hid("h"))
+            .unwrap()
+            .is_empty());
+        assert!(list_marked_pantry_refs(&conn, &hid("nobody"))
+            .unwrap()
+            .is_empty());
+    }
+
     /// Adversarial (AC-3): a mark is one household's record and no other household's read or
     /// write may see or clear it.
     #[test]
@@ -6474,5 +6640,227 @@ mod tests {
             .query_row("SELECT household_id FROM pantry_item", [], |r| r.get(0))
             .unwrap();
         assert_eq!(survivor, "h2");
+    }
+
+    // --- MVP-015 step 4: the shopping snapshot -------------------------------------------
+
+    fn shopping_lines(list: &ShoppingList) -> Vec<&ShoppingLine> {
+        list.groups.iter().flat_map(|g| g.lines.iter()).collect()
+    }
+
+    fn snapshot(conn: &mut Connection, household: &str, from: &str, to: &str) -> ShoppingInput {
+        load_shopping_input(
+            conn,
+            &hid(household),
+            parse_civil_date(from).unwrap(),
+            parse_civil_date(to).unwrap(),
+        )
+        .unwrap()
+    }
+
+    /// `h` with the lunch+dinner cycle, catalog `i-oil` (aisle) and `i-salt` (aisle), custom
+    /// `c-h` (no category), recipe `shop-h` naming all three plus an unresolved line.
+    fn seed_for_shopping(conn: &mut Connection, household: &str) {
+        seed_for_meals(conn, household);
+        for i in catalog() {
+            upsert_ingredient(conn, &i).unwrap();
+        }
+        upsert_custom_ingredient(conn, &custom(&format!("c-{household}"), household, "mix"))
+            .unwrap();
+        let lines = vec![
+            full_line(
+                "1 cup oil",
+                "oil",
+                Some(IngredientRef::Catalog(IngredientId::new("i-oil").unwrap())),
+                Quantity::Exact(rat(1, 1)),
+                Unit::Known(UnitKind::Cup),
+                None,
+                false,
+            ),
+            full_line(
+                "1 tsp salt",
+                "salt",
+                Some(IngredientRef::Catalog(IngredientId::new("i-salt").unwrap())),
+                Quantity::Exact(rat(1, 1)),
+                Unit::Known(UnitKind::Teaspoon),
+                None,
+                false,
+            ),
+            full_line(
+                "2 handfuls mix",
+                "mix",
+                Some(IngredientRef::Custom(
+                    CustomIngredientId::new(format!("c-{household}")).unwrap(),
+                )),
+                Quantity::Exact(rat(2, 1)),
+                Unit::Other("handful".to_owned()),
+                None,
+                false,
+            ),
+            text_line("a splash of something"),
+        ];
+        save_recipe(
+            conn,
+            &recipe(household, &format!("shop-{household}"), lines),
+        )
+        .unwrap();
+    }
+
+    fn shop_dinner(household: &str, id: &str, date: &str, numer: u32, denom: u32) -> PlannedMeal {
+        occurrence(
+            household,
+            id,
+            date,
+            MealSlot::Dinner,
+            vec![
+                scaled(&format!("shop-{household}"), numer, denom),
+                leftovers("chili"),
+            ],
+        )
+    }
+
+    #[test]
+    fn an_inclusive_date_range_selects_exactly_the_planned_occurrences() {
+        let mut conn = open(":memory:").unwrap();
+        seed_for_shopping(&mut conn, "h");
+        for (id, date) in [
+            ("a", "2026-08-28"),
+            ("b", "2026-08-29"),
+            ("c", "2026-08-31"),
+            ("d", "2026-09-01"),
+        ] {
+            user_save(&mut conn, &shop_dinner("h", id, date, 1, 1)).unwrap();
+        }
+        let input = snapshot(&mut conn, "h", "2026-08-29", "2026-08-31");
+        let ids: Vec<&str> = input.meals.iter().map(|m| m.id().as_str()).collect();
+        assert_eq!(ids, ["b", "c"]);
+        assert_eq!(
+            input.recipes.len(),
+            1,
+            "one recipe loaded once, not per meal"
+        );
+        assert_eq!(input.recipes[0].id().as_str(), "shop-h");
+        let list = load_shopping_list(
+            &mut conn,
+            &hid("h"),
+            parse_civil_date("2026-08-29").unwrap(),
+            parse_civil_date("2026-08-31").unwrap(),
+        )
+        .unwrap();
+        assert_eq!(list.contribution_count, 8);
+        assert_eq!(list.non_recipe_components, 2);
+        let oil = shopping_lines(&list)
+            .into_iter()
+            .find(|l| l.name == "olive oil")
+            .unwrap();
+        assert_eq!(oil.quantity, Quantity::Exact(rat(2, 1)));
+        // Inverted range: empty, by `list_planned_meals` precedent — not an error.
+        let inverted = snapshot(&mut conn, "h", "2026-08-31", "2026-08-29");
+        assert!(inverted.meals.is_empty());
+        assert!(inverted.recipes.is_empty());
+    }
+
+    #[test]
+    fn store_categories_come_from_the_catalog_and_custom_rows() {
+        let mut conn = open(":memory:").unwrap();
+        seed_for_shopping(&mut conn, "h");
+        user_save(&mut conn, &shop_dinner("h", "pm", "2026-08-29", 1, 1)).unwrap();
+        let input = snapshot(&mut conn, "h", "2026-08-29", "2026-08-29");
+        let mut identities: Vec<(String, Option<String>)> = input
+            .identities
+            .iter()
+            .map(|(_, i)| (i.name.clone(), i.store_category.clone()))
+            .collect();
+        identities.sort();
+        assert_eq!(
+            identities,
+            vec![
+                ("mix".to_owned(), None),
+                ("olive oil".to_owned(), Some("aisle".to_owned())),
+                ("salt".to_owned(), Some("aisle".to_owned())),
+            ]
+        );
+        let list = derive_shopping_list(&input);
+        let categories: Vec<Option<&str>> =
+            list.groups.iter().map(|g| g.category.as_deref()).collect();
+        assert_eq!(categories, vec![Some("aisle"), None]);
+    }
+
+    #[test]
+    fn a_marked_pantry_identity_arrives_in_the_snapshot() {
+        let mut conn = open(":memory:").unwrap();
+        seed_for_shopping(&mut conn, "h");
+        user_save(&mut conn, &shop_dinner("h", "pm", "2026-08-29", 1, 1)).unwrap();
+        let salt = IngredientRef::Catalog(IngredientId::new("i-salt").unwrap());
+        set_pantry_mark(&mut conn, &hid("h"), &salt, true).unwrap();
+        let input = snapshot(&mut conn, "h", "2026-08-29", "2026-08-29");
+        assert_eq!(input.pantry_marked, vec![salt]);
+        let list = derive_shopping_list(&input);
+        let lines = shopping_lines(&list);
+        assert_eq!(lines.len(), 4);
+        let salt_line = lines.iter().find(|l| l.name == "salt").unwrap();
+        assert_eq!(salt_line.status, LineStatus::OmittedPantryMarked);
+        assert!(lines
+            .iter()
+            .filter(|l| l.name != "salt")
+            .all(|l| l.status == LineStatus::Needed));
+    }
+
+    #[test]
+    fn shopping_snapshot_reads_an_archived_recipes_lines() {
+        let mut conn = open(":memory:").unwrap();
+        seed_for_shopping(&mut conn, "h");
+        user_save(&mut conn, &shop_dinner("h", "pm", "2026-08-29", 1, 1)).unwrap();
+        archive(&mut conn, "h", "shop-h", "2026-08-29").unwrap();
+        let input = snapshot(&mut conn, "h", "2026-08-29", "2026-08-29");
+        assert_eq!(input.recipes.len(), 1);
+        assert_eq!(input.recipes[0].lines().len(), 4);
+        assert_eq!(derive_shopping_list(&input).contribution_count, 4);
+    }
+
+    #[test]
+    fn shopping_snapshot_for_an_absent_household_is_rejected() {
+        let mut conn = open(":memory:").unwrap();
+        let err = load_shopping_input(
+            &mut conn,
+            &hid("ghost"),
+            parse_civil_date("2026-08-29").unwrap(),
+            parse_civil_date("2026-08-29").unwrap(),
+        )
+        .unwrap_err();
+        assert!(
+            matches!(err, StorageError::NoSuchHousehold(ref h) if h == "ghost"),
+            "{err:?}"
+        );
+    }
+
+    /// Adversarial: h2's meals, pantry marks and custom ingredient never reach h1's snapshot.
+    #[test]
+    fn shopping_snapshot_is_household_scoped() {
+        let mut conn = open(":memory:").unwrap();
+        seed_for_shopping(&mut conn, "h");
+        seed_for_shopping(&mut conn, "h2");
+        user_save(&mut conn, &shop_dinner("h", "pm-h", "2026-08-29", 1, 1)).unwrap();
+        user_save(&mut conn, &shop_dinner("h2", "pm-h2", "2026-08-29", 3, 1)).unwrap();
+        let oil = IngredientRef::Catalog(IngredientId::new("i-oil").unwrap());
+        set_pantry_mark(&mut conn, &hid("h2"), &oil, true).unwrap();
+        let input = snapshot(&mut conn, "h", "2026-08-29", "2026-08-29");
+        assert_eq!(input.meals.len(), 1);
+        assert_eq!(input.meals[0].id().as_str(), "pm-h");
+        assert_eq!(input.recipes.len(), 1);
+        assert_eq!(input.recipes[0].household_id().as_str(), "h");
+        assert!(input.pantry_marked.is_empty());
+        assert!(input
+            .identities
+            .iter()
+            .all(|(r, _)| r != &IngredientRef::Custom(CustomIngredientId::new("c-h2").unwrap())));
+        let list = derive_shopping_list(&input);
+        assert_eq!(list.contribution_count, 4);
+        let oil_line = shopping_lines(&list)
+            .into_iter()
+            .find(|l| l.name == "olive oil")
+            .unwrap();
+        assert_eq!(oil_line.status, LineStatus::Needed);
+        assert_eq!(oil_line.quantity, Quantity::Exact(rat(1, 1)));
     }
 }

@@ -11,6 +11,7 @@ import 'api/planned_meals.dart';
 import 'api/planning.dart';
 import 'api/recipe.dart';
 import 'api/restrictions.dart';
+import 'api/shopping.dart';
 import 'api/starter.dart';
 
 import 'dart:async';
@@ -77,7 +78,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.13.0';
 
   @override
-  int get rustContentHash => -617872351;
+  int get rustContentHash => -1290913739;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -110,6 +111,12 @@ abstract class RustLibApi extends BaseApi {
   Future<void> crateApiPlannedMealsDeletePlannedMeal({
     required String householdId,
     required String mealId,
+  });
+
+  Future<ShoppingListDto> crateApiShoppingDeriveShoppingList({
+    required String householdId,
+    required String fromDate,
+    required String toDate,
   });
 
   Future<PlanningCycleDto> crateApiPlanningEnsurePlanningCycle({
@@ -410,6 +417,43 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
+  Future<ShoppingListDto> crateApiShoppingDeriveShoppingList({
+    required String householdId,
+    required String fromDate,
+    required String toDate,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(householdId, serializer);
+          sse_encode_String(fromDate, serializer);
+          sse_encode_String(toDate, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 7,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_shopping_list_dto,
+          decodeErrorData: sse_decode_kimatta_error,
+        ),
+        constMeta: kCrateApiShoppingDeriveShoppingListConstMeta,
+        argValues: [householdId, fromDate, toDate],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiShoppingDeriveShoppingListConstMeta =>
+      const TaskConstMeta(
+        debugName: "derive_shopping_list",
+        argNames: ["householdId", "fromDate", "toDate"],
+      );
+
+  @override
   Future<PlanningCycleDto> crateApiPlanningEnsurePlanningCycle({
     required String householdId,
     required String defaultAnchorDate,
@@ -423,7 +467,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 7,
+            funcId: 8,
             port: port_,
           );
         },
@@ -453,7 +497,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 8,
+            funcId: 9,
             port: port_,
           );
         },
@@ -483,7 +527,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 9,
+            funcId: 10,
             port: port_,
           );
         },
@@ -513,7 +557,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 10,
+            funcId: 11,
             port: port_,
           );
         },
@@ -543,7 +587,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 11,
+            funcId: 12,
             port: port_,
           );
         },
@@ -570,7 +614,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 12,
+            funcId: 13,
             port: port_,
           );
         },
@@ -600,7 +644,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 13,
+            funcId: 14,
             port: port_,
           );
         },
@@ -633,7 +677,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 14,
+            funcId: 15,
             port: port_,
           );
         },
@@ -666,7 +710,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 15,
+            funcId: 16,
             port: port_,
           );
         },
@@ -700,7 +744,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 16,
+            funcId: 17,
             port: port_,
           );
         },
@@ -733,7 +777,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 17,
+            funcId: 18,
             port: port_,
           );
         },
@@ -765,7 +809,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 18,
+            funcId: 19,
             port: port_,
           );
         },
@@ -800,7 +844,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 19,
+            funcId: 20,
             port: port_,
           );
         },
@@ -832,7 +876,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 20,
+            funcId: 21,
             port: port_,
           );
         },
@@ -863,7 +907,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 21,
+            funcId: 22,
             port: port_,
           );
         },
@@ -897,7 +941,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 22,
+            funcId: 23,
             port: port_,
           );
         },
@@ -932,7 +976,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 23,
+            funcId: 24,
             port: port_,
           );
         },
@@ -967,7 +1011,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 24,
+            funcId: 25,
             port: port_,
           );
         },
@@ -1000,7 +1044,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 25,
+            funcId: 26,
             port: port_,
           );
         },
@@ -1036,7 +1080,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 26,
+            funcId: 27,
             port: port_,
           );
         },
@@ -1067,7 +1111,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 27,
+            funcId: 28,
             port: port_,
           );
         },
@@ -1099,7 +1143,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 28,
+            funcId: 29,
             port: port_,
           );
         },
@@ -1136,7 +1180,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 29,
+            funcId: 30,
             port: port_,
           );
         },
@@ -1173,7 +1217,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 30,
+            funcId: 31,
             port: port_,
           );
         },
@@ -1247,6 +1291,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  SeparateReasonDto dco_decode_box_autoadd_separate_reason_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_separate_reason_dto(raw);
+  }
+
+  @protected
   int dco_decode_box_autoadd_u_32(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw as int;
@@ -1263,6 +1313,25 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       linePosition: dco_decode_u_32(arr[1]),
       lineName: dco_decode_String(arr[2]),
       term: dco_decode_String(arr[3]),
+    );
+  }
+
+  @protected
+  ContributionDto dco_decode_contribution_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 9)
+      throw Exception('unexpected arr length: expect 9 but see ${arr.length}');
+    return ContributionDto(
+      plannedMealId: dco_decode_String(arr[0]),
+      date: dco_decode_String(arr[1]),
+      slot: dco_decode_meal_slot_dto(arr[2]),
+      componentPosition: dco_decode_u_32(arr[3]),
+      recipeId: dco_decode_String(arr[4]),
+      recipeTitle: dco_decode_String(arr[5]),
+      linePosition: dco_decode_u_32(arr[6]),
+      originalText: dco_decode_String(arr[7]),
+      scale: dco_decode_opt_box_autoadd_scale_dto(arr[8]),
     );
   }
 
@@ -1378,6 +1447,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  List<ContributionDto> dco_decode_list_contribution_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>).map(dco_decode_contribution_dto).toList();
+  }
+
+  @protected
   List<CustomIngredientDto> dco_decode_list_custom_ingredient_dto(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return (raw as List<dynamic>)
@@ -1437,6 +1512,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   List<RestrictionDto> dco_decode_list_restriction_dto(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return (raw as List<dynamic>).map(dco_decode_restriction_dto).toList();
+  }
+
+  @protected
+  List<ShoppingGroupDto> dco_decode_list_shopping_group_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>).map(dco_decode_shopping_group_dto).toList();
+  }
+
+  @protected
+  List<ShoppingLineDto> dco_decode_list_shopping_line_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>).map(dco_decode_shopping_line_dto).toList();
   }
 
   @protected
@@ -1508,6 +1595,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   ScaleDto? dco_decode_opt_box_autoadd_scale_dto(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw == null ? null : dco_decode_box_autoadd_scale_dto(raw);
+  }
+
+  @protected
+  SeparateReasonDto? dco_decode_opt_box_autoadd_separate_reason_dto(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw == null ? null : dco_decode_box_autoadd_separate_reason_dto(raw);
   }
 
   @protected
@@ -1677,6 +1772,65 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  SeparateReasonDto dco_decode_separate_reason_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return SeparateReasonDto.values[raw as int];
+  }
+
+  @protected
+  ShoppingGroupDto dco_decode_shopping_group_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 2)
+      throw Exception('unexpected arr length: expect 2 but see ${arr.length}');
+    return ShoppingGroupDto(
+      category: dco_decode_opt_String(arr[0]),
+      lines: dco_decode_list_shopping_line_dto(arr[1]),
+    );
+  }
+
+  @protected
+  ShoppingLineDto dco_decode_shopping_line_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 9)
+      throw Exception('unexpected arr length: expect 9 but see ${arr.length}');
+    return ShoppingLineDto(
+      key: dco_decode_String(arr[0]),
+      name: dco_decode_String(arr[1]),
+      ingredient: dco_decode_opt_box_autoadd_ingredient_ref_dto(arr[2]),
+      quantity: dco_decode_quantity_dto(arr[3]),
+      unit: dco_decode_unit_dto(arr[4]),
+      optional: dco_decode_bool(arr[5]),
+      status: dco_decode_shopping_line_status_dto(arr[6]),
+      separateReason: dco_decode_opt_box_autoadd_separate_reason_dto(arr[7]),
+      contributions: dco_decode_list_contribution_dto(arr[8]),
+    );
+  }
+
+  @protected
+  ShoppingLineStatusDto dco_decode_shopping_line_status_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return ShoppingLineStatusDto.values[raw as int];
+  }
+
+  @protected
+  ShoppingListDto dco_decode_shopping_list_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 6)
+      throw Exception('unexpected arr length: expect 6 but see ${arr.length}');
+    return ShoppingListDto(
+      algorithmVersion: dco_decode_u_32(arr[0]),
+      fromDate: dco_decode_String(arr[1]),
+      toDate: dco_decode_String(arr[2]),
+      groups: dco_decode_list_shopping_group_dto(arr[3]),
+      nonRecipeComponents: dco_decode_u_32(arr[4]),
+      contributionCount: dco_decode_u_32(arr[5]),
+    );
+  }
+
+  @protected
   StarterInstallReportDto dco_decode_starter_install_report_dto(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
@@ -1782,6 +1936,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  SeparateReasonDto sse_decode_box_autoadd_separate_reason_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_separate_reason_dto(deserializer));
+  }
+
+  @protected
   int sse_decode_box_autoadd_u_32(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return (sse_decode_u_32(deserializer));
@@ -1799,6 +1961,31 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       linePosition: var_linePosition,
       lineName: var_lineName,
       term: var_term,
+    );
+  }
+
+  @protected
+  ContributionDto sse_decode_contribution_dto(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_plannedMealId = sse_decode_String(deserializer);
+    var var_date = sse_decode_String(deserializer);
+    var var_slot = sse_decode_meal_slot_dto(deserializer);
+    var var_componentPosition = sse_decode_u_32(deserializer);
+    var var_recipeId = sse_decode_String(deserializer);
+    var var_recipeTitle = sse_decode_String(deserializer);
+    var var_linePosition = sse_decode_u_32(deserializer);
+    var var_originalText = sse_decode_String(deserializer);
+    var var_scale = sse_decode_opt_box_autoadd_scale_dto(deserializer);
+    return ContributionDto(
+      plannedMealId: var_plannedMealId,
+      date: var_date,
+      slot: var_slot,
+      componentPosition: var_componentPosition,
+      recipeId: var_recipeId,
+      recipeTitle: var_recipeTitle,
+      linePosition: var_linePosition,
+      originalText: var_originalText,
+      scale: var_scale,
     );
   }
 
@@ -1945,6 +2132,20 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  List<ContributionDto> sse_decode_list_contribution_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <ContributionDto>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_contribution_dto(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
   List<CustomIngredientDto> sse_decode_list_custom_ingredient_dto(
     SseDeserializer deserializer,
   ) {
@@ -2076,6 +2277,34 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  List<ShoppingGroupDto> sse_decode_list_shopping_group_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <ShoppingGroupDto>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_shopping_group_dto(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
+  List<ShoppingLineDto> sse_decode_list_shopping_line_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <ShoppingLineDto>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_shopping_line_dto(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
   MealComponentDto sse_decode_meal_component_dto(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var var_kind = sse_decode_String(deserializer);
@@ -2175,6 +2404,19 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
 
     if (sse_decode_bool(deserializer)) {
       return (sse_decode_box_autoadd_scale_dto(deserializer));
+    } else {
+      return null;
+    }
+  }
+
+  @protected
+  SeparateReasonDto? sse_decode_opt_box_autoadd_separate_reason_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    if (sse_decode_bool(deserializer)) {
+      return (sse_decode_box_autoadd_separate_reason_dto(deserializer));
     } else {
       return null;
     }
@@ -2384,6 +2626,80 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  SeparateReasonDto sse_decode_separate_reason_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var inner = sse_decode_i_32(deserializer);
+    return SeparateReasonDto.values[inner];
+  }
+
+  @protected
+  ShoppingGroupDto sse_decode_shopping_group_dto(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_category = sse_decode_opt_String(deserializer);
+    var var_lines = sse_decode_list_shopping_line_dto(deserializer);
+    return ShoppingGroupDto(category: var_category, lines: var_lines);
+  }
+
+  @protected
+  ShoppingLineDto sse_decode_shopping_line_dto(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_key = sse_decode_String(deserializer);
+    var var_name = sse_decode_String(deserializer);
+    var var_ingredient = sse_decode_opt_box_autoadd_ingredient_ref_dto(
+      deserializer,
+    );
+    var var_quantity = sse_decode_quantity_dto(deserializer);
+    var var_unit = sse_decode_unit_dto(deserializer);
+    var var_optional = sse_decode_bool(deserializer);
+    var var_status = sse_decode_shopping_line_status_dto(deserializer);
+    var var_separateReason = sse_decode_opt_box_autoadd_separate_reason_dto(
+      deserializer,
+    );
+    var var_contributions = sse_decode_list_contribution_dto(deserializer);
+    return ShoppingLineDto(
+      key: var_key,
+      name: var_name,
+      ingredient: var_ingredient,
+      quantity: var_quantity,
+      unit: var_unit,
+      optional: var_optional,
+      status: var_status,
+      separateReason: var_separateReason,
+      contributions: var_contributions,
+    );
+  }
+
+  @protected
+  ShoppingLineStatusDto sse_decode_shopping_line_status_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var inner = sse_decode_i_32(deserializer);
+    return ShoppingLineStatusDto.values[inner];
+  }
+
+  @protected
+  ShoppingListDto sse_decode_shopping_list_dto(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_algorithmVersion = sse_decode_u_32(deserializer);
+    var var_fromDate = sse_decode_String(deserializer);
+    var var_toDate = sse_decode_String(deserializer);
+    var var_groups = sse_decode_list_shopping_group_dto(deserializer);
+    var var_nonRecipeComponents = sse_decode_u_32(deserializer);
+    var var_contributionCount = sse_decode_u_32(deserializer);
+    return ShoppingListDto(
+      algorithmVersion: var_algorithmVersion,
+      fromDate: var_fromDate,
+      toDate: var_toDate,
+      groups: var_groups,
+      nonRecipeComponents: var_nonRecipeComponents,
+      contributionCount: var_contributionCount,
+    );
+  }
+
+  @protected
   StarterInstallReportDto sse_decode_starter_install_report_dto(
     SseDeserializer deserializer,
   ) {
@@ -2505,6 +2821,15 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_box_autoadd_separate_reason_dto(
+    SeparateReasonDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_separate_reason_dto(self, serializer);
+  }
+
+  @protected
   void sse_encode_box_autoadd_u_32(int self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_u_32(self, serializer);
@@ -2517,6 +2842,23 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_u_32(self.linePosition, serializer);
     sse_encode_String(self.lineName, serializer);
     sse_encode_String(self.term, serializer);
+  }
+
+  @protected
+  void sse_encode_contribution_dto(
+    ContributionDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.plannedMealId, serializer);
+    sse_encode_String(self.date, serializer);
+    sse_encode_meal_slot_dto(self.slot, serializer);
+    sse_encode_u_32(self.componentPosition, serializer);
+    sse_encode_String(self.recipeId, serializer);
+    sse_encode_String(self.recipeTitle, serializer);
+    sse_encode_u_32(self.linePosition, serializer);
+    sse_encode_String(self.originalText, serializer);
+    sse_encode_opt_box_autoadd_scale_dto(self.scale, serializer);
   }
 
   @protected
@@ -2628,6 +2970,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_i_32(self.length, serializer);
     for (final item in self) {
       sse_encode_conflict_dto(item, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_list_contribution_dto(
+    List<ContributionDto> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_contribution_dto(item, serializer);
     }
   }
 
@@ -2750,6 +3104,30 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_list_shopping_group_dto(
+    List<ShoppingGroupDto> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_shopping_group_dto(item, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_list_shopping_line_dto(
+    List<ShoppingLineDto> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_shopping_line_dto(item, serializer);
+    }
+  }
+
+  @protected
   void sse_encode_meal_component_dto(
     MealComponentDto self,
     SseSerializer serializer,
@@ -2846,6 +3224,19 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_bool(self != null, serializer);
     if (self != null) {
       sse_encode_box_autoadd_scale_dto(self, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_opt_box_autoadd_separate_reason_dto(
+    SeparateReasonDto? self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    sse_encode_bool(self != null, serializer);
+    if (self != null) {
+      sse_encode_box_autoadd_separate_reason_dto(self, serializer);
     }
   }
 
@@ -3002,6 +3393,68 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_u_32(self.numer, serializer);
     sse_encode_u_32(self.denom, serializer);
+  }
+
+  @protected
+  void sse_encode_separate_reason_dto(
+    SeparateReasonDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.index, serializer);
+  }
+
+  @protected
+  void sse_encode_shopping_group_dto(
+    ShoppingGroupDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_opt_String(self.category, serializer);
+    sse_encode_list_shopping_line_dto(self.lines, serializer);
+  }
+
+  @protected
+  void sse_encode_shopping_line_dto(
+    ShoppingLineDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.key, serializer);
+    sse_encode_String(self.name, serializer);
+    sse_encode_opt_box_autoadd_ingredient_ref_dto(self.ingredient, serializer);
+    sse_encode_quantity_dto(self.quantity, serializer);
+    sse_encode_unit_dto(self.unit, serializer);
+    sse_encode_bool(self.optional, serializer);
+    sse_encode_shopping_line_status_dto(self.status, serializer);
+    sse_encode_opt_box_autoadd_separate_reason_dto(
+      self.separateReason,
+      serializer,
+    );
+    sse_encode_list_contribution_dto(self.contributions, serializer);
+  }
+
+  @protected
+  void sse_encode_shopping_line_status_dto(
+    ShoppingLineStatusDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.index, serializer);
+  }
+
+  @protected
+  void sse_encode_shopping_list_dto(
+    ShoppingListDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_u_32(self.algorithmVersion, serializer);
+    sse_encode_String(self.fromDate, serializer);
+    sse_encode_String(self.toDate, serializer);
+    sse_encode_list_shopping_group_dto(self.groups, serializer);
+    sse_encode_u_32(self.nonRecipeComponents, serializer);
+    sse_encode_u_32(self.contributionCount, serializer);
   }
 
   @protected

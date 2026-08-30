@@ -362,6 +362,13 @@ fn gcd(mut a: u32, mut b: u32) -> u32 {
     a
 }
 
+fn gcd_u64(mut a: u64, mut b: u64) -> u64 {
+    while b != 0 {
+        (a, b) = (b, a % b);
+    }
+    a
+}
+
 /// Exact positive rational, gcd-normalised so equal values compare equal. Fields are private:
 /// `new` is the only way in, so `2/4` cannot exist beside `1/2` and `denom` is never zero.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -391,6 +398,33 @@ impl Rational {
 
     pub fn denom(self) -> u32 {
         self.denom
+    }
+
+    /// `None` when the exact result does not fit `u32` after normalisation. Every intermediate
+    /// step is a checked `u64` operation: two `u32` products each fit `u64`, but their *sum*
+    /// can exceed it, so the addition is checked too — never a wrap, never a panic.
+    pub fn checked_add(self, other: Self) -> Option<Self> {
+        let lhs = u64::from(self.numer).checked_mul(u64::from(other.denom))?;
+        let rhs = u64::from(other.numer).checked_mul(u64::from(self.denom))?;
+        let numer = lhs.checked_add(rhs)?;
+        let denom = u64::from(self.denom).checked_mul(u64::from(other.denom))?;
+        Self::from_u64(numer, denom)
+    }
+
+    pub fn checked_mul(self, other: Self) -> Option<Self> {
+        Self::from_u64(
+            u64::from(self.numer) * u64::from(other.numer),
+            u64::from(self.denom) * u64::from(other.denom),
+        )
+    }
+
+    fn from_u64(numer: u64, denom: u64) -> Option<Self> {
+        let g = gcd_u64(numer, denom);
+        let (numer, denom) = (numer / g, denom / g);
+        Some(Self {
+            numer: u32::try_from(numer).ok()?,
+            denom: u32::try_from(denom).ok()?,
+        })
     }
 }
 
@@ -915,6 +949,43 @@ mod tests {
         assert!(big > half);
         assert!(half < big);
         assert!(r(u32::MAX, u32::MAX - 1) > r(1, 1));
+    }
+
+    // --- MVP-015 step 2: checked arithmetic -----------------------------------------------
+
+    #[test]
+    fn rational_add_and_mul_are_exact_and_normalised() {
+        assert_eq!(r(1, 2).checked_add(r(1, 3)), Some(r(5, 6)));
+        assert_eq!(r(2, 3).checked_mul(r(3, 4)), Some(r(1, 2)));
+        assert_eq!(r(1, 2).checked_add(r(1, 2)), Some(r(1, 1)));
+        assert_eq!(r(1, 2).checked_add(r(1, 2)).unwrap().denom(), 1);
+    }
+
+    #[test]
+    fn rational_add_reports_overflow_instead_of_wrapping() {
+        assert_eq!(r(u32::MAX, 1).checked_add(r(1, 1)), None);
+        assert_eq!(r(u32::MAX, 1).checked_mul(r(2, 1)), None);
+        // Each cross product fits `u64`, but their sum does not: this pair fails against an
+        // unchecked `u64` addition, which would wrap in release and panic in debug.
+        let near = r(u32::MAX, u32::MAX - 1);
+        assert_eq!(near.checked_add(near), None);
+        // A large-denominator product that fits `u64` but not `u32` after normalisation.
+        assert_eq!(r(1, u32::MAX).checked_add(r(1, u32::MAX - 1)), None);
+        assert_eq!(r(1, 2).checked_add(r(1, 2)), Some(r(1, 1)));
+    }
+
+    #[test]
+    fn rational_add_is_commutative_on_a_boundary_matrix() {
+        let matrix = [r(1, 1), r(1, 3), r(u32::MAX, 1), r(1, u32::MAX)];
+        assert!(!matrix.is_empty());
+        for a in matrix {
+            for b in matrix {
+                assert_eq!(a.checked_add(b), b.checked_add(a), "{a} + {b}");
+                assert_eq!(a.checked_mul(b), b.checked_mul(a), "{a} * {b}");
+            }
+        }
+        assert_eq!(r(1, 3).checked_add(r(1, 1)), Some(r(4, 3)));
+        assert_eq!(r(u32::MAX, 1).checked_mul(r(1, u32::MAX)), Some(r(1, 1)));
     }
 
     // --- Step 3: IngredientLine and Recipe ----------------------------------------------

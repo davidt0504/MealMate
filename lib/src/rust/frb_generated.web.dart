@@ -14,6 +14,7 @@ import 'api/planned_meals.dart';
 import 'api/planning.dart';
 import 'api/recipe.dart';
 import 'api/restrictions.dart';
+import 'api/shopping.dart';
 import 'api/starter.dart';
 
 import 'dart:async';
@@ -58,10 +59,16 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   ScaleDto dco_decode_box_autoadd_scale_dto(dynamic raw);
 
   @protected
+  SeparateReasonDto dco_decode_box_autoadd_separate_reason_dto(dynamic raw);
+
+  @protected
   int dco_decode_box_autoadd_u_32(dynamic raw);
 
   @protected
   ConflictDto dco_decode_conflict_dto(dynamic raw);
+
+  @protected
+  ContributionDto dco_decode_contribution_dto(dynamic raw);
 
   @protected
   CustomIngredientDto dco_decode_custom_ingredient_dto(dynamic raw);
@@ -89,6 +96,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   List<ConflictDto> dco_decode_list_conflict_dto(dynamic raw);
+
+  @protected
+  List<ContributionDto> dco_decode_list_contribution_dto(dynamic raw);
 
   @protected
   List<CustomIngredientDto> dco_decode_list_custom_ingredient_dto(dynamic raw);
@@ -121,6 +131,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   List<RestrictionDto> dco_decode_list_restriction_dto(dynamic raw);
 
   @protected
+  List<ShoppingGroupDto> dco_decode_list_shopping_group_dto(dynamic raw);
+
+  @protected
+  List<ShoppingLineDto> dco_decode_list_shopping_line_dto(dynamic raw);
+
+  @protected
   MealComponentDto dco_decode_meal_component_dto(dynamic raw);
 
   @protected
@@ -147,6 +163,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   ScaleDto? dco_decode_opt_box_autoadd_scale_dto(dynamic raw);
+
+  @protected
+  SeparateReasonDto? dco_decode_opt_box_autoadd_separate_reason_dto(
+    dynamic raw,
+  );
 
   @protected
   int? dco_decode_opt_box_autoadd_u_32(dynamic raw);
@@ -180,6 +201,21 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   ScaleDto dco_decode_scale_dto(dynamic raw);
+
+  @protected
+  SeparateReasonDto dco_decode_separate_reason_dto(dynamic raw);
+
+  @protected
+  ShoppingGroupDto dco_decode_shopping_group_dto(dynamic raw);
+
+  @protected
+  ShoppingLineDto dco_decode_shopping_line_dto(dynamic raw);
+
+  @protected
+  ShoppingLineStatusDto dco_decode_shopping_line_status_dto(dynamic raw);
+
+  @protected
+  ShoppingListDto dco_decode_shopping_list_dto(dynamic raw);
 
   @protected
   StarterInstallReportDto dco_decode_starter_install_report_dto(dynamic raw);
@@ -229,10 +265,18 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   ScaleDto sse_decode_box_autoadd_scale_dto(SseDeserializer deserializer);
 
   @protected
+  SeparateReasonDto sse_decode_box_autoadd_separate_reason_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   int sse_decode_box_autoadd_u_32(SseDeserializer deserializer);
 
   @protected
   ConflictDto sse_decode_conflict_dto(SseDeserializer deserializer);
+
+  @protected
+  ContributionDto sse_decode_contribution_dto(SseDeserializer deserializer);
 
   @protected
   CustomIngredientDto sse_decode_custom_ingredient_dto(
@@ -264,6 +308,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   List<ConflictDto> sse_decode_list_conflict_dto(SseDeserializer deserializer);
+
+  @protected
+  List<ContributionDto> sse_decode_list_contribution_dto(
+    SseDeserializer deserializer,
+  );
 
   @protected
   List<CustomIngredientDto> sse_decode_list_custom_ingredient_dto(
@@ -310,6 +359,16 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  List<ShoppingGroupDto> sse_decode_list_shopping_group_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  List<ShoppingLineDto> sse_decode_list_shopping_line_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   MealComponentDto sse_decode_meal_component_dto(SseDeserializer deserializer);
 
   @protected
@@ -344,6 +403,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   ScaleDto? sse_decode_opt_box_autoadd_scale_dto(SseDeserializer deserializer);
+
+  @protected
+  SeparateReasonDto? sse_decode_opt_box_autoadd_separate_reason_dto(
+    SseDeserializer deserializer,
+  );
 
   @protected
   int? sse_decode_opt_box_autoadd_u_32(SseDeserializer deserializer);
@@ -381,6 +445,25 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   ScaleDto sse_decode_scale_dto(SseDeserializer deserializer);
+
+  @protected
+  SeparateReasonDto sse_decode_separate_reason_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  ShoppingGroupDto sse_decode_shopping_group_dto(SseDeserializer deserializer);
+
+  @protected
+  ShoppingLineDto sse_decode_shopping_line_dto(SseDeserializer deserializer);
+
+  @protected
+  ShoppingLineStatusDto sse_decode_shopping_line_status_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  ShoppingListDto sse_decode_shopping_list_dto(SseDeserializer deserializer);
 
   @protected
   StarterInstallReportDto sse_decode_starter_install_report_dto(
@@ -442,10 +525,22 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_box_autoadd_separate_reason_dto(
+    SeparateReasonDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_box_autoadd_u_32(int self, SseSerializer serializer);
 
   @protected
   void sse_encode_conflict_dto(ConflictDto self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_contribution_dto(
+    ContributionDto self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_custom_ingredient_dto(
@@ -483,6 +578,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_list_conflict_dto(
     List<ConflictDto> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_contribution_dto(
+    List<ContributionDto> self,
     SseSerializer serializer,
   );
 
@@ -547,6 +648,18 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_list_shopping_group_dto(
+    List<ShoppingGroupDto> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_shopping_line_dto(
+    List<ShoppingLineDto> self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_meal_component_dto(
     MealComponentDto self,
     SseSerializer serializer,
@@ -588,6 +701,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_opt_box_autoadd_scale_dto(
     ScaleDto? self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_opt_box_autoadd_separate_reason_dto(
+    SeparateReasonDto? self,
     SseSerializer serializer,
   );
 
@@ -644,6 +763,36 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_scale_dto(ScaleDto self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_separate_reason_dto(
+    SeparateReasonDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_shopping_group_dto(
+    ShoppingGroupDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_shopping_line_dto(
+    ShoppingLineDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_shopping_line_status_dto(
+    ShoppingLineStatusDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_shopping_list_dto(
+    ShoppingListDto self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_starter_install_report_dto(

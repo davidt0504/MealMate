@@ -173,7 +173,10 @@ fn stored(
     }
 }
 
-fn save_in(conn: &mut Connection, dto: PlannedMealDto) -> Result<PlannedMealDto, KimattaError> {
+pub(crate) fn save_in(
+    conn: &mut Connection,
+    dto: PlannedMealDto,
+) -> Result<PlannedMealDto, KimattaError> {
     let meal = to_domain(dto)?;
     kimatta_storage::save_planned_meal(conn, &meal, WriteSource::User)?;
     stored(conn, meal.household_id(), meal.id())

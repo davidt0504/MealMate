@@ -705,3 +705,41 @@ Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-orch-27-2026-
 - **Per-cell action controls carry no cell context for a screen reader** (`lib/features/planning/planner_screen.dart:298`) -- every cell renders an identically-labelled `Add`, and the component menu's `Move…`/`Scale…`/`Remove` repeat per component; the `Card` has a `ValueKey` but no `Semantics` container, so explore-by-touch announces "Add" seven times with no day or slot. `labeledTapTargetGuideline` passes, so no test sees it. Fix: wrap each cell in `Semantics(container: true, label: '$date · ${slotLabel(slot)}')` and sample the label from `planner_copy.dart`.
   Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-orch-27-2026-08-29T1900-494b.md
   **Status:** OPEN
+
+---
+
+## orch/29 -- 2026-08-29
+
+Source: /home/davidlinux/.claude/reviews/impl-handoff-orch-29-2026-08-29T2040-d2cb.md
+Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-orch-29-2026-08-29T2047-558f.md
+
+### LOW
+
+- **Duplicate ids make `derive_shopping_list` order-dependent** (`rust/crates/food-domain/src/shopping.rs:363`) -- `ShoppingInput`'s doc claims "Order of every `Vec` is irrelevant to the output", but duplicate recipe ids resolve first-wins (`or_insert`) while duplicate identity refs resolve last-wins (`collect` into `BTreeMap`). Unreachable via `load_shopping_input`, which dedups both; `derive_shopping_list` is public and pure, so the invariant is overclaimed. Fix: weaken the doc to require unique ids/refs, or make both collections first-wins.
+  Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-orch-29-2026-08-29T2047-558f.md
+  **Status:** OPEN
+
+---
+
+## orch/29 -- 2026-08-29
+
+Source: /home/davidlinux/.claude/reviews/impl-handoff-orch-29-2026-08-29T2117-8f5f.md
+Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-orch-29-2026-08-29T2126-026f.md
+
+### LOW
+
+- **`derive_shopping_list` never filters `meals` by `from..=to`** (`rust/crates/food-domain/src/shopping.rs:416`) -- the doc claims `contribution_count` counts pairs "in range" and the list echoes `from`/`to`, but `collect_raws` iterates every meal; only `load_shopping_input`'s SQL `BETWEEN` bounds it. A hand-built `ShoppingInput` derives a list mislabelled with a range it does not respect. Fix: `retain` on the range in `collect_raws`, or state the precondition.
+  Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-orch-29-2026-08-29T2126-026f.md
+  **Status:** OPEN
+
+---
+
+- **Overflow fallback hand-rebuilds `Raw` field by field** (`rust/crates/food-domain/src/shopping.rs:494`) -- a ten-line struct literal copies all seven fields unchanged because `Raw` has no `Clone`, so a future field must be added in two places. Readability only; the compiler catches the omission. Fix: `#[derive(Clone)]` on `Raw`, then `separate_line(raw.clone(), ...)`.
+  Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-orch-29-2026-08-29T2126-026f.md
+  **Status:** OPEN
+
+---
+
+- **Re-export rationale comment cites a name no item produces** (`rust/crates/food-domain/src/lib.rs:20`) -- the comment says a glob would expose `food_domain::derive`, but `shopping.rs` defines no `derive`; the function is `derive_shopping_list`, which a glob would re-export under that name. The stated reason for the explicit list describes nothing that could happen. Fix: state the real reason (a reviewable crate-root surface) or drop the comment.
+  Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-orch-29-2026-08-29T2126-026f.md
+  **Status:** OPEN
