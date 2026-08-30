@@ -29,6 +29,9 @@ import 'package:meal_mate/src/rust/api/recipe.dart';
 import 'package:meal_mate/src/rust/api/restrictions.dart';
 import 'package:meal_mate/src/rust/api/starter.dart';
 import 'package:meal_mate/features/recipes/starter_provider.dart';
+import 'package:meal_mate/features/shopping/shopping_copy.dart';
+import 'package:meal_mate/features/shopping/shopping_provider.dart';
+import 'package:meal_mate/src/rust/api/shopping.dart';
 
 const okReport = HealthReport(dbPath: '/x/kimatta.db', schemaVersion: 5);
 
@@ -593,6 +596,230 @@ class _FakePlannerNotifier extends PlannerNotifier {
   }
 }
 
+/// The *real* `ShoppingNotifier` with only its seven bridge seams replaced, as
+/// `_FakePlannerNotifier` is: its own `build`, `refresh` and every republish run, so the
+/// merge-by-key logic is what every shopping widget assertion verifies.
+class _FakeShoppingNotifier extends ShoppingNotifier {
+  _FakeShoppingNotifier({
+    this.window,
+    this.view,
+    this.lineState,
+    this.manualItem,
+    this.deleteItem,
+    this.reset_,
+    this.pantryMarks,
+  });
+
+  final FutureOr<PlanningCycleDto> Function(int offset)? window;
+  final FutureOr<ShoppingViewDto> Function(String from, String to)? view;
+  final Future<ShoppingLineStateDto> Function(ShoppingLineStateDto)? lineState;
+  final Future<ShoppingManualItemDto> Function(ShoppingManualItemDto)?
+  manualItem;
+  final Future<void> Function(String id)? deleteItem;
+  final Future<void> Function(String from, String to)? reset_;
+  final Future<List<IngredientRefDto>> Function(List<IngredientRefDto>, bool)?
+  pantryMarks;
+
+  @override
+  Future<PlanningCycleDto> fetchWindow(
+    String householdId,
+    String today,
+    int offset,
+  ) async => (window ?? (_) => okCycle)(offset);
+
+  @override
+  Future<ShoppingViewDto> fetchView(
+    String householdId,
+    String from,
+    String to,
+  ) async => (view ?? (_, _) => emptyShoppingView)(from, to);
+
+  @override
+  Future<ShoppingLineStateDto> writeLineState(
+    String householdId,
+    String from,
+    String to,
+    ShoppingLineStateDto state,
+  ) {
+    final fake = lineState;
+    if (fake == null) {
+      throw StateError('this test writes a line state without a hook');
+    }
+    return fake(state);
+  }
+
+  @override
+  Future<ShoppingManualItemDto> writeManualItem(ShoppingManualItemDto item) {
+    final fake = manualItem;
+    if (fake == null) {
+      throw StateError('this test saves a manual item without a hook');
+    }
+    return fake(item);
+  }
+
+  @override
+  Future<void> removeManualItem(String householdId, String itemId) {
+    final fake = deleteItem;
+    if (fake == null) {
+      throw StateError('this test deletes a manual item without a hook');
+    }
+    return fake(itemId);
+  }
+
+  @override
+  Future<void> writeReset(String householdId, String from, String to) {
+    final fake = reset_;
+    if (fake == null) throw StateError('this test resets without a hook');
+    return fake(from, to);
+  }
+
+  @override
+  Future<List<IngredientRefDto>> writePantryMarks(
+    String householdId,
+    List<IngredientRefDto> ingredients,
+    bool marked,
+  ) {
+    final fake = pantryMarks;
+    if (fake == null) {
+      throw StateError('this test marks the pantry in bulk without a hook');
+    }
+    return fake(ingredients, marked);
+  }
+}
+
+const emptyShoppingList = ShoppingListDto(
+  algorithmVersion: 1,
+  fromDate: '2026-08-29',
+  toDate: '2026-09-04',
+  groups: [],
+  nonRecipeComponents: 0,
+  contributionCount: 0,
+);
+
+const emptyShoppingView = ShoppingViewDto(
+  list: emptyShoppingList,
+  lineStates: [],
+  manualItems: [],
+  orphanedLineStateCount: 0,
+);
+
+const flourKey = 'm:catalog:i-chickpeas:volume_us:req:known';
+const onionKey = 'm:catalog:i-onion:count:req:known';
+const mysteryKey = 's:pm-1:0:2';
+
+ContributionDto contribution(String meal, String date, String text) =>
+    ContributionDto(
+      plannedMealId: meal,
+      date: date,
+      slot: MealSlotDto.dinner,
+      componentPosition: 0,
+      recipeId: 'r-1',
+      recipeTitle: 'Pancakes',
+      linePosition: 0,
+      originalText: text,
+    );
+
+/// Two store groups: `baking` holds a merged line with two contributions (resolved to
+/// `chickpeasRef`, so a bulk mark shows on the Pantry tab) and a pantry-omitted line; the
+/// uncategorised group holds one unresolved `s:` line.
+final okShoppingList = ShoppingListDto(
+  algorithmVersion: 1,
+  fromDate: '2026-08-29',
+  toDate: '2026-09-04',
+  groups: [
+    ShoppingGroupDto(
+      category: 'baking',
+      lines: [
+        ShoppingLineDto(
+          key: flourKey,
+          name: 'flour',
+          ingredient: chickpeasRef,
+          quantity: const QuantityDto.exact(numer: 5, denom: 2),
+          unit: const UnitDto.known(unit: 'cup'),
+          optional: false,
+          status: ShoppingLineStatusDto.needed,
+          contributions: [
+            contribution('pm-1', '2026-08-29', '1 cup flour'),
+            contribution('pm-2', '2026-08-30', '1 1/2 cup flour'),
+          ],
+        ),
+        ShoppingLineDto(
+          key: onionKey,
+          name: 'onion',
+          ingredient: const IngredientRefDto.catalog(id: 'i-onion'),
+          quantity: const QuantityDto.exact(numer: 2, denom: 1),
+          unit: const UnitDto.known(unit: 'piece'),
+          optional: false,
+          status: ShoppingLineStatusDto.omittedPantryMarked,
+          contributions: [contribution('pm-1', '2026-08-29', '2 onions')],
+        ),
+      ],
+    ),
+    ShoppingGroupDto(
+      lines: [
+        ShoppingLineDto(
+          key: mysteryKey,
+          name: 'mystery',
+          quantity: const QuantityDto.unknown(),
+          unit: const UnitDto.none(),
+          optional: true,
+          status: ShoppingLineStatusDto.needed,
+          separateReason: SeparateReasonDto.unresolved,
+          contributions: [contribution('pm-1', '2026-08-29', 'a mystery')],
+        ),
+      ],
+    ),
+  ],
+  nonRecipeComponents: 0,
+  contributionCount: 4,
+);
+
+ShoppingViewDto shoppingView({
+  List<ShoppingLineStateDto> states = const [],
+  List<ShoppingManualItemDto> items = const [],
+  int orphaned = 0,
+}) => ShoppingViewDto(
+  list: okShoppingList,
+  lineStates: states,
+  manualItems: items,
+  orphanedLineStateCount: orphaned,
+);
+
+ShoppingLineStateDto lineStateOf(
+  String key, {
+  bool checked = false,
+  bool hidden = false,
+  bool restored = false,
+  bool changed = false,
+  String? checkedAgainst,
+}) => ShoppingLineStateDto(
+  key: key,
+  checked: checked,
+  hidden: hidden,
+  restored: restored,
+  changed: changed,
+  checkedAgainst: checkedAgainst,
+);
+
+/// Echoes a line-state write back as stored: `changed` off, and a token attached iff
+/// checked — what Rust returns.
+Future<ShoppingLineStateDto> echoLineState(ShoppingLineStateDto s) async =>
+    lineStateOf(
+      s.key,
+      checked: s.checked,
+      hidden: s.hidden,
+      restored: s.restored,
+      checkedAgainst: s.checked ? 'exact:5/2|known:cup' : null,
+    );
+
+const batteries = ShoppingManualItemDto(
+  id: 'mi-1',
+  householdId: 'h-1',
+  name: 'batteries',
+  note: 'AA',
+  checked: false,
+);
+
 /// The six kind tokens the real bridge returns (`known_meal_component_kinds`).
 const componentKindTokens = [
   'recipe',
@@ -719,8 +946,28 @@ Widget harness({
   Future<PlannedMealDto> Function(String, String, bool)? lockPlanned,
   Future<void> Function(String, String)? deletePlanned,
   FutureOr<List<String>> Function()? componentKinds,
+  FutureOr<ShoppingViewDto> Function(String, String)? shopping,
+  Future<ShoppingLineStateDto> Function(ShoppingLineStateDto)? setLineState,
+  Future<ShoppingManualItemDto> Function(ShoppingManualItemDto)? saveItem,
+  Future<void> Function(String)? deleteItem,
+  Future<void> Function(String, String)? resetShopping,
+  Future<List<IngredientRefDto>> Function(List<IngredientRefDto>, bool)?
+  setPantryMarks,
 }) => ProviderScope(
   overrides: [
+    // Unconditional, as the planner override is: the destinations, restoration,
+    // accessibility and text-scale tests all visit Shopping.
+    shoppingProvider.overrideWith(
+      () => _FakeShoppingNotifier(
+        window: cycleWindow,
+        view: shopping,
+        lineState: setLineState,
+        manualItem: saveItem,
+        deleteItem: deleteItem,
+        reset_: resetShopping,
+        pantryMarks: setPantryMarks,
+      ),
+    ),
     // Unconditional: Plan is home, so every launch reaches the planner, and an un-overridden
     // provider would reach the real bridge.
     plannerProvider.overrideWith(
@@ -5178,6 +5425,794 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  // --- MVP-016: the shopping screen ------------------------------------------------------
+
+  Finder checkboxFor(String name) => find.ancestor(
+    of: find.text(name),
+    matching: find.byType(CheckboxListTile),
+  );
+
+  Future<void> openMenu(WidgetTester tester) async {
+    await tester.tap(find.byTooltip('More'));
+    await tester.pumpAndSettle();
+  }
+
+  /// AC-1: lines land under their store category, the uncategorised line under `Other`, the
+  /// omitted line under Already have, and the explain sheet names every contribution.
+  testWidgets('the shopping screen groups lines and explains one', (
+    tester,
+  ) async {
+    useTallView(tester);
+    await tester.pumpWidget(
+      harness(initial: '/shopping', shopping: (_, _) => shoppingView()),
+    );
+    await tester.pumpAndSettle();
+    expect(title(shoppingTitle), findsOneWidget);
+    expect(
+      find.text(shoppingHeading('2026-08-29', '2026-09-04')),
+      findsOneWidget,
+    );
+    expect(find.text(countsCopy(2, 1, 0)), findsOneWidget);
+    expect(find.text(neededHeading), findsOneWidget);
+    expect(find.text('baking'), findsOneWidget);
+    expect(find.text(uncategorisedHeading), findsOneWidget);
+    expect(find.text('flour'), findsOneWidget);
+    expect(find.text('mystery'), findsOneWidget);
+    expect(find.text('$alreadyHaveHeading (1)'), findsOneWidget);
+    expect(find.text('5/2 cup'), findsOneWidget);
+    expect(find.text('amount not known · $optionalCopy'), findsOneWidget);
+    expect(find.text(manualEditPolicyCopy), findsOneWidget);
+    // The omitted line is not in the To buy list until expanded.
+    expect(find.text('onion'), findsNothing);
+
+    await tester.tap(find.byTooltip('Why is this here?').first);
+    await tester.pumpAndSettle();
+    for (final c in okShoppingList.groups[0].lines[0].contributions) {
+      expect(find.text(explainContribution(c)), findsOneWidget);
+    }
+    expect(find.text('Remove from list'), findsOneWidget);
+    expect(find.text('Back to pantry'), findsNothing);
+  });
+
+  /// AC-2: a tap sends the line's key and flags, and the row renders what Rust stored.
+  testWidgets('checking a line sends its state and renders what was stored', (
+    tester,
+  ) async {
+    useTallView(tester);
+    final handle = tester.ensureSemantics();
+    final sent = <ShoppingLineStateDto>[];
+    await tester.pumpWidget(
+      harness(
+        initial: '/shopping',
+        shopping: (_, _) => shoppingView(),
+        setLineState: (s) {
+          sent.add(s);
+          return echoLineState(s);
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.bySemanticsLabel(lineLabel('flour', false)), findsOneWidget);
+    await tester.tap(checkboxFor('flour'));
+    await tester.pumpAndSettle();
+    expect(sent, hasLength(1));
+    expect(sent.single.key, flourKey);
+    expect(sent.single.checked, isTrue);
+    expect(sent.single.hidden, isFalse);
+    expect(sent.single.restored, isFalse);
+    expect(find.bySemanticsLabel(lineLabel('flour', true)), findsOneWidget);
+    expect(tester.widget<CheckboxListTile>(checkboxFor('flour')).value, isTrue);
+    // Unchecking clears the row: Rust deletes it, and the view drops the state.
+    await tester.tap(checkboxFor('flour'));
+    await tester.pumpAndSettle();
+    expect(sent.last.checked, isFalse);
+    expect(find.bySemanticsLabel(lineLabel('flour', false)), findsOneWidget);
+    handle.dispose();
+  });
+
+  /// Decision 2: a check made against a different amount is shown as changed and rendered
+  /// unchecked — never kept.
+  testWidgets('a changed line renders unchecked with the changed copy', (
+    tester,
+  ) async {
+    useTallView(tester);
+    await tester.pumpWidget(
+      harness(
+        initial: '/shopping',
+        shopping: (_, _) => shoppingView(
+          states: [
+            lineStateOf(
+              flourKey,
+              checked: true,
+              changed: true,
+              checkedAgainst: 'exact:1/1|known:cup',
+            ),
+          ],
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<CheckboxListTile>(checkboxFor('flour')).value,
+      isFalse,
+    );
+    expect(find.text('5/2 cup · ${changedCopy('1 cup')}'), findsOneWidget);
+    // Not eligible for the pantry while changed.
+    await openMenu(tester);
+    final item = tester.widget<PopupMenuItem<String>>(
+      find.widgetWithText(PopupMenuItem<String>, 'Add checked to pantry'),
+    );
+    expect(item.enabled, isFalse);
+  });
+
+  testWidgets('removing a line moves it to Removed and Put back restores it', (
+    tester,
+  ) async {
+    useTallView(tester);
+    final sent = <ShoppingLineStateDto>[];
+    await tester.pumpWidget(
+      harness(
+        initial: '/shopping',
+        shopping: (_, _) => shoppingView(),
+        setLineState: (s) {
+          sent.add(s);
+          return echoLineState(s);
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Why is this here?').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Remove from list'));
+    await tester.pumpAndSettle();
+    expect(sent.single.key, flourKey);
+    expect(sent.single.hidden, isTrue);
+    expect(find.text(countsCopy(1, 1, 1)), findsOneWidget);
+    expect(checkboxFor('flour'), findsNothing);
+    expect(find.text('$removedHeading (1)'), findsOneWidget);
+
+    await tester.tap(find.text('$removedHeading (1)'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Put back'));
+    await tester.pumpAndSettle();
+    expect(sent.last.hidden, isFalse);
+    expect(sent.last.restored, isFalse);
+    expect(find.text(countsCopy(2, 1, 0)), findsOneWidget);
+    expect(checkboxFor('flour'), findsOneWidget);
+  });
+
+  testWidgets('an omitted line can be added anyway and sent back to pantry', (
+    tester,
+  ) async {
+    useTallView(tester);
+    final sent = <ShoppingLineStateDto>[];
+    await tester.pumpWidget(
+      harness(
+        initial: '/shopping',
+        shopping: (_, _) => shoppingView(),
+        setLineState: (s) {
+          sent.add(s);
+          return echoLineState(s);
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('$alreadyHaveHeading (1)'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining(omittedCopy), findsOneWidget);
+    await tester.tap(find.text('Add anyway'));
+    await tester.pumpAndSettle();
+    expect(sent.single.key, onionKey);
+    expect(sent.single.restored, isTrue);
+    expect(find.text(countsCopy(3, 0, 0)), findsOneWidget);
+    expect(checkboxFor('onion'), findsOneWidget);
+
+    // onion now sits second in the baking group, so its explain button is the second.
+    await tester.tap(find.byTooltip('Why is this here?').at(1));
+    await tester.pumpAndSettle();
+    expect(find.text(omittedCopy), findsOneWidget);
+    await tester.tap(find.text('Back to pantry'));
+    await tester.pumpAndSettle();
+    expect(sent.last.key, onionKey);
+    expect(sent.last.restored, isFalse);
+    expect(find.text(countsCopy(2, 1, 0)), findsOneWidget);
+    expect(checkboxFor('onion'), findsNothing);
+  });
+
+  testWidgets('manual items can be added, checked, edited and deleted', (
+    tester,
+  ) async {
+    useTallView(tester);
+    final saved = <ShoppingManualItemDto>[];
+    final deleted = <String>[];
+    await tester.pumpWidget(
+      harness(
+        initial: '/shopping',
+        shopping: (_, _) => shoppingView(items: [batteries]),
+        saveItem: (item) async {
+          saved.add(item);
+          return ShoppingManualItemDto(
+            id: item.id.isEmpty ? 'mi-2' : item.id,
+            householdId: item.householdId,
+            name: item.name.trim(),
+            note: item.note,
+            checked: item.checked,
+          );
+        },
+        deleteItem: (id) async => deleted.add(id),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text(yourItemsHeading), findsOneWidget);
+    expect(find.text('batteries'), findsOneWidget);
+    expect(find.text('AA'), findsOneWidget);
+
+    // A blank name is refused inside the dialog; nothing is sent.
+    await tester.tap(find.text('Add item'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+    expect(find.text(manualNameRequiredCopy), findsOneWidget);
+    expect(saved, isEmpty);
+    await tester.enterText(find.widgetWithText(TextField, 'Name'), ' candles ');
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+    expect(saved.single.id, isEmpty, reason: 'a blank id lets Rust mint one');
+    expect(saved.single.householdId, 'h-1');
+    expect(saved.single.name, ' candles ');
+    expect(saved.single.note, isNull);
+    expect(find.text('candles'), findsOneWidget);
+    // Sorted case-insensitively: batteries before candles.
+    expect(
+      tester.getTopLeft(find.text('batteries')).dy,
+      lessThan(tester.getTopLeft(find.text('candles')).dy),
+    );
+
+    await tester.tap(checkboxFor('candles'));
+    await tester.pumpAndSettle();
+    expect(saved.last.id, 'mi-2');
+    expect(saved.last.checked, isTrue);
+    expect(
+      tester.widget<CheckboxListTile>(checkboxFor('candles')).value,
+      isTrue,
+    );
+
+    await tester.tap(find.byTooltip('Edit item').at(1));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Name'),
+      'tea lights',
+    );
+    await tester.enterText(find.widgetWithText(TextField, 'Note'), 'unscented');
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+    expect(saved.last.id, 'mi-2');
+    expect(saved.last.name, 'tea lights');
+    expect(saved.last.note, 'unscented');
+    expect(saved.last.checked, isTrue, reason: 'an edit keeps the check');
+    expect(find.text('tea lights'), findsOneWidget);
+    expect(find.text('candles'), findsNothing);
+
+    await tester.tap(find.byTooltip('Edit item').at(1));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Delete'));
+    await tester.pumpAndSettle();
+    expect(deleted, ['mi-2']);
+    expect(find.text('tea lights'), findsNothing);
+    expect(find.text('batteries'), findsOneWidget);
+  });
+
+  /// AC-3 and decision 8: only the eligible refs are sent, Undo sends exactly the returned
+  /// set, the Pantry tab shows the mark, and the shopping view re-reads after each.
+  testWidgets(
+    'add checked to pantry sends only the eligible refs and Undo sends the returned set',
+    (tester) async {
+      useTallView(tester);
+      var fetches = 0;
+      var chickpeasMarked = false;
+      final calls = <(List<IngredientRefDto>, bool)>[];
+      await tester.pumpWidget(
+        harness(
+          initial: '/shopping',
+          shopping: (_, _) {
+            fetches++;
+            return shoppingView(
+              states: [
+                lineStateOf(flourKey, checked: true),
+                // Unresolved, so never eligible however it is checked.
+                lineStateOf(mysteryKey, checked: true),
+              ],
+            );
+          },
+          pantry: () => [
+            pantryEntryMarked(chickpeasRef, chickpeasMarked),
+            pantryEntries[1],
+          ],
+          setPantryMarks: (refs, marked) async {
+            calls.add((refs, marked));
+            chickpeasMarked = marked;
+            // A pre-existing mark would be absent here; the caller must send this back.
+            return [chickpeasRef];
+          },
+        ),
+      );
+      await tester.pumpAndSettle();
+      final before = fetches;
+      await openMenu(tester);
+      await tester.tap(find.text('Add checked to pantry'));
+      await tester.pumpAndSettle();
+      expect(calls, hasLength(1));
+      expect(calls.single.$1, [chickpeasRef]);
+      expect(calls.single.$2, isTrue);
+      expect(find.text(addedToPantryCopy(1)), findsOneWidget);
+      expect(
+        fetches,
+        greaterThan(before),
+        reason: 'invalidating the pantry re-runs the shopping build',
+      );
+
+      await tester.tap(tab('Pantry'));
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<SwitchListTile>(
+              find.ancestor(
+                of: find.text('chickpeas'),
+                matching: find.byType(SwitchListTile),
+              ),
+            )
+            .value,
+        isTrue,
+      );
+
+      await tester.tap(tab('Shopping'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Undo'));
+      await tester.pumpAndSettle();
+      expect(calls, hasLength(2));
+      expect(calls.last.$1, [chickpeasRef]);
+      expect(calls.last.$2, isFalse);
+    },
+  );
+
+  testWidgets('Start over names the counts and clears only after confirm', (
+    tester,
+  ) async {
+    useTallView(tester);
+    var cleared = false;
+    final resets = <(String, String)>[];
+    await tester.pumpWidget(
+      harness(
+        initial: '/shopping',
+        shopping: (_, _) => cleared
+            ? shoppingView(items: [batteries])
+            : shoppingView(
+                states: [
+                  lineStateOf(flourKey, checked: true),
+                  lineStateOf(mysteryKey, hidden: true),
+                ],
+                items: [
+                  batteries,
+                  const ShoppingManualItemDto(
+                    id: 'mi-2',
+                    householdId: 'h-1',
+                    name: 'candles',
+                    checked: true,
+                  ),
+                ],
+              ),
+        resetShopping: (from, to) async {
+          resets.add((from, to));
+          cleared = true;
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+    await openMenu(tester);
+    await tester.tap(find.text('Start over'));
+    await tester.pumpAndSettle();
+    expect(find.text(resetTitle), findsOneWidget);
+    expect(find.text(resetBody(2, 1)), findsOneWidget);
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(resets, isEmpty);
+    expect(find.text('candles'), findsOneWidget);
+
+    await openMenu(tester);
+    await tester.tap(find.text('Start over'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, 'Start over'));
+    await tester.pumpAndSettle();
+    expect(resets, [('2026-08-29', '2026-09-04')]);
+    expect(find.text('candles'), findsNothing);
+    expect(find.text('batteries'), findsOneWidget);
+    expect(find.text(countsCopy(2, 1, 0)), findsOneWidget);
+  });
+
+  /// The reset write commits before the read that follows it, so a failed read must not leave
+  /// the pre-reset list standing as a successful-looking view of storage that no longer
+  /// matches it.
+  testWidgets('a failed read after Start over does not leave the old list up', (
+    tester,
+  ) async {
+    useTallView(tester);
+    var reset = false;
+    await tester.pumpWidget(
+      harness(
+        initial: '/shopping',
+        shopping: (_, _) {
+          if (reset) throw const KimattaError.storage(message: 'db closed');
+          return shoppingView(states: [lineStateOf(flourKey, checked: true)]);
+        },
+        resetShopping: (_, _) async => reset = true,
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(tester.widget<CheckboxListTile>(checkboxFor('flour')).value, isTrue);
+    await openMenu(tester);
+    await tester.tap(find.text('Start over'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, 'Start over'));
+    await tester.pumpAndSettle();
+    expect(checkboxFor('flour'), findsNothing);
+    // Reported twice on purpose: the screen's error branch and `_startOver`'s snackbar.
+    expect(find.text('Shopping unavailable: db closed'), findsWidgets);
+    expect(find.text('Try again'), findsOneWidget);
+  });
+
+  /// The bridge counts the states it dropped for exactly this: the screen says the edits no
+  /// longer apply rather than showing an unchecked list with no explanation.
+  testWidgets('states dropped by the window are named, not silently missing', (
+    tester,
+  ) async {
+    useTallView(tester);
+    var orphaned = 0;
+    await tester.pumpWidget(
+      harness(
+        initial: '/shopping',
+        shopping: (_, _) => shoppingView(orphaned: orphaned),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.textContaining('no longer has'), findsNothing);
+
+    // Paging cycles is a fresh read, so one harness can produce a window that did drop rows.
+    orphaned = 6;
+    await tester.tap(find.byTooltip('Next cycle'));
+    await tester.pumpAndSettle();
+    expect(find.text(orphanedStatesCopy(6)), findsOneWidget);
+
+    orphaned = 1;
+    await tester.tap(find.byTooltip('Next cycle'));
+    await tester.pumpAndSettle();
+    expect(find.text(orphanedStatesCopy(1)), findsOneWidget);
+  });
+
+  /// `reset_shopping_list` deletes every row for the window, including the ones the bridge
+  /// filtered out of `line_states`, so the confirmation must count those too.
+  testWidgets('Start over counts the dropped rows it also deletes', (
+    tester,
+  ) async {
+    useTallView(tester);
+    await tester.pumpWidget(
+      harness(
+        initial: '/shopping',
+        shopping: (_, _) => shoppingView(
+          states: [
+            lineStateOf(flourKey, checked: true),
+            lineStateOf(mysteryKey, hidden: true),
+          ],
+          orphaned: 3,
+        ),
+        resetShopping: (_, _) async {},
+      ),
+    );
+    await tester.pumpAndSettle();
+    await openMenu(tester);
+    await tester.tap(find.text('Start over'));
+    await tester.pumpAndSettle();
+    expect(find.text(resetBody(5, 0)), findsOneWidget);
+  });
+
+  /// `restored` qualifies a pantry-omitted line and nothing else. Carried onto a line the
+  /// derivation now calls Needed it would override a later pantry mark from storage.
+  testWidgets('a restored flag is dropped on a line that is merely needed', (
+    tester,
+  ) async {
+    useTallView(tester);
+    final sent = <ShoppingLineStateDto>[];
+    await tester.pumpWidget(
+      harness(
+        initial: '/shopping',
+        shopping: (_, _) =>
+            shoppingView(states: [lineStateOf(flourKey, restored: true)]),
+        setLineState: (s) {
+          sent.add(s);
+          return echoLineState(s);
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(checkboxFor('flour'));
+    await tester.pumpAndSettle();
+    expect(sent.single.key, flourKey);
+    expect(sent.single.checked, isTrue);
+    expect(
+      sent.single.restored,
+      isFalse,
+      reason: 'the inert flag is dropped rather than carried forward',
+    );
+
+    // The line the flag exists for still sets it.
+    await tester.tap(find.text('$alreadyHaveHeading (1)'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Add anyway'));
+    await tester.pumpAndSettle();
+    expect(sent.last.key, onionKey);
+    expect(sent.last.restored, isTrue);
+  });
+
+  /// A section change is a move, not an edit: the line key does not change when a pantry mark
+  /// is added or a line is removed, so the check on it must not be destroyed on the way.
+  testWidgets('a check survives Add anyway and a remove/put-back round trip', (
+    tester,
+  ) async {
+    useTallView(tester);
+    final sent = <ShoppingLineStateDto>[];
+    await tester.pumpWidget(
+      harness(
+        initial: '/shopping',
+        // The Already have row renders no checkbox, so this check is invisible before it is
+        // destroyed — exactly why "Add anyway" must carry it.
+        shopping: (_, _) =>
+            shoppingView(states: [lineStateOf(onionKey, checked: true)]),
+        setLineState: (s) {
+          sent.add(s);
+          return echoLineState(s);
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('$alreadyHaveHeading (1)'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Add anyway'));
+    await tester.pumpAndSettle();
+    expect(sent.single.key, onionKey);
+    expect(sent.single.restored, isTrue);
+    expect(
+      sent.single.checked,
+      isTrue,
+      reason: 'the stored check is carried, not discarded',
+    );
+    expect(tester.widget<CheckboxListTile>(checkboxFor('onion')).value, isTrue);
+
+    await tester.tap(checkboxFor('flour'));
+    await tester.pumpAndSettle();
+    expect(sent.last.checked, isTrue);
+    await tester.tap(find.byTooltip('Why is this here?').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Remove from list'));
+    await tester.pumpAndSettle();
+    expect(sent.last.key, flourKey);
+    expect(sent.last.hidden, isTrue);
+    expect(sent.last.checked, isTrue);
+    await tester.tap(find.text('$removedHeading (1)'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Put back'));
+    await tester.pumpAndSettle();
+    expect(sent.last.hidden, isFalse);
+    expect(sent.last.checked, isTrue);
+    expect(tester.widget<CheckboxListTile>(checkboxFor('flour')).value, isTrue);
+
+    // The fourth arm: sending onion back under Already have keeps its check too, so a
+    // second "Add anyway" returns it checked rather than blank.
+    await tester.tap(find.byTooltip('Why is this here?').at(1));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Back to pantry'));
+    await tester.pumpAndSettle();
+    expect(sent.last.key, onionKey);
+    expect(sent.last.restored, isFalse);
+    expect(sent.last.checked, isTrue);
+  });
+
+  /// Line keys carry no window bound, so the same key routinely appears in adjacent cycles:
+  /// the next cycle's row must not inherit the previous cycle's in-flight write.
+  testWidgets('paging cycles mid-write does not freeze the next cycle row', (
+    tester,
+  ) async {
+    useTallView(tester);
+    final gate = Completer<ShoppingLineStateDto>();
+    await tester.pumpWidget(
+      harness(
+        initial: '/shopping',
+        shopping: (_, _) => shoppingView(),
+        setLineState: (_) => gate.future,
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(checkboxFor('flour'));
+    await tester.pump();
+    expect(
+      tester.widget<CheckboxListTile>(checkboxFor('flour')).onChanged,
+      isNull,
+    );
+    await tester.tap(find.byTooltip('Next cycle'));
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<CheckboxListTile>(checkboxFor('flour')).onChanged,
+      isNotNull,
+    );
+    // The old cycle's write settling must not unfreeze — or refreeze — this cycle's row.
+    gate.complete(lineStateOf(flourKey, checked: true));
+    await tester.pumpAndSettle();
+    expect(
+      tester.widget<CheckboxListTile>(checkboxFor('flour')).onChanged,
+      isNotNull,
+    );
+  });
+
+  /// Rust mints a fresh id for every blank-id save, so nothing deduplicates a repeated submit:
+  /// the button carries the guard instead.
+  testWidgets('Add item is disabled while the save it started is in flight', (
+    tester,
+  ) async {
+    useTallView(tester);
+    final gate = Completer<ShoppingManualItemDto>();
+    Finder addButton() => find.widgetWithText(TextButton, 'Add item');
+    await tester.pumpWidget(
+      harness(
+        initial: '/shopping',
+        shopping: (_, _) => shoppingView(),
+        saveItem: (_) => gate.future,
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(tester.widget<TextButton>(addButton()).onPressed, isNotNull);
+    await tester.tap(find.text('Add item'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.widgetWithText(TextField, 'Name'), 'candles');
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+    expect(tester.widget<TextButton>(addButton()).onPressed, isNull);
+    gate.complete(
+      const ShoppingManualItemDto(
+        id: 'mi-2',
+        householdId: 'h-1',
+        name: 'candles',
+        checked: false,
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(tester.widget<TextButton>(addButton()).onPressed, isNotNull);
+  });
+
+  testWidgets('the shopping screen renders a load failure in prose', (
+    tester,
+  ) async {
+    useTallView(tester);
+    await tester.pumpWidget(
+      harness(
+        initial: '/shopping',
+        shopping: (_, _) => throw const KimattaError.storage(message: 'boom'),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Shopping unavailable: boom'), findsOneWidget);
+    expect(find.text('Try again'), findsOneWidget);
+    expect(find.byType(CheckboxListTile), findsNothing);
+  });
+
+  testWidgets('an empty derivation shows the empty copy', (tester) async {
+    useTallView(tester);
+    await tester.pumpWidget(harness(initial: '/shopping'));
+    await tester.pumpAndSettle();
+    expect(find.text(shoppingEmptyCopy), findsOneWidget);
+    expect(find.text(countsCopy(0, 0, 0)), findsOneWidget);
+    expect(find.text('Add item'), findsOneWidget);
+  });
+
+  /// Decision 8 and the reload pin: a pantry toggle re-runs the shopping build, and while
+  /// that re-read is in flight the list the user was reading stays on screen.
+  testWidgets('a pantry toggle re-reads shopping and a reload keeps the list', (
+    tester,
+  ) async {
+    useTallView(tester);
+    var fetches = 0;
+    final pending = Completer<ShoppingViewDto>();
+    await tester.pumpWidget(
+      harness(
+        initial: '/shopping',
+        shopping: (_, _) {
+          fetches++;
+          return fetches == 1 ? shoppingView() : pending.future;
+        },
+        setMark: (_, ref, marked) async => pantryEntryMarked(ref, marked),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(fetches, 1);
+
+    await tester.tap(tab('Pantry'));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.ancestor(
+        of: find.text('chickpeas'),
+        matching: find.byType(SwitchListTile),
+      ),
+    );
+    await tester.pump();
+    await tester.tap(tab('Shopping'));
+    await tester.pump();
+    expect(fetches, 2, reason: 'the pantry toggle re-ran the build');
+    expect(find.text('flour'), findsOneWidget);
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+
+    pending.complete(shoppingView(items: [batteries]));
+    await tester.pumpAndSettle();
+    expect(find.text('batteries'), findsOneWidget);
+  });
+
+  testWidgets('a planner save re-reads shopping', (tester) async {
+    useTallView(tester);
+    var fetches = 0;
+    await tester.pumpWidget(
+      harness(
+        initial: '/shopping',
+        shopping: (_, _) {
+          fetches++;
+          return shoppingView();
+        },
+        savePlanned: (meal) async => meal,
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(fetches, 1);
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(NavigationBar)),
+    );
+    await container.read(plannerProvider(0).notifier).save(okPlanned);
+    await tester.pumpAndSettle();
+    expect(fetches, 2);
+    expect(find.text('flour'), findsOneWidget);
+  });
+
+  /// AC-4's accessible half, the pantry precedent: every row's name states the meaning
+  /// before the platform's own state, and each explain button is its own labelled node.
+  testWidgets('the shopping screen meets the accessibility guidelines', (
+    tester,
+  ) async {
+    usePixel5(tester);
+    final handle = tester.ensureSemantics();
+    for (final brightness in Brightness.values) {
+      tester.platformDispatcher.platformBrightnessTestValue = brightness;
+      await tester.pumpWidget(
+        harness(
+          initial: '/shopping',
+          shopping: (_, _) => shoppingView(
+            states: [lineStateOf(flourKey, checked: true)],
+            items: [batteries],
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await expectLater(tester, meetsGuideline(androidTapTargetGuideline));
+      await expectLater(tester, meetsGuideline(labeledTapTargetGuideline));
+      await expectLater(tester, meetsGuideline(textContrastGuideline));
+      expect(find.bySemanticsLabel(lineLabel('flour', true)), findsOneWidget);
+      expect(
+        find.bySemanticsLabel(lineLabel('mystery', false)),
+        findsOneWidget,
+      );
+      expect(
+        find.bySemanticsLabel(lineLabel('batteries', false)),
+        findsOneWidget,
+      );
+      // One explain node per Needed row, outside the tile's merged node.
+      expect(find.byTooltip('Why is this here?'), findsNWidgets(2));
+    }
+    handle.dispose();
+  });
+
   // Keep this test last: the assertion it provokes leaves the element tree
   // half-updated, and every test pumped after it in the same file fails on a
   // framework "dependent is not our descendant" assertion (measured).
@@ -5190,11 +6225,16 @@ void main() {
 
     // `App` carries no key, so this updates the existing element rather than
     // building a fresh one: `_router` is already built and the new location
-    // would otherwise be dropped in silence. Provoked from Shopping, not Plan: the assertion
-    // is `App`'s and does not depend on the branch shown, but the half-updated tree it leaves
-    // makes the planner's focus scope report a second framework assertion during teardown,
-    // and a test that reports two exceptions fails regardless of `takeException` (MVP-013).
+    // would otherwise be dropped in silence. The assertion is `App`'s and does not depend
+    // on the route shown, but the half-updated tree it leaves makes a focus scope report a
+    // second framework assertion when the tree is torn down, and a test that reports two
+    // exceptions in one frame fails regardless of `takeException`. MVP-013 dodged that by
+    // provoking it from the then-inert Shopping branch; with Shopping live (MVP-016) no
+    // route is inert, so the tree is unmounted here, in its own frame, and that teardown
+    // assertion is taken separately from the one under test.
     await tester.pumpWidget(harness(initial: '/nope'));
     expect(tester.takeException(), isA<AssertionError>());
+    await tester.pumpWidget(const SizedBox.shrink());
+    tester.takeException();
   });
 }

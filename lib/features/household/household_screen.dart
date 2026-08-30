@@ -37,6 +37,9 @@ String describeFailure(
   // Added with the variant itself (MVP-012), as every arm above was, so MVP-013's planner
   // cannot surface a raw freezed `toString()`.
   KimattaError_PlannedMeal(:final message) => '$subject unavailable: $message',
+  // Added with the variant itself (MVP-016), as every arm above was, so the shopping
+  // screen cannot surface a raw freezed `toString()`.
+  KimattaError_Shopping(:final message) => '$subject unavailable: $message',
   _ => '$subject unavailable: $error',
 };
 

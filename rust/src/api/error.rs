@@ -17,6 +17,19 @@ pub enum KimattaError {
     Restriction { message: String },
     #[error("invalid planned meal input: {message}")]
     PlannedMeal { message: String },
+    #[error("invalid shopping input: {message}")]
+    Shopping { message: String },
+}
+
+/// Same scope rule as the `Planning` conversion below: a `ShoppingError` raised while
+/// validating bridge arguments; one raised inside storage arrives as `StorageError::Shopping`
+/// and stays `Storage`.
+impl From<kimatta_storage::ShoppingError> for KimattaError {
+    fn from(e: kimatta_storage::ShoppingError) -> Self {
+        KimattaError::Shopping {
+            message: e.to_string(),
+        }
+    }
 }
 
 /// Same scope rule as the `Planning` conversion below: a `PlannedMealError` raised while

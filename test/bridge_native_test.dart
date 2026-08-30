@@ -42,9 +42,9 @@ void main() {
     );
   });
 
-  test('open_database migrates a real database to schema v8', () async {
+  test('open_database migrates a real database to schema v9', () async {
     final report = await openDatabase(dbPath: await tempDb());
-    expect(report.schemaVersion, 8);
+    expect(report.schemaVersion, 9);
   });
 
   test('storage failure surfaces as KimattaError_Storage', () async {
@@ -534,6 +534,156 @@ void main() {
       }
     },
   );
+
+  /// MVP-016 at the real bridge: the overlay is durable (AC-2), the view carries it back
+  /// with the derivation, and a bulk pantry mark flips a line to omitted and the returned
+  /// refs flip it back (AC-3). Expected-to-pass — the commands already exist; it is the
+  /// only Dart execution of the generated view/state/manual-item decoders.
+  test('a shopping view survives reopening the same file', () async {
+    final path = await tempDb();
+    await openDatabase(dbPath: path);
+    final h = await bootstrapHousehold();
+    await installStarterContent(householdId: h.id);
+    final catalog = await listPantry(householdId: h.id);
+    final a = catalog[0];
+    await ensurePlanningCycle(
+      householdId: h.id,
+      defaultAnchorDate: '2026-08-30',
+    );
+    final saved = await saveRecipe(
+      recipe: recipeFor(h.id, [
+        IngredientLineDto(
+          originalText: '2 cup ${a.name}',
+          name: a.name,
+          ingredient: a.ingredient,
+          quantity: const QuantityDto.exact(numer: 2, denom: 1),
+          unit: const UnitDto.known(unit: 'cup'),
+          optional: false,
+        ),
+      ]),
+    );
+    await savePlannedMeal(
+      meal: PlannedMealDto(
+        id: '',
+        householdId: h.id,
+        date: '2026-08-30',
+        slot: MealSlotDto.dinner,
+        locked: false,
+        components: [MealComponentDto(kind: 'recipe', recipeId: saved.id)],
+      ),
+    );
+    final first = await loadShoppingView(
+      householdId: h.id,
+      fromDate: '2026-08-30',
+      toDate: '2026-08-30',
+    );
+    final line = first.list.groups.single.lines.single;
+    expect(first.lineStates, isEmpty);
+    expect(first.manualItems, isEmpty);
+
+    final stored = await setShoppingLineState(
+      householdId: h.id,
+      fromDate: '2026-08-30',
+      toDate: '2026-08-30',
+      state: ShoppingLineStateDto(
+        key: line.key,
+        checked: true,
+        hidden: false,
+        restored: false,
+        changed: false,
+      ),
+    );
+    expect(stored.checked, isTrue);
+    expect(stored.checkedAgainst, 'exact:2/1|known:cup');
+    final item = await saveShoppingManualItem(
+      item: ShoppingManualItemDto(
+        id: '',
+        householdId: h.id,
+        name: ' batteries ',
+        note: null,
+        checked: false,
+      ),
+    );
+    expect(item.id, isNotEmpty);
+    expect(item.name, 'batteries');
+
+    await openDatabase(dbPath: path);
+    final reopened = await loadShoppingView(
+      householdId: h.id,
+      fromDate: '2026-08-30',
+      toDate: '2026-08-30',
+    );
+    // Field by field: the generated `==` compares `List` members by identity, so two
+    // separately decoded lists never compare equal as wholes.
+    final reopenedLine = reopened.list.groups.single.lines.single;
+    expect(reopened.list.contributionCount, first.list.contributionCount);
+    expect(reopenedLine.key, line.key);
+    expect(reopenedLine.quantity, line.quantity);
+    expect(reopenedLine.contributions, line.contributions);
+    expect(reopened.lineStates, [stored]);
+    expect(reopened.manualItems, [item]);
+
+    final changed = await setPantryMarks(
+      householdId: h.id,
+      ingredients: [a.ingredient],
+      marked: true,
+    );
+    expect(changed, [a.ingredient]);
+    final omitted = await loadShoppingView(
+      householdId: h.id,
+      fromDate: '2026-08-30',
+      toDate: '2026-08-30',
+    );
+    expect(
+      omitted.list.groups.single.lines.single.status,
+      ShoppingLineStatusDto.omittedPantryMarked,
+    );
+    final undone = await setPantryMarks(
+      householdId: h.id,
+      ingredients: changed,
+      marked: false,
+    );
+    expect(undone, [a.ingredient]);
+    final restored = await loadShoppingView(
+      householdId: h.id,
+      fromDate: '2026-08-30',
+      toDate: '2026-08-30',
+    );
+    expect(
+      restored.list.groups.single.lines.single.status,
+      ShoppingLineStatusDto.needed,
+    );
+
+    await resetShoppingList(
+      householdId: h.id,
+      fromDate: '2026-08-30',
+      toDate: '2026-08-30',
+    );
+    final cleared = await loadShoppingView(
+      householdId: h.id,
+      fromDate: '2026-08-30',
+      toDate: '2026-08-30',
+    );
+    expect(cleared.lineStates, isEmpty);
+    expect(cleared.manualItems, [item], reason: 'unchecked items carry');
+    await deleteShoppingManualItem(householdId: h.id, itemId: item.id);
+    await expectLater(
+      () => deleteShoppingManualItem(householdId: h.id, itemId: item.id),
+      throwsA(isA<KimattaError_Storage>()),
+    );
+    await expectLater(
+      () => saveShoppingManualItem(
+        item: ShoppingManualItemDto(
+          id: '',
+          householdId: h.id,
+          name: '  ',
+          note: null,
+          checked: false,
+        ),
+      ),
+      throwsA(isA<KimattaError_Shopping>()),
+    );
+  });
 
   test('a blank title is a typed Recipe error in Dart', () async {
     await openDatabase(dbPath: await tempDb());

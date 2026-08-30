@@ -62,6 +62,16 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   SeparateReasonDto dco_decode_box_autoadd_separate_reason_dto(dynamic raw);
 
   @protected
+  ShoppingLineStateDto dco_decode_box_autoadd_shopping_line_state_dto(
+    dynamic raw,
+  );
+
+  @protected
+  ShoppingManualItemDto dco_decode_box_autoadd_shopping_manual_item_dto(
+    dynamic raw,
+  );
+
+  @protected
   int dco_decode_box_autoadd_u_32(dynamic raw);
 
   @protected
@@ -107,6 +117,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   List<IngredientLineDto> dco_decode_list_ingredient_line_dto(dynamic raw);
 
   @protected
+  List<IngredientRefDto> dco_decode_list_ingredient_ref_dto(dynamic raw);
+
+  @protected
   List<MealComponentDto> dco_decode_list_meal_component_dto(dynamic raw);
 
   @protected
@@ -135,6 +148,16 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   List<ShoppingLineDto> dco_decode_list_shopping_line_dto(dynamic raw);
+
+  @protected
+  List<ShoppingLineStateDto> dco_decode_list_shopping_line_state_dto(
+    dynamic raw,
+  );
+
+  @protected
+  List<ShoppingManualItemDto> dco_decode_list_shopping_manual_item_dto(
+    dynamic raw,
+  );
 
   @protected
   MealComponentDto dco_decode_meal_component_dto(dynamic raw);
@@ -212,10 +235,19 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   ShoppingLineDto dco_decode_shopping_line_dto(dynamic raw);
 
   @protected
+  ShoppingLineStateDto dco_decode_shopping_line_state_dto(dynamic raw);
+
+  @protected
   ShoppingLineStatusDto dco_decode_shopping_line_status_dto(dynamic raw);
 
   @protected
   ShoppingListDto dco_decode_shopping_list_dto(dynamic raw);
+
+  @protected
+  ShoppingManualItemDto dco_decode_shopping_manual_item_dto(dynamic raw);
+
+  @protected
+  ShoppingViewDto dco_decode_shopping_view_dto(dynamic raw);
 
   @protected
   StarterInstallReportDto dco_decode_starter_install_report_dto(dynamic raw);
@@ -266,6 +298,16 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   SeparateReasonDto sse_decode_box_autoadd_separate_reason_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  ShoppingLineStateDto sse_decode_box_autoadd_shopping_line_state_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  ShoppingManualItemDto sse_decode_box_autoadd_shopping_manual_item_dto(
     SseDeserializer deserializer,
   );
 
@@ -325,6 +367,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  List<IngredientRefDto> sse_decode_list_ingredient_ref_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   List<MealComponentDto> sse_decode_list_meal_component_dto(
     SseDeserializer deserializer,
   );
@@ -365,6 +412,16 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   List<ShoppingLineDto> sse_decode_list_shopping_line_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  List<ShoppingLineStateDto> sse_decode_list_shopping_line_state_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  List<ShoppingManualItemDto> sse_decode_list_shopping_manual_item_dto(
     SseDeserializer deserializer,
   );
 
@@ -458,12 +515,25 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   ShoppingLineDto sse_decode_shopping_line_dto(SseDeserializer deserializer);
 
   @protected
+  ShoppingLineStateDto sse_decode_shopping_line_state_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   ShoppingLineStatusDto sse_decode_shopping_line_status_dto(
     SseDeserializer deserializer,
   );
 
   @protected
   ShoppingListDto sse_decode_shopping_list_dto(SseDeserializer deserializer);
+
+  @protected
+  ShoppingManualItemDto sse_decode_shopping_manual_item_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  ShoppingViewDto sse_decode_shopping_view_dto(SseDeserializer deserializer);
 
   @protected
   StarterInstallReportDto sse_decode_starter_install_report_dto(
@@ -527,6 +597,18 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_box_autoadd_separate_reason_dto(
     SeparateReasonDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_shopping_line_state_dto(
+    ShoppingLineStateDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_shopping_manual_item_dto(
+    ShoppingManualItemDto self,
     SseSerializer serializer,
   );
 
@@ -600,6 +682,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_list_ingredient_ref_dto(
+    List<IngredientRefDto> self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_list_meal_component_dto(
     List<MealComponentDto> self,
     SseSerializer serializer,
@@ -656,6 +744,18 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_list_shopping_line_dto(
     List<ShoppingLineDto> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_shopping_line_state_dto(
+    List<ShoppingLineStateDto> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_shopping_manual_item_dto(
+    List<ShoppingManualItemDto> self,
     SseSerializer serializer,
   );
 
@@ -783,6 +883,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_shopping_line_state_dto(
+    ShoppingLineStateDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_shopping_line_status_dto(
     ShoppingLineStatusDto self,
     SseSerializer serializer,
@@ -791,6 +897,18 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_shopping_list_dto(
     ShoppingListDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_shopping_manual_item_dto(
+    ShoppingManualItemDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_shopping_view_dto(
+    ShoppingViewDto self,
     SseSerializer serializer,
   );
 
