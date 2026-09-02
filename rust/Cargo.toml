@@ -9,6 +9,7 @@ crate-type = ["cdylib", "staticlib"]
 [dependencies]
 flutter_rust_bridge = "=2.13.0"
 thiserror = "2"
+kimatta-application = { path = "crates/kimatta-application" }
 kimatta-storage = { path = "crates/kimatta-storage" }
 uuid = { version = "1", features = ["v4"] }
 

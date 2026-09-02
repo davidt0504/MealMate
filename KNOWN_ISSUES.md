@@ -174,3 +174,33 @@ Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-orch-16-2026-
 - **Restriction-load failure breaks every recipe read, and in `save_recipe_in` lands post-commit** (`rust/src/api/recipe.rs:373`) -- one unparseable `household_restriction` row (`CorruptRestriction`, reachable by downgrade past a vocabulary addition) kills list/load/save/archive/restore for the whole library. `db::with` is not transactional (`rust/src/db.rs:23`), so the save at `:399` has committed before `stored_recipe` errors: the user sees a write failure on a stored recipe, and because a create sends an empty id minted in Rust, each retry stores a duplicate. Deterministic, so it repeats. Fix: keep the recipe read paths independent of restriction-load failure, or keep the read-back free of newly fallible work.
   Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-orch-16-2026-08-29T1040-68c3.md
   **Status:** OPEN
+
+## orch/33 -- 2026-09-02
+
+Source: /home/davidlinux/.claude/reviews/impl-handoff-orch-33-2026-09-02T1146-243b.md
+Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-orch-33-2026-09-02T1158-e249.md
+
+### MEDIUM
+
+- **Tier-5 pantry fit and ingredient overlap can outweigh the repeat penalty** (`rust/crates/food-domain/src/planner/score.rs:218`) -- four terms share tier 5: `REPEAT_IN_CYCLE` at `-2 * repeats` (:218) against `INGREDIENT_OVERLAP` and `PANTRY_FIT` at `+min(count, 3)` each (:243, :252). A repeated dish with three pantry marks and three shared refs scores +4 while a novel dish scores 0, so the beam repeats it. AC-3's `sequence_fixture_picks_cycle_optimal_over_slot_optimal` asserts no adjacent repeat on one fixture whose dishes carry no pantry marks, so the property is unpinned. Deferred: a weight-tuning question MVP-025's fixtures and beam benchmark are chartered to settle; retuning without them risks a different miscalibration. Fix: scale the repeat penalty above the positive cap, or give variety its own sub-tier ahead of reuse, plus a fixture where pantry fit and repetition oppose.
+  Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-orch-33-2026-09-02T1158-e249.md
+  **Status:** OPEN
+
+- **`selected_action` cannot record a declined apply** (`rust/crates/kimatta-application/src/lib.rs:68`) -- `will_apply = req.apply && status != NeedsAttention`, and the ledger writes `ACTION_APPLY` or `ACTION_PROPOSE` from that single bool (:90-95), so "the user asked to automate and the controller refused" and "the user asked for a preview" produce byte-identical rows in the column that records intent. Pinned by the crate's own `apply_under_needs_attention_records_and_does_not_write` (:413, :433). No wrong output; the ledger loses the most diagnostic event it exists to capture. Deferred: a third stored token needs the kernel token-table treatment (`ALL`/`as_str`/`parse` plus a `CorruptLedgerEntry` case in `list_ledger_entries`) and a ledger-schema decision belonging with MVP-024's explain surface, the first consumer of the distinction. Fix: an `ACTION_DECLINED` token on the `req.apply && !will_apply` path.
+  Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-orch-33-2026-09-02T1158-e249.md
+  **Status:** OPEN
+
+- **`offset_cycles` is unvalidated at the bridge and surfaces a pure input error as a database failure** (`rust/src/api/planner.rs:352`) -- the rustdoc at :341-342 promises "dates are parsed before storage is touched, so a malformed `today` is a typed `Planning` error" and :347 honours it, but the sibling input `offset_cycles` is passed through untouched and validated only inside `load_planning_snapshot` -> `window_containing` -> `CycleWindowOverflow` -> `StorageError::Planning` -> `KimattaError::Storage`. `coverCycle(offsetCycles: 2147483647)` therefore reads as "Household unavailable: ..." (`lib/features/household/household_screen.dart:27`). No panic -- `window_containing` is overflow-safe. `today`'s half is pinned by `test/bridge_native_test.dart:586-596`; this half is not. Deferred: wrong error *category*, no data effect; pairs with MVP-024's error-surface work where the Dart copy is decided. Fix: range-check `offset_cycles` beside the `today` parse and return the `Planning` variant, plus a mirroring Dart test.
+  Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-orch-33-2026-09-02T1158-e249.md
+  **Status:** OPEN
+
+## orch/33 -- 2026-09-02
+
+Source: /home/davidlinux/.claude/reviews/impl-handoff-orch-33-2026-09-02T1354-52de.md
+Full review: .orch/redteam-impl-handoff-orch-33-2026-09-02T1401-4b38.md
+
+### MEDIUM
+
+- **`save_planned_meal` accepts a `locked` flag it never writes** (`rust/crates/kimatta-storage/src/lib.rs:2146`) -- `PlannedMeal::new(..., locked)` takes a lock but the INSERT names only `(id, household_id, date, slot)` and the `ON CONFLICT` arm updates `date` and `slot`, so a caller constructing a locked occurrence gets an unlocked row and no error. Not a slip: documented at :2079-2081, at the DTO field (`rust/src/api/planned_meals.rs:38-39`), at :137 and on `stored()` at :159, and pinned by `a_sent_locked_flag_is_ignored_on_save` (:333) and `set_lock_then_save_keeps_it_locked` (:344). Both production writers hardcode `locked: false`, so nothing is presently wrong; the smell is a constructor parameter that is inert on the save path. Deferred: reversing it would break a contract three files depend on, for no caller. Fix: a second constructor for the loader (`meal_from_rows` at :2309-2329 needs the parameter), then drop it from `new` so `set_planned_meal_lock` is the only way to set a lock.
+  Full review: .orch/redteam-impl-handoff-orch-33-2026-09-02T1401-4b38.md
+  **Status:** OPEN

@@ -33,8 +33,8 @@ Live task status, current work, and next work are authoritative only in `docs/RO
 | 5. SQLite migration foundation | Complete (MVP-002, 2026-08-24) |
 | 6. Tests for the first migrated domain primitive (household identity) | Complete (MVP-002, 2026-08-24) |
 | 7. README architecture update with real build commands | Complete (PRE-002) |
-| Kernel primitives beyond identity (`Policy`, `OutcomeAssessment`, `ActionProposal`, `AttentionRequest`, ledger) | MVP-023 |
-| Planner, coverage assessment, attention requests | MVP-023 |
+| Kernel primitives beyond identity (`Policy`, `OutcomeAssessment`, `ActionProposal`, `AttentionRequest`, ledger) | Complete (MVP-023, 2026-09-02: `household-core/src/kernel.rs`, schema v10 `policy`/`controller_ledger`) |
+| Planner, coverage assessment, attention requests | Complete (MVP-023, 2026-09-02: `food-domain/src/planner/`, `kimatta-application`, one `cover_cycle` bridge command) |
 | Cover My Week UI | MVP-024 |
 | Fixtures, property tests, beam-width benchmark | MVP-025 |
 | Privacy-safe metric hooks | MVP-019 |
@@ -53,7 +53,7 @@ Live task status, current work, and next work are authoritative only in `docs/RO
 |---|---|
 | No code or toolchain work in this session; the eight deliverables are split across PRE-002 → DEC-005 → MVP-002 | Owner decision via `/deep-options` (2026-08-24). The prompt's Phase-0 rule requires the migration plan before refactoring, and `docs/task/README.md` forbids `--auto` for the first three implementation cards and requires a red-teamed plan for Elevated cards; a one-shot pivot would bypass both. |
 | Rust-core commitment (DEC-005, resolved 2026-08-24 as D-030) made on **Android evidence only**; iOS deferred to PRE-003 | PRD v3 §17 Phase 1 / §22 ask for Android + iOS. D-015 and invariant 14 make iOS post-launch and no macOS/CI exists. iOS re-opens the kill criterion at PRE-003. |
-| Three crates to start (`household-core`, `kimatta-storage`, `kimatta-bridge`) instead of the five sketched | Empty crates are scaffolding; `food-domain` and `kimatta-application` appear with their first real type/use case. Dependency direction is preserved. |
+| Three crates to start (`household-core`, `kimatta-storage`, `kimatta-bridge`) instead of the five sketched | Empty crates are scaffolding; `food-domain` and `kimatta-application` appear with their first real type/use case. Dependency direction is preserved. All five now exist: `food-domain` arrived with MVP-005/007 and `kimatta-application` with MVP-023 (2026-09-02), at exactly the arrival points `V3_MIGRATION_PLAN.md` §3 names. |
 | Kernel primitives beyond identity deferred to MVP-023 | Principles §25: only primitives with a call site; the planner is the first call site. |
 | `tracing`, `jiff`, `serde` adopted at first call site rather than up front | PRD §6.6 lists them as "likely choices"; adding unused dependencies adds nothing. |
 | Task cards reconciled by banners + outline cards, not a full rewrite | D-029: a full rewrite before the spike would be redone if DEC-005 invokes the §22 fallback. **Superseded 2026-08-26 (D-034)** — the spike settled the question the deferral was hedging, so the full re-derivation ran. |

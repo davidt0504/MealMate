@@ -21,6 +21,19 @@ pub enum KimattaError {
     Shopping { message: String },
 }
 
+/// The application layer's storage failures stay `Storage`, exactly as they would arriving
+/// from any other command — a ghost household reads the same on every screen. There is no
+/// planner-specific arm: `ApplicationError` has one variant and this `match` is exhaustive
+/// without a catch-all, so nothing could construct one. Add it back with the first failure
+/// that needs it, rather than freezing a speculative variant into the generated Dart.
+impl From<kimatta_application::ApplicationError> for KimattaError {
+    fn from(e: kimatta_application::ApplicationError) -> Self {
+        match e {
+            kimatta_application::ApplicationError::Storage(inner) => inner.into(),
+        }
+    }
+}
+
 /// Same scope rule as the `Planning` conversion below: a `ShoppingError` raised while
 /// validating bridge arguments; one raised inside storage arrives as `StorageError::Shopping`
 /// and stays `Storage`.

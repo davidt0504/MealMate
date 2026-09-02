@@ -7,6 +7,7 @@ import 'package:meal_mate/src/rust/api/health.dart';
 import 'package:meal_mate/src/rust/api/household.dart';
 import 'package:meal_mate/src/rust/api/pantry.dart';
 import 'package:meal_mate/src/rust/api/planned_meals.dart';
+import 'package:meal_mate/src/rust/api/planner.dart';
 import 'package:meal_mate/src/rust/api/planning.dart';
 import 'package:meal_mate/src/rust/api/recipe.dart';
 import 'package:meal_mate/src/rust/api/restrictions.dart';
@@ -42,9 +43,9 @@ void main() {
     );
   });
 
-  test('open_database migrates a real database to schema v9', () async {
+  test('open_database migrates a real database to schema v10', () async {
     final report = await openDatabase(dbPath: await tempDb());
-    expect(report.schemaVersion, 9);
+    expect(report.schemaVersion, 10);
   });
 
   test('storage failure surfaces as KimattaError_Storage', () async {
@@ -534,6 +535,64 @@ void main() {
       }
     },
   );
+
+  /// MVP-023 AC-8: one coarse command carries the whole cover-cycle operation — snapshot,
+  /// assessment, plan, ledger row and apply — and its nested outcome decodes in Dart.
+  test('a cover cycle outcome crosses the bridge', () async {
+    await openDatabase(dbPath: await tempDb());
+    final h = await bootstrapHousehold();
+    await ensurePlanningCycle(
+      householdId: h.id,
+      defaultAnchorDate: '2026-08-30',
+    );
+    final saved = await saveRecipe(recipe: recipeFor(h.id, const []));
+    final out = await coverCycle(
+      request: CoverCycleRequestDto(
+        householdId: h.id,
+        today: '2026-08-30',
+        offsetCycles: 0,
+        apply: true,
+      ),
+    );
+    expect(out.ledgerEntryId, isNotEmpty);
+    expect(out.applied, isTrue);
+    expect(out.changedSlots, 7);
+    expect(out.result.algorithmVersion, 2);
+    expect(out.result.snapshotHash.length, 16);
+    expect(out.result.horizonFrom, '2026-08-30');
+    expect(out.result.slots.length, 7, reason: 'seven dinner slots');
+    // No restrictions were configured, so the plan may not claim `covered`.
+    expect(out.result.status, OutcomeStatusDto.tentativelyCovered);
+    expect(out.result.assumptions, contains('RESTRICTIONS_NOT_CONFIGURED'));
+    expect(out.result.unresolvedIssues, isNotEmpty);
+    expect(
+      out.result.proposed.first.components.first.recipeId,
+      saved.id,
+      reason: 'the one recipe wins every slot over the fallbacks',
+    );
+    expect(out.result.proposals.single.actionType, 'apply_plan');
+    expect(out.result.search.beamWidth, 8);
+    expect(out.result.search.slotOrder, 'canonical');
+    expect(out.result.scoreTiers.length, 6);
+    final planned = await listPlannedMeals(
+      householdId: h.id,
+      fromDate: '2026-08-30',
+      toDate: '2026-09-05',
+    );
+    expect(planned.length, 7);
+    // A malformed today is the same typed error every other command raises.
+    await expectLater(
+      () => coverCycle(
+        request: CoverCycleRequestDto(
+          householdId: h.id,
+          today: '2026-08-30T00:00:00Z',
+          offsetCycles: 0,
+          apply: false,
+        ),
+      ),
+      throwsA(isA<KimattaError_Planning>()),
+    );
+  });
 
   /// MVP-016 at the real bridge: the overlay is durable (AC-2), the view carries it back
   /// with the derivation, and a bulk pantry mark flips a line to omitted and the returned
