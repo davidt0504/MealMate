@@ -19,6 +19,9 @@ Full review: /home/davidlinux/.claude/reviews/redteam-mvp003-integration-verify-
 
 ### MEDIUM
 
+- **MVP-025 AC-4 device benchmark is discharged only by a real-hardware run** (`rust/crates/food-domain/examples/beam_width.rs`, `docs/ROADMAP.md` MVP-025 Done row) -- approved Done 2026-09-02 under D-027 with the host-run numbers verifier-reproduced. Fix: before `MVP-022` beta readiness, run the beam_width example on representative low/mid-range Android hardware and record the numbers; re-tune (B, K) only if Score index 0-2 regress.
+  **Status:** OPEN
+
 - **MVP-011 AC-3 (human cook log) is discharged only as cook reviews are recorded** (`rust/crates/food-domain/content/starter_recipes.json`, `docs/ROADMAP.md` MVP-011 Done row) -- approved Done 2026-08-29 under D-027 with 0/10 recipes reviewed, so no starter recipe installs yet. Fix: cook each recipe and add `"cook_review": {"cooked_on": "YYYY-MM-DD", "by": "...", "corrections": null}`; tests validate the shape and the installer ships reviewed entries. Must be revisited before `MVP-022` beta readiness; a beta with 0/10 is the accepted residual risk.
   **Status:** OPEN
 
