@@ -10,6 +10,11 @@ pub mod score;
 pub mod snapshot;
 pub mod tier0;
 
+#[cfg(any(test, feature = "fixtures"))]
+pub mod fixtures;
+
+#[cfg(test)]
+mod invariant_tests;
 #[cfg(test)]
 mod tests;
 

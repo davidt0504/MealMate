@@ -3,6 +3,15 @@ name = "food-domain"
 version = "0.1.0"
 edition = "2021"
 
+[[example]]
+name = "beam_width"
+required-features = ["fixtures"]
+
+[features]
+# MVP-025: synthetic planner fixtures, compiled for tests and for the benchmark
+# example (`required-features`), never into the shipped library.
+fixtures = []
+
 [dependencies]
 household-core = { path = "../household-core" }
 jiff = { version = "0.2.35", default-features = false, features = ["std"] }

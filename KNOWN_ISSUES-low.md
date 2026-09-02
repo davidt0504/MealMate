@@ -981,3 +981,32 @@ Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-orch-33-2026-
 - **`leftovers_sourced_from_stored` reads `history` with no `previous < anchor` guard** (`rust/crates/food-domain/src/planner/candidates.rs:258`) -- its counterpart `score::leftover_source` guards the same lookup at `score.rs:127`. The loader keeps `existing` and `history` date-disjoint (`controller.rs:525-529`), but `PlanningSnapshot`'s fields are public and every planner test builds one by hand, so a history row on or after the anchor silently re-opens the assess/search divergence this card closed. Fix: mirror the guard.
   Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-orch-33-2026-09-02T1548-e7cc.md
   **Status:** OPEN
+
+## orch/35 -- 2026-09-02
+
+Source: /home/davidlinux/.claude/reviews/impl-handoff-orch-35-2026-09-02T1722-7e0f.md
+Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-orch-35-2026-09-02T1736-f8f4.md
+
+### LOW
+
+- **Dead statements written to satisfy the compiler, not to assert** (`rust/crates/food-domain/src/planner/invariant_tests.rs:166`) -- `history_ids.clear()` exists only to justify the `mut` binding; `let _ = lines;` (line 648) discards a counter `assert_well_formed` computes and never asserts; `fixtures/mod.rs:798` re-assigns `pantry_marked = vec![]` that `base()` already set at `mod.rs:291`. Reads as configuration, is tautology. Fix: drop the `mut`+`clear()`, assert a floor on `lines` or delete it, delete the redundant assignment.
+  Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-orch-35-2026-09-02T1736-f8f4.md
+  **Status:** RESOLVED 2026-09-02 -- all three deleted; the `lines` counter went rather than gaining a floor (the caller's `lines_seen > 0` already covers it), and `sparse_pantry`'s pinned hash was unchanged by the assignment's removal, confirming it was a tautology.
+
+---
+
+- **Exploratory B×K grid skips `multiple_strong_dislikes`, the only fixture with a strictly-better cell** (`rust/crates/food-domain/examples/beam_width.rs:19`) -- `SEARCH_HEAVY` is an undocumented four-name list that includes 3-recipe `leftovers_fallback_heavy` but excludes the 8-recipe fixture that produced the recorded headroom cell (`docs/ROADMAP.md:322`), so no intermediate-B data exists where the evidence says shipped params leave quality on the table. Non-blocking: `beam.rs:85-108` is monotone in B and K, so `(64, cap)` upper-bounds every cell. Fix: derive the list from `feasible_cap`, or add the fixture and record the monotonicity argument.
+  Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-orch-35-2026-09-02T1736-f8f4.md
+  **Status:** RESOLVED 2026-09-02 -- fixture added (`SEARCH_HEAVY` now 5), selection criterion recorded on the const and the monotonicity argument in the module doc; benchmark re-run resolved the open question — the headroom is a beam-width effect reached at B>=16 for every swept K (and at B=8/K=2), verdict still SURVIVES.
+
+---
+
+- **ROADMAP evidence row overstates invariant 4's parameter coverage** (`docs/ROADMAP.md:322`) -- the AC-2 cell claims invariants "1-4 ... quantified over all 11 fixtures x (B,K) in {(1,1),(8,12),(64,64)}", but `invariant_tests.rs:570-577` runs invariant 4 over `[(1,1), default]` only, as its own doc comment states. The row is what a verifier reads to grant PASS. Materially small: the subset check is parameter-independent, only the corollary is affected. Fix: narrow the parenthetical to invariants 1-3, or annotate invariant 4's two cells.
+  Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-orch-35-2026-09-02T1736-f8f4.md
+  **Status:** RESOLVED 2026-09-02 -- the AC-2 cell now reads "invariants 1-3 ... x (B,K)", with invariant 4 recorded separately as parameter-independent subset checks plus a corollary at (1,1) and (8,12); appended rather than narrowed, so invariant 4 keeps its place in the evidence sentence.
+
+---
+
+- **`by_name` rebuilds every fixture per call; the skipped-restrictions variant is never planned** (`rust/crates/food-domain/src/planner/fixtures/mod.rs:64`) -- `by_name` calls `all()` (line 65), so `fixture_shapes_hold`'s eleven lookups build 121 fixtures including 48-recipe `high_variety_household`. Separately `restrictions_skipped_variant` (line 96) has one caller (`invariant_tests.rs:286`) that only asserts its own shape; no invariant and not `beam_width.rs` ever plans it, so `fixtures/README.md:22`'s "tests, bench, §22" reuse cell overstates it. Fix: match-then-build or `OnceLock` in `by_name`; run one invariant over the variant or narrow the README cell.
+  Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-orch-35-2026-09-02T1736-f8f4.md
+  **Status:** RESOLVED 2026-09-02 -- `by_name` builds once via `OnceLock` (chosen over match-then-build, which would duplicate the eleven-name list; `all()` stays uncached so `fixtures_are_deterministic` still compares two independent builds), and the README's reuse and shape cells for that row now say the skipped variant is shape-asserted only.
