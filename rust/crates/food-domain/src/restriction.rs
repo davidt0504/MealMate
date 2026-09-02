@@ -342,7 +342,9 @@ fn components(kind: RestrictionKind) -> &'static [Component] {
 
 /// Lowercased alphanumeric tokens. Non-ASCII letters are kept as they are (so `crème` is one
 /// token that matches nothing) — a documented false negative, never a false "safe".
-fn tokens(text: &str) -> Vec<String> {
+/// `pub(crate)` for the planner's veto and preference matching (MVP-023), so there is one
+/// tokenizer in the crate rather than a second that could disagree with this one.
+pub(crate) fn tokens(text: &str) -> Vec<String> {
     text.split(|c: char| !c.is_alphanumeric())
         .filter(|t| !t.is_empty())
         .map(str::to_lowercase)
@@ -350,7 +352,7 @@ fn tokens(text: &str) -> Vec<String> {
 }
 
 /// `phrase` (already tokenised) occurs contiguously in `hay`.
-fn contains_phrase(hay: &[String], phrase: &[String]) -> bool {
+pub(crate) fn contains_phrase(hay: &[String], phrase: &[String]) -> bool {
     !phrase.is_empty() && hay.windows(phrase.len()).any(|w| w == phrase)
 }
 

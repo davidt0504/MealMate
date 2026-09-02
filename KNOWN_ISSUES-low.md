@@ -834,3 +834,150 @@ Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-orch-31-2026-
 - **New-item `_write` key is dead and "Add item" is never disabled** (`lib/features/shopping/shopping_screen.dart:235`) -- a save keyed `existing?.id ?? ''` is never consulted (`_manualRow` guards on `item.id`, the Add button has no guard), and Rust mints a fresh id per blank-id save, so a double submit creates two identical items. Fix: guard the Add button on `_writing.contains('')`, or drop the empty key and disable the button for the save.
   Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-orch-31-2026-08-29T2331-d2ca.md
   **Status:** OPEN
+
+## orch/33 -- 2026-09-02
+
+Source: /home/davidlinux/.claude/reviews/impl-handoff-orch-33-2026-09-02T1146-243b.md
+Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-orch-33-2026-09-02T1158-e249.md
+
+### LOW
+
+- **`PLAN_INFEASIBLE` copy attributes a scoring outcome to "the hard checks"** (`rust/crates/food-domain/src/planner/coverage.rs:54`) -- the sentence says no leftovers option "passed the hard checks", but `only_fallbacks` is `!any(source.is_meal())` (`mod.rs:157`) and `is_meal()` excludes `Leftovers` (`candidates.rs:50`). A sourceless leftovers candidate passes Tier 0 and is still reported as having failed it, with an empty `rejections` list to explain. Fix: reword to the actual condition, or split sourceless leftovers into its own code and sentence.
+  Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-orch-33-2026-09-02T1158-e249.md
+  **Status:** OPEN
+
+---
+
+- **Split doc comment across two bridge tests** (`test/bridge_native_test.dart:539`) -- the MVP-016 shopping test's comment head sits above `test('a cover cycle outcome crosses the bridge')` at :543 while its tail sits at :599 above the MVP-016 test at :601. Comments only; analyze, format and all 287 tests pass. Self-disclosed in the MVP-023 handoff (Reviewer Note 1); left unfixed because the session lost edit permission. Fix: delete the two orphaned lines above :543 and restore the full MVP-016 comment above :601.
+  Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-orch-33-2026-09-02T1158-e249.md
+  **Status:** OPEN
+
+---
+
+- **`decode_parameters` silently discards malformed lines while its siblings report corruption** (`rust/crates/kimatta-storage/src/controller.rs:56`) -- `filter_map(|line| line.split_once('\t'))` drops any tab-less stored line, though `list_policies`' rustdoc (:100) promises a row that could not be a policy is reported and the same function raises `CorruptLedgerEntry` for a corrupt `source` token (:124). Round-trip is lossless for well-formed data. A corrupted parameters blob surfaces as a generic `UNKNOWN_POLICY_TYPE` instead of naming the row. Fix: return `Result` and raise `CorruptLedgerEntry { column: "parameters" }` on a tab-less non-empty line.
+  Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-orch-33-2026-09-02T1158-e249.md
+  **Status:** OPEN
+
+---
+
+- **`FoodPolicies::from_policies` non-`food` branch is unreachable and mislabels if reached** (`rust/crates/food-domain/src/planner/snapshot.rs:58`) -- the only production caller passes `list_policies(&tx, household, "food")` (`controller.rs:357`), whose SQL filters on domain, so the branch is defensive bloat. If a future caller passes an unfiltered list, every foreign-domain policy adds a spurious `UNKNOWN_POLICY_TYPE` issue to the Cover My Week assessment. Fix: drop the branch, or filter by domain inside the function and ignore foreign domains silently.
+  Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-orch-33-2026-09-02T1158-e249.md
+  **Status:** OPEN
+
+---
+
+- **`PREP_FEASIBLE_UNKNOWN` duplicates `NO_PREP_TIME_ESTIMATES`** (`rust/crates/food-domain/src/planner/score.rs:16`) -- score.rs:142 raises it on exactly the negation of `coverage.rs:120`'s `schedule_fit_known`, which raises `NO_PREP_TIME_ESTIMATES`. Only the coverage code has an `ISSUE_TEXT` entry and claim-blocking wiring; the score-side code lands in `assessment.assumptions` and renders as `""`. A later card adding copy for one name produces duplicate or missing text. Fix: emit the single coverage code from both sites, or document at :16 that this code is score-local and never user-facing.
+  Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-orch-33-2026-09-02T1158-e249.md
+  **Status:** OPEN
+
+---
+
+- **`PlanningSnapshot` has public fields and no validating constructor; `length_days: 0` panics** (`rust/crates/food-domain/src/planner/mod.rs:213`) -- `let from = snapshot.dates()[0];` and `horizon()` at :133 index an empty `Vec` when `length_days == 0`; `snapshot.rs:148` also carries `expect("loader proved the cycle fits")`. Both rest on a loader invariant the public type does not enforce, and the type is re-exported through `kimatta-storage`. MVP-025 is about to hand-build fixtures. Fix: add a checked constructor validating `MIN_CYCLE_DAYS..=MAX_CYCLE_DAYS`, or make the fields `pub(crate)` with accessors.
+  Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-orch-33-2026-09-02T1158-e249.md
+  **Status:** OPEN
+
+---
+
+- **`load_planning_snapshot` issues N+1 queries and loads full recipe records for seven fields** (`rust/crates/kimatta-storage/src/controller.rs:359`) -- `list_recipes(Active)` then `load_recipe` per recipe, each materialising instructions, provenance and every line only to build a `RecipeCandidateInfo`. A 200-recipe household runs 201 queries per `cover_cycle` call. No wrong output; it adds fixed cost to an already-expensive operation. Fix: one projecting join, or a `list_recipe_candidate_info` in the storage crate; best paired with the scoring hot-loop fix.
+  Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-orch-33-2026-09-02T1158-e249.md
+  **Status:** OPEN
+
+---
+
+- **`KimattaError::Planner` is a dead variant already frozen into the FFI contract** (`rust/src/api/error.rs:23`) -- nothing constructs it: grepping `rust/src/` and `lib/features/` returns the definition plus three machine-generated `frb_generated.rs` arms (:1764, :3382, :4460) and nothing else, and the `From<ApplicationError>` impl at :30-36 is exhaustive over a one-variant enum with no catch-all. Its own doc concedes it is "reserved for planner-specific failures the application layer may grow". It generated ~60 lines of freezed Dart and an unreachable arm in `describeFailure` (`lib/features/household/household_screen.dart:43-45`). Fix: delete the variant and its Dart arm and regenerate -- cheap now, a breaking change to a Dart surface once MVP-024 ships against it.
+  Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-orch-33-2026-09-02T1158-e249.md
+  **Status:** OPEN
+
+---
+
+- **`slot_is_resolved` is dead, and the resolution guard is absent from `apply_plan_and_record`** (`rust/crates/kimatta-storage/src/controller.rs:422`) -- never called (the only other grep hit is an unrelated test *name* at `food-domain/src/planner/tests.rs:467`), and it duplicates `candidates::is_resolved` (`candidates.rs:131`), which is used. So the applier enforces only the lock half: an unlocked slot the household set to `Open` is deleted and rewritten as `Automation` with no guard. Unreachable today because `tier0::filter` keeps only the `ExistingPlan` candidate for a resolved slot (`tier0.rs:68-70`), so the `continue` at `controller.rs:300` fires -- but that protection lives in `food-domain` while `apply_plan_and_record` is `pub`. Fix: call it in the apply loop beside the lock check, or delete it and note that resolution is enforced upstream.
+  Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-orch-33-2026-09-02T1158-e249.md
+  **Status:** OPEN
+
+---
+
+- **A corrupt `policy` row is reported as `CorruptLedgerEntry`, naming the wrong table** (`rust/crates/kimatta-storage/src/controller.rs:124`) -- `list_policies` raises that variant for a `policy` row with an unparseable `source`, and its message is "ledger entry {entry} has {column} {value:?}, which is not a stored token" (`lib.rs:158-163`). An operator reads `ledger entry p1 has source "bogus"` for a row in `policy`, inspects `controller_ledger`, and finds nothing wrong. The corruption is correctly refused rather than coerced; only the message misleads. Fix: a shared `CorruptRow { table, id, column, value }` variant, or a second variant for policies.
+  Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-orch-33-2026-09-02T1158-e249.md
+  **Status:** OPEN
+
+---
+
+- **`days()`'s doc says the history window "simply shortens"; the caller drops it entirely** (`rust/crates/kimatta-storage/src/controller.rs:29`) -- the match at :397-400 takes `(Some(from), Some(to))` or `Vec::new()`, so a `None` bound yields an *empty* history rather than a shorter one. Reachable only within 14 days of jiff's minimum civil date, so the practical impact is nil and the defect is that the comment states the opposite of the behaviour. (Also: `days()`'s `n.abs()` would panic on `i64::MIN`, but it is only ever called with the literals `-14` and `-1`.) Fix: clamp the lower bound to the calendar minimum so the window genuinely shortens, or correct the comment.
+  Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-orch-33-2026-09-02T1158-e249.md
+  **Status:** OPEN
+
+---
+
+- **A short `ids` slice is reported as a data error rather than a programmer error** (`rust/crates/kimatta-storage/src/controller.rs:305`) -- passing fewer `ids` than `proposed` slots returns `NoSuchPlannedMeal { meal: "proposed slot {index}" }`, a synthetic string in an id field, so the caller cannot tell "I passed a short slice" from "a stored occurrence vanished". Rollback is correct. Defensive only: `kimatta-application/src/lib.rs:100-105` mints exactly one id per proposed slot. Fix: an `IdCountMismatch { expected, got }` variant, or a debug assertion at the top of the function.
+  Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-orch-33-2026-09-02T1158-e249.md
+  **Status:** OPEN
+
+---
+
+## orch/33 -- 2026-09-02
+
+Source: /home/davidlinux/.claude/reviews/impl-handoff-orch-33-2026-09-02T1304-e11f.md
+Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-orch-33-2026-09-02T1317-9799.md
+
+### LOW
+
+- **`list_recipe_candidate_info`'s ref arm cites the wrong table's CHECK** (`rust/crates/kimatta-storage/src/controller.rs:386`) -- the rustdoc points at `lib.rs:379`, which is `pantry_item`'s exactly-one CHECK; `recipe_ingredient_line`'s own is `lib.rs:264` and is at-most-one, permitting both-NULL. Match arms are correct; the comment invites deleting the `(None, None)` arm the real constraint needs. Fix: re-point the citation at `lib.rs:264` and say at-most-one.
+  Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-orch-33-2026-09-02T1317-9799.md
+  **Status:** OPEN
+
+---
+
+- **`PlanningSnapshot.existing`/`.history` documented "by date then slot"; loader gives date then id** (`rust/crates/food-domain/src/planner/snapshot.rs:138`) -- `list_planned_meals` is `ORDER BY date, id` (`kimatta-storage/src/lib.rs:2387`), so within a date the order is planned-meal-id (UUID for automation rows), not slot. Hash stays deterministic because ids are in `meal_text`; the risk is a later change trusting the documented order and dropping the id, which would make `StalePlan` fire spuriously. Fix: correct the field docs, or add `slot` to the ORDER BY.
+  Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-orch-33-2026-09-02T1317-9799.md
+  **Status:** OPEN
+
+---
+
+- **`commitment_horizon_days` is unclamped under a comment saying all three knobs are clamped** (`rust/src/api/planner.rs:354`) -- `beam_width` and `candidates_per_slot` get `.clamp(1, 16)`; the third is a bare `unwrap_or`. No overflow (it only feeds an `i64` compare in `score.rs:103`), but `u32::MAX` from Dart makes every date near-term, applying `NEAR_TERM_CHURN` (-3) uniformly and freezing the existing plan. Untested. Fix: clamp to the 31-day cycle maximum, or scope the comment to the two fields it covers.
+  Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-orch-33-2026-09-02T1317-9799.md
+  **Status:** OPEN
+
+---
+
+- **`SearchTrace.states_scored` omits the per-slot ranking pass** (`rust/crates/food-domain/src/planner/beam.rs:62`) -- `search` calls `score_plan` once per feasible candidate to rank before truncating to K, and counts only the extension scorings. On a 7-locked-dinner / 50-recipe fixture that is 370 scorings reported as zero. It is the only cost signal in the ledger payload and MVP-025's benchmark baseline. Fix: fold `Σ|feasible|` in, or add a separate `candidates_ranked` counter.
+  Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-orch-33-2026-09-02T1317-9799.md
+  **Status:** OPEN
+
+## orch/33 -- 2026-09-02
+
+Source: /home/davidlinux/.claude/reviews/impl-handoff-orch-33-2026-09-02T1354-52de.md
+Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-orch-33-2026-09-02T1401-4b38.md
+
+### LOW
+
+- **Bridge keeps `LOCK_CONFLICT` in `reason_codes` while dropping its rejections** (`rust/src/api/planner.rs:321`) -- the filter strips every `LOCK_CONFLICT` row from `PlanningResultDto.rejections`, but `planner/mod.rs:246` still chains the code into `assessment.reason_codes` and nothing filters it at the bridge. A Dart consumer indexing `rejections` by code finds zero rows, and `issue_text("LOCK_CONFLICT")` is `""` so there is no copy either. MVP-024 is the first UI that could trip on it. Fix: filter the code out of the DTO's `reason_codes`, or document on `PlanningResultDto.rejections` that `reason_codes` is a superset.
+  Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-orch-33-2026-09-02T1401-4b38.md
+  **Status:** OPEN
+
+## orch/33 -- 2026-09-02
+
+Source: /home/davidlinux/.claude/reviews/impl-handoff-orch-33-2026-09-02T1446-32d3.md
+Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-orch-33-2026-09-02T1502-ac00.md
+
+### LOW
+
+- **`assess` runs the leftovers-source scan on every slot** (`rust/crates/food-domain/src/planner/mod.rs:364`) -- `leftovers_sourced_from_stored` is called unconditionally per enabled slot, but `slot_coverage` reads the flag only when the candidate `is_leftovers()` (`coverage.rs:215`). Each call re-scans `existing ∪ history` and rebuilds a `RecipeView` per component, linear-scanning `snapshot.recipes` and deep-cloning title, line names and refs -- ~735 discarded view constructions on a 21-slot / 50-recipe cycle. `score.rs:65-70` hoists exactly this cost for exactly this reason. No wrong answer. Fix: gate the call on the stored occurrence holding a `Leftovers` component, or memoise per date.
+  Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-orch-33-2026-09-02T1502-ac00.md
+  **Status:** OPEN
+
+## orch/33 -- 2026-09-02
+
+Source: /home/davidlinux/.claude/reviews/impl-handoff-orch-33-2026-09-02T1536-838b.md
+Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-orch-33-2026-09-02T1548-e7cc.md
+
+### LOW
+
+- **Facts-free starter view's `title` is a slug the veto and preference matchers read as a dish name** (`rust/crates/food-domain/src/planner/candidates.rs:225`) -- the unknown-slug arm sets `title: slug`, and `tokens` splits on non-alphanumerics, so `chicken-curry` matches a `Like: "curry"` preference and scores `MEMBER_LIKE +1` at the tier that sets the per-member floor. The archived-recipe branch it mirrors uses an opaque recipe id. Fix: leave `title` empty in that arm, or split display from matched text on `RecipeView`.
+  Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-orch-33-2026-09-02T1548-e7cc.md
+  **Status:** OPEN
+
+---
+
+- **`leftovers_sourced_from_stored` reads `history` with no `previous < anchor` guard** (`rust/crates/food-domain/src/planner/candidates.rs:258`) -- its counterpart `score::leftover_source` guards the same lookup at `score.rs:127`. The loader keeps `existing` and `history` date-disjoint (`controller.rs:525-529`), but `PlanningSnapshot`'s fields are public and every planner test builds one by hand, so a history row on or after the anchor silently re-opens the assess/search divergence this card closed. Fix: mirror the guard.
+  Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-orch-33-2026-09-02T1548-e7cc.md
+  **Status:** OPEN

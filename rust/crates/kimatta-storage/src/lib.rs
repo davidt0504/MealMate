@@ -1,8 +1,13 @@
 //! Rust-owned SQLite (PRD v3 §12): foreign keys on, explicit migrations, transactions.
 #![forbid(unsafe_code)]
 
+pub mod controller;
+
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
+
+pub use controller::*;
+pub use food_domain::planner;
 
 pub use food_domain::starter::{
     all_starter_content, shipped_starter_content, CookReview, StarterContent, StarterError,
@@ -20,7 +25,13 @@ pub use food_domain::{
     ShoppingLine, ShoppingList, ShoppingManualItemId, Unit, UnitFamily, UnitKind, WriteSource,
     DEFAULT_CYCLE_DAYS, MAX_CYCLE_DAYS, MIN_CYCLE_DAYS, RULE_VERSION, SHOPPING_ALGORITHM_VERSION,
 };
-pub use household_core::{Household, HouseholdId, HouseholdMember, IdError, MemberId};
+pub use household_core::{
+    ActionProposal, AttentionRequest, Band, Confidence, EvidenceSource, Horizon, Household,
+    HouseholdController, HouseholdId, HouseholdMember, IdError, KernelError, LedgerEntry,
+    LedgerEntryId, MemberId, OutcomeAssessment, OutcomeStatus, Policy, PolicyId, ReasonCode,
+    RequiredAuthority, Reversibility, Urgency,
+};
+pub use rusqlite;
 pub use rusqlite::Connection;
 use rusqlite::{params, OptionalExtension, Transaction, TransactionBehavior};
 use rusqlite_migration::{Migrations, M};
@@ -142,6 +153,25 @@ pub enum StorageError {
     NoSuchShoppingItem(String),
     #[error(transparent)]
     Shopping(#[from] ShoppingError),
+    #[error(transparent)]
+    Kernel(#[from] KernelError),
+    /// `table` names the row's own table: `list_policies` and `list_ledger_entries` both report
+    /// through this variant, and an operator sent to `controller_ledger` for a `policy` row has
+    /// no pointer to the row that is actually corrupt.
+    #[error("{table} row {id} has {column} {value:?}, which is not a stored token")]
+    CorruptRow {
+        table: &'static str,
+        id: String,
+        column: &'static str,
+        value: String,
+    },
+    #[error("apply was given {got} planned-meal ids for {expected} proposed slots")]
+    IdCountMismatch { expected: usize, got: usize },
+    #[error(
+        "the plan was built from snapshot {expected} but the household is now at {found}; \
+         re-run the planner"
+    )]
+    StalePlan { expected: String, found: String },
 }
 
 // Two consts: `M` has drop glue, so an inline `&[M::up(..)]` argument is not promoted
@@ -391,6 +421,62 @@ const MIGRATION_ARRAY: &[M] = &[
         checked INTEGER NOT NULL CHECK (checked IN (0, 1))
     ) STRICT;
     CREATE INDEX shopping_manual_item_household ON shopping_manual_item(household_id);",
+    ),
+    // Kernel policy envelope and the controller ledger (MVP-023, PRD §7.3, §7.7). `policy`
+    // is household-owned and cascades like every other household child; `parameters` is
+    // `key<TAB>value` lines, which `Policy::new` keeps unforgeable by refusing tabs and
+    // newlines in either half. `controller_ledger` is append-only by trigger, not by
+    // convention (invariant 20): UPDATE and DELETE are refused at the engine, and so is an
+    // INSERT whose `id` or `seq` already exists — that third trigger is what closes
+    // `INSERT OR REPLACE`, whose conflict eviction skips the BEFORE DELETE trigger unless
+    // `PRAGMA recursive_triggers` is on (it is off by default and set nowhere here), and
+    // which on a `seq` conflict would evict an unrelated older row. `DROP TRIGGER` and
+    // `PRAGMA writable_schema` remain bypasses; those take deliberately hostile SQL rather
+    // than an ordinary-looking statement. Its household FK
+    // deliberately carries **no cascade** — deleting a household while ledger rows exist is
+    // refused, because a planner record must outlive the state it describes. `seq` is the
+    // total order across households; `reason_codes` is space-joined, which `ReasonCode`
+    // keeps splittable by refusing whitespace.
+    M::up(
+        "CREATE TABLE policy (
+        id TEXT PRIMARY KEY NOT NULL,
+        household_id TEXT NOT NULL REFERENCES household(id) ON DELETE CASCADE,
+        domain TEXT NOT NULL CHECK (trim(domain, char(32, 9, 10, 11, 12, 13)) <> ''),
+        policy_type TEXT NOT NULL
+            CHECK (trim(policy_type, char(32, 9, 10, 11, 12, 13)) <> ''),
+        parameters TEXT NOT NULL,
+        enabled INTEGER NOT NULL CHECK (enabled IN (0, 1)),
+        source TEXT NOT NULL
+    ) STRICT;
+    CREATE INDEX policy_household_domain ON policy(household_id, domain);
+    CREATE TABLE controller_ledger (
+        id TEXT PRIMARY KEY NOT NULL,
+        seq INTEGER NOT NULL UNIQUE,
+        household_id TEXT NOT NULL REFERENCES household(id),
+        controller_id TEXT NOT NULL,
+        algorithm_version INTEGER NOT NULL,
+        snapshot_hash TEXT NOT NULL,
+        reason_codes TEXT NOT NULL,
+        selected_action TEXT NOT NULL,
+        prior_status TEXT NOT NULL,
+        resulting_status TEXT NOT NULL,
+        payload TEXT NOT NULL
+    ) STRICT;
+    CREATE INDEX controller_ledger_household ON controller_ledger(household_id);
+    CREATE TRIGGER controller_ledger_no_update BEFORE UPDATE ON controller_ledger
+    BEGIN
+        SELECT RAISE(ABORT, 'controller_ledger is append-only');
+    END;
+    CREATE TRIGGER controller_ledger_no_delete BEFORE DELETE ON controller_ledger
+    BEGIN
+        SELECT RAISE(ABORT, 'controller_ledger is append-only');
+    END;
+    CREATE TRIGGER controller_ledger_no_replace BEFORE INSERT ON controller_ledger
+    WHEN EXISTS (SELECT 1 FROM controller_ledger
+                 WHERE id = NEW.id OR seq = NEW.seq)
+    BEGIN
+        SELECT RAISE(ABORT, 'controller_ledger is append-only');
+    END;",
     ),
 ];
 pub const MIGRATIONS: Migrations<'static> = Migrations::from_slice(MIGRATION_ARRAY);
@@ -1999,9 +2085,21 @@ pub fn save_planned_meal(
     source: WriteSource,
 ) -> Result<(), StorageError> {
     let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    save_planned_meal_in(&tx, meal, source)?;
+    tx.commit()?;
+    Ok(())
+}
+
+/// The body `save_planned_meal` and `apply_plan_and_record` share; the caller owns the
+/// transaction, as `set_pantry_mark_in` and `insert_rows` are shaped.
+pub(crate) fn save_planned_meal_in(
+    tx: &Transaction<'_>,
+    meal: &PlannedMeal,
+    source: WriteSource,
+) -> Result<(), StorageError> {
     let household = meal.household_id();
-    require_household(&tx, household)?;
-    let cycle = load_planning_cycle(&tx, household)?
+    require_household(tx, household)?;
+    let cycle = load_planning_cycle(tx, household)?
         .ok_or_else(|| StorageError::NoPlanningCycle(household.as_str().to_owned()))?;
     if !cycle.scope().contains(meal.slot()) {
         return Err(StorageError::SlotNotEnabled {
@@ -2009,7 +2107,7 @@ pub fn save_planned_meal(
             slot: meal.slot().as_str().to_owned(),
         });
     }
-    check_component_recipes(&tx, meal)?;
+    check_component_recipes(tx, meal)?;
     check_freeform_notes(meal)?;
     let id = meal.id().as_str();
     let existing: Option<(String, bool)> = tx
@@ -2078,7 +2176,6 @@ pub fn save_planned_meal(
             ],
         )?;
     }
-    tx.commit()?;
     Ok(())
 }
 
@@ -2122,6 +2219,19 @@ pub fn delete_planned_meal(
     source: WriteSource,
 ) -> Result<(), StorageError> {
     let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    delete_planned_meal_in(&tx, household, id, source)?;
+    tx.commit()?;
+    Ok(())
+}
+
+/// The body `delete_planned_meal` and `apply_plan_and_record` share; the caller owns the
+/// transaction.
+pub(crate) fn delete_planned_meal_in(
+    tx: &Transaction<'_>,
+    household: &HouseholdId,
+    id: &PlannedMealId,
+    source: WriteSource,
+) -> Result<(), StorageError> {
     let locked: Option<bool> = tx
         .query_row(
             "SELECT locked FROM planned_meal WHERE id = ?1 AND household_id = ?2",
@@ -2145,7 +2255,6 @@ pub fn delete_planned_meal(
         "DELETE FROM planned_meal WHERE id = ?1",
         params![id.as_str()],
     )?;
-    tx.commit()?;
     Ok(())
 }
 
@@ -2817,7 +2926,7 @@ mod tests {
     /// on-device v1→v2 migration (PRD §12: tested from representative prior versions); since
     /// v4 it proves v1→latest end to end.
     #[test]
-    fn an_existing_v1_database_migrates_to_v9_without_losing_data() {
+    fn an_existing_v1_database_migrates_to_v10_without_losing_data() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("kimatta.db");
         {
@@ -2832,7 +2941,7 @@ mod tests {
             .unwrap();
         }
         let conn = open(&path).unwrap();
-        assert_eq!(schema_version(&conn).unwrap(), 9);
+        assert_eq!(schema_version(&conn).unwrap(), 10);
         assert_eq!(count(&conn, "household"), 1);
         assert_eq!(count(&conn, "household_member"), 2);
         assert_eq!(count(&conn, "planning_cycle"), 0);
@@ -3046,16 +3155,16 @@ mod tests {
     }
 
     #[test]
-    fn empty_db_migrates_to_v9() {
+    fn empty_db_migrates_to_v10() {
         let conn = open(":memory:").unwrap();
-        assert_eq!(schema_version(&conn).unwrap(), 9);
+        assert_eq!(schema_version(&conn).unwrap(), 10);
     }
 
     // --- Step 4: schema v3 -----------------------------------------------------------------
 
     /// Test-level stand-in for the on-device v2→v3 migration, as the v1 test is for v1→v2.
     #[test]
-    fn an_existing_v2_database_migrates_to_v9_without_losing_data() {
+    fn an_existing_v2_database_migrates_to_v10_without_losing_data() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("kimatta.db");
         {
@@ -3076,7 +3185,7 @@ mod tests {
             .unwrap();
         }
         let conn = open(&path).unwrap();
-        assert_eq!(schema_version(&conn).unwrap(), 9);
+        assert_eq!(schema_version(&conn).unwrap(), 10);
         assert_eq!(count(&conn, "household"), 1);
         assert_eq!(count(&conn, "planning_cycle"), 1);
         assert_eq!(count(&conn, "planning_meal_slot"), 2);
@@ -3089,7 +3198,7 @@ mod tests {
     /// theirs. A recipe is saved at v3 so the migration is proved not to disturb the tables
     /// migration 3 introduced, not merely the household one it alters.
     #[test]
-    fn an_existing_v3_database_migrates_to_v9_without_losing_data() {
+    fn an_existing_v3_database_migrates_to_v10_without_losing_data() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("kimatta.db");
         {
@@ -3101,7 +3210,7 @@ mod tests {
             insert_pre_v6_recipe(&raw, "h", "r");
         }
         let conn = open(&path).unwrap();
-        assert_eq!(schema_version(&conn).unwrap(), 9);
+        assert_eq!(schema_version(&conn).unwrap(), 10);
         assert_eq!(count(&conn, "household"), 1);
         assert_eq!(count(&conn, "household_member"), 1);
         assert_eq!(count(&conn, "recipe"), 1);
@@ -3115,7 +3224,7 @@ mod tests {
     /// test: a recipe saved at v4 must survive the `ALTER TABLE`s that add `archived_at` (v5)
     /// and `prep_minutes`/the rights columns (v6).
     #[test]
-    fn an_existing_v4_database_migrates_to_v9_without_losing_data() {
+    fn an_existing_v4_database_migrates_to_v10_without_losing_data() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("kimatta.db");
         {
@@ -3127,7 +3236,7 @@ mod tests {
             insert_pre_v6_recipe(&raw, "h", "r");
         }
         let conn = open(&path).unwrap();
-        assert_eq!(schema_version(&conn).unwrap(), 9);
+        assert_eq!(schema_version(&conn).unwrap(), 10);
         assert_eq!(count(&conn, "household"), 1);
         assert_eq!(count(&conn, "recipe"), 1);
         assert_eq!(count(&conn, "household_restriction"), 0);
@@ -4477,7 +4586,7 @@ mod tests {
             insert_household(&mut conn, &household("h"), &[member("m", "h")]).unwrap();
         }
         let conn = open(&path).unwrap();
-        assert_eq!(schema_version(&conn).unwrap(), 9);
+        assert_eq!(schema_version(&conn).unwrap(), 10);
         assert_eq!(count(&conn, "household"), 1);
         assert_eq!(count(&conn, "household_member"), 1);
         let on: i32 = conn
@@ -5069,7 +5178,7 @@ mod tests {
     }
 
     #[test]
-    fn an_existing_v5_database_migrates_to_v9_without_losing_data() {
+    fn an_existing_v5_database_migrates_to_v10_without_losing_data() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("kimatta.db");
         {
@@ -5081,7 +5190,7 @@ mod tests {
             insert_pre_v6_recipe(&raw, "h", "r");
         }
         let conn = open(&path).unwrap();
-        assert_eq!(schema_version(&conn).unwrap(), 9);
+        assert_eq!(schema_version(&conn).unwrap(), 10);
         assert_eq!(count(&conn, "household"), 1);
         assert_eq!(count(&conn, "recipe"), 1);
         assert_eq!(load(&conn, "h", "r").unwrap().title(), "Recipe r");
@@ -5108,7 +5217,7 @@ mod tests {
     /// predecessors: a recipe saved at v6 must survive the two new tables, which touch nothing
     /// that exists.
     #[test]
-    fn an_existing_v6_database_migrates_to_v9_without_losing_data() {
+    fn an_existing_v6_database_migrates_to_v10_without_losing_data() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("kimatta.db");
         {
@@ -5120,7 +5229,7 @@ mod tests {
             save_recipe(&mut raw, &recipe("h", "r", vec![])).unwrap();
         }
         let conn = open(&path).unwrap();
-        assert_eq!(schema_version(&conn).unwrap(), 9);
+        assert_eq!(schema_version(&conn).unwrap(), 10);
         assert_eq!(count(&conn, "household"), 1);
         assert_eq!(count(&conn, "recipe"), 1);
         assert_eq!(load(&conn, "h", "r").unwrap().title(), "Recipe r");
@@ -6596,7 +6705,7 @@ mod tests {
     /// Test-level stand-in for the on-device v7→v8 migration, in the pattern of its
     /// predecessors: everything saved at v7 must survive a migration that only adds a table.
     #[test]
-    fn an_existing_v7_database_migrates_to_v9_without_losing_data() {
+    fn an_existing_v7_database_migrates_to_v10_without_losing_data() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("kimatta.db");
         {
@@ -6608,7 +6717,7 @@ mod tests {
             save_recipe(&mut raw, &recipe("h", "r", vec![])).unwrap();
         }
         let conn = open(&path).unwrap();
-        assert_eq!(schema_version(&conn).unwrap(), 9);
+        assert_eq!(schema_version(&conn).unwrap(), 10);
         assert_eq!(count(&conn, "household"), 1);
         assert_eq!(count(&conn, "recipe"), 1);
         assert_eq!(load(&conn, "h", "r").unwrap().title(), "Recipe r");
@@ -6989,7 +7098,7 @@ mod tests {
     /// Test-level stand-in for the on-device v8→v9 migration, in the pattern of its
     /// predecessors: everything saved at v8 must survive a migration that only adds tables.
     #[test]
-    fn an_existing_v8_database_migrates_to_v9_without_losing_data() {
+    fn an_existing_v8_database_migrates_to_v10_without_losing_data() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("kimatta.db");
         {
@@ -7001,11 +7110,39 @@ mod tests {
             set_pantry_mark(&mut raw, &hid("h"), &catalog_ref("flour"), true).unwrap();
         }
         let conn = open(&path).unwrap();
-        assert_eq!(schema_version(&conn).unwrap(), 9);
+        assert_eq!(schema_version(&conn).unwrap(), 10);
         assert_eq!(count(&conn, "household"), 1);
         assert_eq!(count(&conn, "pantry_item"), 1);
         assert_eq!(count(&conn, "shopping_line_state"), 0);
         assert_eq!(count(&conn, "shopping_manual_item"), 0);
+    }
+
+    /// Test-level stand-in for the on-device v9→v10 migration (MVP-023): everything saved at
+    /// v9 — a shopping overlay row included — survives a migration that only adds tables.
+    #[test]
+    fn an_existing_v9_database_migrates_to_v10_without_losing_data() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("kimatta.db");
+        {
+            let mut raw = Connection::open(&path).unwrap();
+            MIGRATIONS.to_version(&mut raw, 9).unwrap();
+            assert_eq!(schema_version(&raw).unwrap(), 9);
+            raw.pragma_update(None, "foreign_keys", "ON").unwrap();
+            seed_for_pantry(&mut raw, "h");
+            set_pantry_mark(&mut raw, &hid("h"), &catalog_ref("flour"), true).unwrap();
+            raw.execute(
+                RAW_LINE_STATE,
+                params!["h", "m:x", 1, Some("exact:1/1|none"), 0, 0],
+            )
+            .unwrap();
+        }
+        let conn = open(&path).unwrap();
+        assert_eq!(schema_version(&conn).unwrap(), 10);
+        assert_eq!(count(&conn, "household"), 1);
+        assert_eq!(count(&conn, "pantry_item"), 1);
+        assert_eq!(count(&conn, "shopping_line_state"), 1);
+        assert_eq!(count(&conn, "policy"), 0);
+        assert_eq!(count(&conn, "controller_ledger"), 0);
     }
 
     /// Adversarial: an all-false row is a row that says nothing, and storage deletes rather

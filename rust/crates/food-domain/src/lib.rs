@@ -2,6 +2,7 @@
 #![forbid(unsafe_code)]
 
 pub mod planned_meal;
+pub mod planner;
 pub mod preference;
 pub mod recipe;
 pub mod restriction;

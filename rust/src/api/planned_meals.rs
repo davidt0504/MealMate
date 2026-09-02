@@ -99,7 +99,7 @@ fn component_to_domain(c: MealComponentDto) -> Result<MealComponent, KimattaErro
     })
 }
 
-fn component_from_domain(c: &MealComponent) -> MealComponentDto {
+pub(crate) fn component_from_domain(c: &MealComponent) -> MealComponentDto {
     let (recipe_id, note, scale) = match c {
         MealComponent::Recipe { recipe_id, scale } => (
             Some(recipe_id.as_str().to_owned()),

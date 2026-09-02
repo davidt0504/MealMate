@@ -566,6 +566,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "kimatta-application"
+version = "0.1.0"
+dependencies = [
+ "food-domain",
+ "household-core",
+ "kimatta-storage",
+ "tempfile",
+ "thiserror",
+]
+
+[[package]]
 name = "kimatta-storage"
 version = "0.1.0"
 dependencies = [
@@ -582,6 +593,7 @@ name = "kimatta_bridge"
 version = "0.1.0"
 dependencies = [
  "flutter_rust_bridge",
+ "kimatta-application",
  "kimatta-storage",
  "thiserror",
  "uuid",
