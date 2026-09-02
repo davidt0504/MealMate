@@ -555,9 +555,9 @@ mod tests {
     use super::*;
     use crate::{
         insert_household, open, parse_civil_date, save_planned_meal, save_planning_cycle,
-        save_recipe, save_restrictions, set_planned_meal_lock, HouseholdRestrictions,
-        MealComponent, MealScope, MealSlot, PlanningCycle, ProvenanceKind, Recipe, RecipeId,
-        RecipeProvenance, Restriction, RestrictionKind,
+        save_recipe, save_restrictions, set_pantry_marks, set_planned_meal_lock,
+        HouseholdRestrictions, MealComponent, MealScope, MealSlot, PlanningCycle, ProvenanceKind,
+        Recipe, RecipeId, RecipeProvenance, Restriction, RestrictionKind,
     };
 
     fn hid(id: &str) -> HouseholdId {
@@ -1493,5 +1493,294 @@ mod tests {
             1
         );
         assert!(list_ledger_entries(&conn, &hid("h")).unwrap().is_empty());
+    }
+
+    // --- MVP-025 storage-side invariants ----------------------------------------------------
+
+    /// MVP-025 invariant 5, end to end: seed → plan → apply → `load_shopping_input` →
+    /// `derive_shopping_list`. Every emitted quantity is well-formed (positive numerator and
+    /// denominator, ordered ranges, contribution counts intact), and marking the pantry
+    /// changes line *status* only — quantities, units and contributions stay byte-identical.
+    /// (Expected-to-pass: the red demonstration lives in `food_domain`'s shopping pantry
+    /// branch; this pins the storage round trip of the same property.)
+    #[test]
+    fn invariant_5_shopping_is_well_formed_end_to_end() {
+        use food_domain::planner::{cover_cycle, SearchParams};
+        use food_domain::{derive_shopping_list, LineStatus, Quantity, ShoppingList};
+
+        fn assert_well_formed(list: &ShoppingList) {
+            let mut contributions = 0usize;
+            for line in list.groups.iter().flat_map(|g| g.lines.iter()) {
+                assert!(
+                    !line.contributions.is_empty(),
+                    "a line with no contribution"
+                );
+                contributions += line.contributions.len();
+                match line.quantity {
+                    Quantity::Unknown => {}
+                    Quantity::Exact(r) => {
+                        assert!(r.numer() >= 1 && r.denom() >= 1, "non-positive quantity");
+                    }
+                    Quantity::Range(range) => {
+                        assert!(range.min().numer() >= 1 && range.min().denom() >= 1);
+                        assert!(range.max().numer() >= 1 && range.max().denom() >= 1);
+                        assert!(range.min() <= range.max(), "inverted range");
+                    }
+                }
+            }
+            assert_eq!(list.contribution_count as usize, contributions);
+        }
+
+        let mut conn = open(":memory:").unwrap();
+        seed(&mut conn, "h");
+        conn.execute(
+            "INSERT INTO ingredient (id, canonical_name, store_category)
+             VALUES ('i-rice', 'rice', 'grains')",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO ingredient (id, canonical_name) VALUES ('i-beans', 'beans')",
+            [],
+        )
+        .unwrap();
+        let quantified_line = |name: &str, id: &str, numer: u32| {
+            crate::IngredientLine::new(
+                format!("{numer} {name}"),
+                name,
+                Some(crate::IngredientRef::Catalog(
+                    crate::IngredientId::new(id).unwrap(),
+                )),
+                Quantity::Exact(crate::Rational::new(numer, 1).unwrap()),
+                crate::Unit::None,
+                None,
+                false,
+            )
+            .unwrap()
+        };
+        let r = Recipe::new(
+            RecipeId::new("r-q").unwrap(),
+            hid("h"),
+            "Rice and beans",
+            Some(4),
+            Some(20),
+            "",
+            vec![
+                quantified_line("rice", "i-rice", 2),
+                quantified_line("beans", "i-beans", 400),
+            ],
+            RecipeProvenance::new(ProvenanceKind::Authored, None, None, None).unwrap(),
+        )
+        .unwrap();
+        save_recipe(&mut conn, &r).unwrap();
+        // Lock the quantified recipe into the first slot so the derived list is guaranteed
+        // to carry its lines whatever the search picks for the other slots.
+        save_planned_meal(
+            &mut conn,
+            &meal("locked-q", "h", "2026-08-29", vec![rc("r-q")]),
+            WriteSource::User,
+        )
+        .unwrap();
+        set_planned_meal_lock(
+            &mut conn,
+            &hid("h"),
+            &PlannedMealId::new("locked-q").unwrap(),
+            true,
+            WriteSource::User,
+        )
+        .unwrap();
+        let snapshot = load_planning_snapshot(&mut conn, &hid("h"), today(), 0).unwrap();
+        let result = cover_cycle(&snapshot, &SearchParams::default());
+        let e = LedgerEntry {
+            snapshot_hash: result.snapshot_hash.clone(),
+            ..entry("l1", "h", "apply", &result.canonical_text())
+        };
+        apply_plan_and_record(
+            &mut conn,
+            &result.proposed,
+            &ids(result.proposed.len()),
+            &e,
+            today(),
+            0,
+        )
+        .unwrap();
+        let to = parse_civil_date("2026-08-31").unwrap();
+        let input = crate::load_shopping_input(&mut conn, &hid("h"), today(), to).unwrap();
+        let unmarked = derive_shopping_list(&input);
+        assert_well_formed(&unmarked);
+        assert!(
+            unmarked.groups.iter().flat_map(|g| g.lines.iter()).count() >= 2,
+            "the locked recipe's two lines must be in range"
+        );
+
+        set_pantry_marks(
+            &mut conn,
+            &hid("h"),
+            &[
+                crate::IngredientRef::Catalog(crate::IngredientId::new("i-rice").unwrap()),
+                crate::IngredientRef::Catalog(crate::IngredientId::new("i-beans").unwrap()),
+            ],
+            true,
+        )
+        .unwrap();
+        let marked_input = crate::load_shopping_input(&mut conn, &hid("h"), today(), to).unwrap();
+        let marked = derive_shopping_list(&marked_input);
+        assert_well_formed(&marked);
+        assert_eq!(unmarked.contribution_count, marked.contribution_count);
+        assert_eq!(unmarked.groups.len(), marked.groups.len());
+        let mut omitted = 0usize;
+        for (before, after) in unmarked.groups.iter().zip(&marked.groups) {
+            assert_eq!(before.category, after.category);
+            assert_eq!(before.lines.len(), after.lines.len());
+            for (b, a) in before.lines.iter().zip(&after.lines) {
+                let mut a_unstatused = a.clone();
+                a_unstatused.status = b.status;
+                assert_eq!(
+                    &a_unstatused, b,
+                    "marking the pantry changed more than the status"
+                );
+                if a.status == LineStatus::OmittedPantryMarked {
+                    omitted += 1;
+                }
+            }
+        }
+        assert!(omitted >= 2, "the two marked identities flip to omitted");
+    }
+
+    /// One `||`-joined string per ledger row, in seq order, for byte-for-byte comparison.
+    fn raw_ledger_rows(conn: &Connection) -> Vec<String> {
+        let mut stmt = conn
+            .prepare(
+                "SELECT seq || '|' || id || '|' || household_id || '|' || controller_id
+                    || '|' || algorithm_version || '|' || snapshot_hash || '|' || reason_codes
+                    || '|' || selected_action || '|' || prior_status || '|' || resulting_status
+                    || '|' || payload
+                 FROM controller_ledger ORDER BY seq",
+            )
+            .unwrap();
+        let rows = stmt
+            .query_map([], |r| r.get::<_, String>(0))
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
+        rows
+    }
+
+    /// Meal and component rows on or before `to`, rendered raw for the same comparison.
+    fn raw_meal_rows(conn: &Connection, to: &str) -> Vec<String> {
+        let mut out = Vec::new();
+        let mut stmt = conn
+            .prepare(
+                "SELECT id || '|' || household_id || '|' || date || '|' || slot || '|' || locked
+                 FROM planned_meal WHERE date <= ?1 ORDER BY id",
+            )
+            .unwrap();
+        out.extend(
+            stmt.query_map([to], |r| r.get::<_, String>(0))
+                .unwrap()
+                .collect::<Result<Vec<_>, _>>()
+                .unwrap(),
+        );
+        let mut stmt = conn
+            .prepare(
+                "SELECT planned_meal_id || '|' || position || '|' || kind
+                    || '|' || COALESCE(recipe_id, '') || '|' || COALESCE(note, '')
+                    || '|' || COALESCE(scale_numer, '') || '|' || COALESCE(scale_denom, '')
+                 FROM meal_component
+                 WHERE planned_meal_id IN (SELECT id FROM planned_meal WHERE date <= ?1)
+                 ORDER BY planned_meal_id, position",
+            )
+            .unwrap();
+        out.extend(
+            stmt.query_map([to], |r| r.get::<_, String>(0))
+                .unwrap()
+                .collect::<Result<Vec<_>, _>>()
+                .unwrap(),
+        );
+        out
+    }
+
+    /// MVP-025 invariant 6: a later plan/apply cycle never mutates the first cycle's ledger
+    /// rows or its planned meals — the rows compare byte-for-byte, the ledger only grows,
+    /// and a direct `UPDATE` is refused by the append-only trigger.
+    /// (Expected-to-pass: the red demonstration drops the `controller_ledger_no_update`
+    /// trigger from the migration.)
+    #[test]
+    fn invariant_6_a_second_apply_never_mutates_the_first_ledger_rows() {
+        use food_domain::planner::{cover_cycle, SearchParams};
+        let mut conn = open(":memory:").unwrap();
+        seed(&mut conn, "h");
+        recipe(&mut conn, "h", "r1", "Rice");
+        let s1 = load_planning_snapshot(&mut conn, &hid("h"), today(), 0).unwrap();
+        let r1 = cover_cycle(&s1, &SearchParams::default());
+        let e1 = LedgerEntry {
+            snapshot_hash: r1.snapshot_hash.clone(),
+            ..entry("l1", "h", "apply", &r1.canonical_text())
+        };
+        apply_plan_and_record(
+            &mut conn,
+            &r1.proposed,
+            &ids(r1.proposed.len()),
+            &e1,
+            today(),
+            0,
+        )
+        .unwrap();
+        let ledger_before = raw_ledger_rows(&conn);
+        let meals_before = raw_meal_rows(&conn, "2026-08-31");
+        assert!(!ledger_before.is_empty(), "cycle 1 must be recorded");
+        assert!(!meals_before.is_empty(), "cycle 1 must write meals");
+
+        // The household changes between cycles: a new recipe and a wider restriction set.
+        recipe(&mut conn, "h", "r2", "Soup");
+        save_restrictions(
+            &mut conn,
+            &hid("h"),
+            &HouseholdRestrictions::new([
+                Restriction::Known(RestrictionKind::Peanuts),
+                Restriction::Known(RestrictionKind::Dairy),
+            ]),
+        )
+        .unwrap();
+
+        let today2 = parse_civil_date("2026-09-01").unwrap();
+        let s2 = load_planning_snapshot(&mut conn, &hid("h"), today2, 0).unwrap();
+        assert_ne!(
+            s1.snapshot_hash(),
+            s2.snapshot_hash(),
+            "cycle 2 is a new input"
+        );
+        let r2 = cover_cycle(&s2, &SearchParams::default());
+        let e2 = LedgerEntry {
+            snapshot_hash: r2.snapshot_hash.clone(),
+            ..entry("l2", "h", "apply", &r2.canonical_text())
+        };
+        let ids2: Vec<PlannedMealId> = (0..r2.proposed.len())
+            .map(|i| PlannedMealId::new(format!("new2-{i}")).unwrap())
+            .collect();
+        apply_plan_and_record(&mut conn, &r2.proposed, &ids2, &e2, today2, 0).unwrap();
+
+        let ledger_after = raw_ledger_rows(&conn);
+        assert!(
+            ledger_after.len() > ledger_before.len(),
+            "the ledger must grow"
+        );
+        assert_eq!(
+            &ledger_after[..ledger_before.len()],
+            &ledger_before[..],
+            "cycle 1's ledger rows changed"
+        );
+        assert_eq!(
+            raw_meal_rows(&conn, "2026-08-31"),
+            meals_before,
+            "cycle 1's meals changed"
+        );
+        let err = conn
+            .execute("UPDATE controller_ledger SET payload = 'tampered'", [])
+            .unwrap_err();
+        assert!(
+            err.to_string().contains("controller_ledger is append-only"),
+            "{err}"
+        );
     }
 }

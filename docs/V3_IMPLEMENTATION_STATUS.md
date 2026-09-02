@@ -36,7 +36,7 @@ Live task status, current work, and next work are authoritative only in `docs/RO
 | Kernel primitives beyond identity (`Policy`, `OutcomeAssessment`, `ActionProposal`, `AttentionRequest`, ledger) | Complete (MVP-023, 2026-09-02: `household-core/src/kernel.rs`, schema v10 `policy`/`controller_ledger`) |
 | Planner, coverage assessment, attention requests | Complete (MVP-023, 2026-09-02: `food-domain/src/planner/`, `kimatta-application`, one `cover_cycle` bridge command) |
 | Cover My Week UI | MVP-024 |
-| Fixtures, property tests, beam-width benchmark | MVP-025 |
+| Fixtures, property tests, beam-width benchmark | Complete (MVP-025, 2026-09-02: `rust/crates/food-domain/src/planner/fixtures/` + its README, `planner/invariant_tests.rs`, storage-side invariants in `kimatta-storage/src/controller.rs`, benchmark `food-domain/examples/beam_width.rs` — verdict in `docs/ROADMAP.md` AC-4 row) |
 | Privacy-safe metric hooks | MVP-019 |
 | iOS build/signing proof | PRE-003 (post-launch, D-015) |
 | PRD v3 §26 per-item traceability table | Complete 2026-08-26 — `docs/ROADMAP.md` "MVP acceptance traceability" |

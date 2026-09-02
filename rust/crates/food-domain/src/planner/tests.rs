@@ -2585,7 +2585,10 @@ fn planner_source_has_no_io_imports() {
             checked += 1;
         }
     }
-    assert_eq!(checked, 8);
+    // 8 MVP-023 modules plus MVP-025's `invariant_tests.rs`; `fixtures/mod.rs` sits in a
+    // subdirectory this non-recursive walk does not reach, and is cfg-gated out of the
+    // shipped library anyway.
+    assert_eq!(checked, 9);
 }
 
 #[test]
