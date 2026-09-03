@@ -219,4 +219,16 @@ mod tests {
         assert!(matches!(err, KimattaError::Storage { .. }), "{err:?}");
         assert_eq!(rows(&conn), 0);
     }
+
+    /// The read arm of the test above, at the layer the UI actually calls: an absent household
+    /// must reach the caller as an error, not as the empty list that the warning surface would
+    /// render as "no restrictions". Storage is what rejects it; this pins that the rejection is
+    /// not swallowed on the way out.
+    #[test]
+    fn loading_for_an_absent_household_is_rejected() {
+        let mut conn = open_seeded(&["h"]);
+        save_in(&mut conn, "h", &[known("peanuts")]).unwrap();
+        let err = load_in(&conn, "nope").unwrap_err();
+        assert!(matches!(err, KimattaError::Storage { .. }), "{err:?}");
+    }
 }

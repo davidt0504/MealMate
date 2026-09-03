@@ -1153,3 +1153,42 @@ Full review: /home/davidlinux/.claude/reviews/redteam-integration-ratification-2
   **Status:** OPEN
 
 ---
+
+## integration -- 2026-09-03
+
+Source: lib/features/recipes/recipe_form_screen.dart
+Full review: /home/davidlinux/.claude/reviews/redteam-recipe-form-screen-2026-09-03T1504-04b9.md
+
+### LOW
+
+- **Servings and prep-time rejection copy shows the user `4294967295`** (`lib/features/recipes/recipe_form_screen.dart:149`) -- `maxQuantity` (`0xFFFFFFFF`, a bridge-encoder artifact) is interpolated into inline error text, so typing `0` in Servings reads "must be a whole number from 1 to 4294967295"; `app_test.dart:3950` and `:4118` pin the literal string. Fix: drop the upper bound from the copy, keeping the `maxQuantity` check as a silent guard, and update the two assertions.
+  Full review: /home/davidlinux/.claude/reviews/redteam-recipe-form-screen-2026-09-03T1504-04b9.md
+  **Status:** OPEN
+
+---
+
+## integration -- 2026-09-03
+
+Source: lib/features/recipes/recipe_form_screen.dart
+Full review: /home/davidlinux/.claude/reviews/redteam-recipe-form-screen-2026-09-03T1540-7688.md
+
+### LOW
+
+- **Household-mismatch refusal is a dead end with Save left enabled** (`lib/features/recipes/recipe_form_screen.dart:297`) -- the guard's own docstring says "there is no field the user could correct to resolve it", yet the refusal is a transient `SnackBar` and every control stays enabled, so retrying reads as worth doing; stale inline errors also survive the early `return`. Sibling unrecoverable states render in place (`:365`, `:354`). Fix: latch the mismatch into state and render it where 'Recipe not found.' renders, Save disabled.
+  Full review: /home/davidlinux/.claude/reviews/redteam-recipe-form-screen-2026-09-03T1540-7688.md
+  **Status:** OPEN
+
+---
+
+## integration -- 2026-09-03
+
+Source: lib/features/recipes/recipe_form_screen.dart
+Full review: /home/davidlinux/.local/state/claude-orch/5f7efeea1579/0276579f2864/wt/integration/.orch/redteam-recipe-form-screen-2026-09-03T1540-7688.md
+
+### LOW
+
+- **Renaming an ingredient line drops its catalog identity for good, with nothing to re-link it** (`lib/features/recipes/recipe_form_screen.dart:86`) -- `emittedIngredient` clears the seeded `IngredientRefDto` whenever the row's `name` no longer matches what it was loaded with (owner decision 2026-09-03: keeping it is the unsafe direction, since `Identities::status` at `shopping.rs:411` matches on the ref alone, so a renamed line would inherit a pantry mark and vanish from the shopping list). The cleared line is correct but coarse: it goes back to `Unresolved`, so it lists separately, uncategorised and always `Needed` -- over-listing, never silent omission. Nothing re-matches it afterwards; the ref is gone until the user re-picks. MVP-009/011 own explicit ingredient mapping and may re-link renamed lines under that scope, at which point this degrades from permanent to transient. Fix: none until then -- deliberate conservative behaviour, tracked so the coarseness is not mistaken for a bug.
+  Full review: /home/davidlinux/.local/state/claude-orch/5f7efeea1579/0276579f2864/wt/integration/.orch/redteam-recipe-form-screen-2026-09-03T1540-7688.md
+  **Status:** OPEN
+
+---

@@ -95,6 +95,55 @@ const okRecipe = RecipeDto(
   assessment: emptyAssessment,
 );
 
+/// Every field the edit form does not render, populated, so `_validate` has something to lose
+/// in each of them: a catalog `ingredient` on one line and a custom one on the other, a
+/// `starter` provenance rather than the `authored` default, and — on the second line — an
+/// `Other` unit and `preparation: null`, the two shapes whose round trip goes through a
+/// controller rather than straight across.
+///
+/// `assessment` and `archivedAt` are set but expected *not* to survive: both are documented
+/// output only — `save_recipe` ignores them, and archive state moves only through
+/// `archive_recipe`/`restore_recipe` — so the form dropping them is the contract, and populating
+/// them here is what makes asserting their absence mean something.
+///
+/// Provenance's five rights scalars (`starterSlug` among them) are the one thing deliberately
+/// left unset. They are output only too, but the form passes `provenance` across whole, so an
+/// assertion over them would go green on the Dart side while pinning a contract Rust does not
+/// honour: `recipe_to_domain` builds provenance with `RecipeProvenance::new`, not `with_rights`.
+const fullyPopulatedRecipe = RecipeDto(
+  id: 'r-1',
+  householdId: 'h-1',
+  title: 'Hummus',
+  servings: 4,
+  prepMinutes: 20,
+  instructions: 'Blend.',
+  lines: [
+    IngredientLineDto(
+      originalText: '1 cup dried chickpeas, soaked',
+      name: 'chickpeas',
+      ingredient: chickpeasRef,
+      quantity: QuantityDto.exact(numer: 1, denom: 1),
+      unit: UnitDto.known(unit: 'cup'),
+      preparation: 'soaked',
+      optional: false,
+    ),
+    IngredientLineDto(
+      originalText: "2 handfuls nana's mix",
+      name: "nana's mix",
+      ingredient: IngredientRefDto.custom(id: 'c-nanas-mix'),
+      quantity: QuantityDto.exact(numer: 2, denom: 1),
+      unit: UnitDto.other(text: 'handful'),
+      optional: true,
+    ),
+  ],
+  provenance: RecipeProvenanceDto(kind: 'starter'),
+  // Both set, not left null, so the test's `isNull` assertions on them pin the form *dropping*
+  // them rather than passing vacuously — a read-back always carries them, so this is what the
+  // form is really handed.
+  archivedAt: '2026-09-01',
+  assessment: emptyAssessment,
+);
+
 /// What a read-back reports with no restrictions stored: checked nothing, found nothing.
 const emptyAssessment = RestrictionAssessmentDto(
   ruleVersion: 1,
@@ -3696,6 +3745,341 @@ void main() {
     await tapVisible(tester, find.widgetWithText(FilledButton, 'Save recipe'));
     await tester.pumpAndSettle();
     expect(sent!.prepMinutes, 20);
+  });
+
+  // The owner's 2026-09-03 audit (HIGH): the same Risk 11 shape as the prep time above, one
+  // level down. `IngredientLineDto.ingredient` is an optional named parameter, so `_LineDraft`
+  // could drop it and `_validate` emit a line without it and still compile. It was reachable on
+  // every starter recipe — all 68 seeded lines carry a catalog ref
+  // (`food-domain/content/starter_recipes.json`), Edit is offered unconditionally
+  // (`recipe_detail_screen.dart`'s only guard is `recipe != null`), and the write deletes and
+  // re-inserts every line row (`kimatta-storage`), so the null was committed rather than
+  // merged away. Downstream that is not cosmetic: `derive_shopping_list` sends a ref-less line
+  // down the `Unresolved` path, so it stops merging with the same item from another meal, drops
+  // into the uncategorised bucket, and reads as `Needed` however it is marked in the pantry.
+  testWidgets('editing an existing recipe preserves each line\'s ingredient '
+      'reference', (tester) async {
+    useTallView(tester);
+    RecipeDto? sent;
+    await tester.pumpWidget(
+      harness(
+        initial: '/recipes/r-1/edit',
+        recipe: (_) => recipeWithResolvedLine,
+        saveRecipe: (dto) async {
+          sent = dto;
+          return recipeWithResolvedLine;
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tapVisible(tester, find.widgetWithText(FilledButton, 'Save recipe'));
+    await tester.pumpAndSettle();
+    expect(sent?.lines.length, 2);
+    expect(sent?.lines[0].ingredient, chickpeasRef);
+    // The unresolved line stays unresolved: carrying the ref through must not invent one.
+    expect(sent?.lines[1].ingredient, isNull);
+  });
+
+  // Edge case: the ref travels with its own row through a structural edit, rather than with the
+  // row *index*. Removing the first row and appending a new one is the arrangement that tells
+  // the two apart — an index-keyed carry-through would leave the catalog ref of the deleted row
+  // on the custom-ref row that took its place.
+  testWidgets('ingredient references follow their row across add and remove', (
+    tester,
+  ) async {
+    useTallView(tester);
+    RecipeDto? sent;
+    await tester.pumpWidget(
+      harness(
+        initial: '/recipes/r-1/edit',
+        recipe: (_) => fullyPopulatedRecipe,
+        saveRecipe: (dto) async {
+          sent = dto;
+          return fullyPopulatedRecipe;
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tapVisible(tester, find.byTooltip('Remove ingredient 1'));
+    await tester.pumpAndSettle();
+    await tapVisible(
+      tester,
+      find.widgetWithText(OutlinedButton, 'Add ingredient'),
+    );
+    await tester.pumpAndSettle();
+    await tester.enterText(field('As written', 1), 'a pinch of salt');
+    await tester.enterText(field('Name', 1), 'salt');
+    await tapVisible(tester, find.widgetWithText(FilledButton, 'Save recipe'));
+    await tester.pumpAndSettle();
+    expect(sent?.lines.length, 2);
+    expect(
+      sent?.lines[0].ingredient,
+      const IngredientRefDto.custom(id: 'c-nanas-mix'),
+    );
+    // A row the user added has no identity, and the form must not borrow one from a sibling.
+    expect(sent?.lines[1].ingredient, isNull);
+  });
+
+  // The ref is stored identity, not a cache of the row's text, so editing the row's *other*
+  // fields leaves it alone. Every rendered control except Name is exercised here, because the
+  // clearing rule below keys on Name alone and a rule that keyed on the whole row would undo
+  // the fix for anyone who corrected a quantity.
+  testWidgets('editing a row around its name keeps the ingredient reference', (
+    tester,
+  ) async {
+    useTallView(tester);
+    RecipeDto? sent;
+    await tester.pumpWidget(
+      harness(
+        initial: '/recipes/r-1/edit',
+        recipe: (_) => recipeWithResolvedLine,
+        saveRecipe: (dto) async {
+          sent = dto;
+          return recipeWithResolvedLine;
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.enterText(field('As written'), '2 cups chickpeas, rinsed');
+    await tester.enterText(field('Amount'), '2');
+    await pickUnit(tester, 0, 'cup');
+    await tester.enterText(field('Preparation'), 'rinsed');
+    await tapVisible(
+      tester,
+      find.widgetWithText(SwitchListTile, 'Optional').first,
+    );
+    await tester.pump();
+    await tapVisible(tester, find.widgetWithText(FilledButton, 'Save recipe'));
+    await tester.pumpAndSettle();
+    // The edits really landed — otherwise the ref surviving would prove nothing.
+    expect(sent?.lines[0].unit, const UnitDto.known(unit: 'cup'));
+    expect(sent?.lines[0].preparation, 'rinsed');
+    expect(sent?.lines[0].optional, isTrue);
+    expect(sent?.lines[0].ingredient, chickpeasRef);
+  });
+
+  // Owner decision 2026-09-03, on the redteam of the carry-through above. Carrying the ref
+  // through a *rename* is the one direction that fails unsafely: `Identities::status`
+  // (`shopping.rs:411`) matches on the ref alone and never consults the name, so a line renamed
+  // away from a pantry-marked ingredient would inherit that mark and disappear from the
+  // shopping list, and could merge quantities with a food it no longer names. Dropping the ref
+  // does not fall back to matching on the name — nothing re-matches here — it returns the line
+  // to `Unresolved`: listed separately, uncategorised, and always `Needed`. Over-listing, never
+  // silent omission, which is the direction this must fail in.
+  testWidgets('renaming a row clears the ingredient reference it was seeded '
+      'with', (tester) async {
+    useTallView(tester);
+    RecipeDto? sent;
+    await tester.pumpWidget(
+      harness(
+        initial: '/recipes/r-1/edit',
+        recipe: (_) => recipeWithResolvedLine,
+        saveRecipe: (dto) async {
+          sent = dto;
+          return recipeWithResolvedLine;
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+    // Only the name, so nothing but the rename can account for the ref going.
+    await tester.enterText(field('Name'), 'black beans');
+    await tapVisible(tester, find.widgetWithText(FilledButton, 'Save recipe'));
+    await tester.pumpAndSettle();
+    expect(sent?.lines[0].name, 'black beans');
+    expect(sent?.lines[0].ingredient, isNull);
+    // Everything else on the row still round-trips — the rename drops the identity, not the row.
+    expect(sent?.lines[0].originalText, 'chickpeas');
+  });
+
+  // The comparison is verbatim, matching the rest of the form: a name the user altered at all —
+  // trailing space included — is a name this card cannot vouch for, so the ref goes. Cheaper to
+  // re-match under MVP-009/011 than to ship a mark against a name nobody checked.
+  testWidgets('a whitespace-only rename also clears the ingredient reference', (
+    tester,
+  ) async {
+    useTallView(tester);
+    RecipeDto? sent;
+    await tester.pumpWidget(
+      harness(
+        initial: '/recipes/r-1/edit',
+        recipe: (_) => recipeWithResolvedLine,
+        saveRecipe: (dto) async {
+          sent = dto;
+          return recipeWithResolvedLine;
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.enterText(field('Name'), 'chickpeas ');
+    await tapVisible(tester, find.widgetWithText(FilledButton, 'Save recipe'));
+    await tester.pumpAndSettle();
+    expect(sent?.lines[0].name, 'chickpeas ');
+    expect(sent?.lines[0].ingredient, isNull);
+  });
+
+  // Expected-to-pass: re-entering the same text is not a rename. `enterText` replaces the
+  // field's whole contents, so this is the path a user takes who selects all, retypes what was
+  // already there, and saves — the seeded name still stands, so the ref must too.
+  testWidgets('retyping a row\'s name unchanged keeps the ingredient '
+      'reference', (tester) async {
+    useTallView(tester);
+    RecipeDto? sent;
+    await tester.pumpWidget(
+      harness(
+        initial: '/recipes/r-1/edit',
+        recipe: (_) => recipeWithResolvedLine,
+        saveRecipe: (dto) async {
+          sent = dto;
+          return recipeWithResolvedLine;
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.enterText(field('Name'), 'chickpeas');
+    await tapVisible(tester, find.widgetWithText(FilledButton, 'Save recipe'));
+    await tester.pumpAndSettle();
+    expect(sent?.lines[0].ingredient, chickpeasRef);
+  });
+
+  // The owner's 2026-09-03 audit (MEDIUM): the reason the HIGH above shipped green through
+  // three cards. Every per-field test names one field, so a field nobody thought to name — as
+  // `ingredient` was — has no test at all, and the next card that adds one inherits the same
+  // hole. This is the standing guard: seed the form from a recipe carrying every round-trippable
+  // field, touch nothing, and require the emitted DTO to match it. A new field on the *line* DTO
+  // fails here the moment it is added to `fullyPopulatedRecipe`, whether or not anyone remembers
+  // to write its own test, because the lines are compared through `IngredientLineDto.==`. A new
+  // field on `RecipeDto` still needs a line adding below — see the note there for why the same
+  // trick does not reach the recipe level.
+  testWidgets('an untouched edit round-trips every field the form does not '
+      'render', (tester) async {
+    useTallView(tester);
+    RecipeDto? sent;
+    await tester.pumpWidget(
+      harness(
+        initial: '/recipes/r-1/edit',
+        recipe: (_) => fullyPopulatedRecipe,
+        saveRecipe: (dto) async {
+          sent = dto;
+          return fullyPopulatedRecipe;
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tapVisible(tester, find.widgetWithText(FilledButton, 'Save recipe'));
+    await tester.pumpAndSettle();
+    // Field by field first, so a mismatch names the field (the DTO has no `toString`).
+    expect(sent?.id, 'r-1');
+    expect(sent?.householdId, 'h-1');
+    expect(sent?.title, 'Hummus');
+    expect(sent?.servings, 4);
+    expect(sent?.prepMinutes, 20);
+    expect(sent?.instructions, 'Blend.');
+    expect(sent?.provenance, fullyPopulatedRecipe.provenance);
+    expect(sent?.lines.length, 2);
+    for (final (i, want) in fullyPopulatedRecipe.lines.indexed) {
+      final got = sent!.lines[i];
+      expect(got.originalText, want.originalText, reason: 'line $i text');
+      expect(got.name, want.name, reason: 'line $i name');
+      expect(got.ingredient, want.ingredient, reason: 'line $i ingredient');
+      expect(got.quantity, want.quantity, reason: 'line $i quantity');
+      expect(got.unit, want.unit, reason: 'line $i unit');
+      expect(got.preparation, want.preparation, reason: 'line $i preparation');
+      expect(got.optional, want.optional, reason: 'line $i optional');
+    }
+    // Then the lines whole, which is the part of this that keeps working unattended: matcher
+    // equality goes through `IngredientLineDto.==`, so a field added to the line DTO is caught
+    // here whether or not anyone extends the loop above. `expect(sent, fullyPopulatedRecipe)`
+    // cannot stand in for it at the recipe level — `RecipeDto.==` compares `lines` with Dart's
+    // `List.==`, which is identity, so a rebuilt list never matches however equal its elements.
+    expect(sent!.lines, orderedEquals(fullyPopulatedRecipe.lines));
+    // The two output-only recipe fields, asserted rather than skipped: dropping them is the
+    // correct behaviour (`save_recipe` ignores both), so this pins that and completes the field
+    // set — every field `RecipeDto` declares today is now named in this test. `fullyPopulatedRecipe`
+    // carries both, so these fail if the form starts passing either back.
+    expect(sent?.archivedAt, isNull);
+    expect(sent?.assessment, isNull);
+  });
+
+  // The owner's 2026-08-29 audit (HIGH, §6 item 2): the form used to stamp the saved DTO with
+  // `householdProvider`'s id rather than the loaded recipe's, so a household that changed under
+  // a seeded form would hand the recipe to whoever is current.
+  //
+  // The mismatch is built here from the two independent harness overrides
+  // (`recipeDetailProvider` and `householdProvider`), because the app itself cannot currently
+  // produce it: `bootstrapHousehold` mints one household, and a restore that changed its id
+  // would also change every recipe id, so the detail read would answer null and the form would
+  // say 'Recipe not found.' before Save ever painted. That is exactly why the guard needs a
+  // test — nothing else in the suite would notice it being deleted.
+  testWidgets('an edit whose household changed under it refuses to save', (
+    tester,
+  ) async {
+    useTallView(tester);
+    var saves = 0;
+    await tester.pumpWidget(
+      harness(
+        initial: '/recipes/r-1/edit',
+        household: () => twoMemberHousehold,
+        recipe: (_) => okRecipe,
+        saveRecipe: (_) async {
+          saves++;
+          return okRecipe;
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tapVisible(tester, find.widgetWithText(FilledButton, 'Save recipe'));
+    await tester.pumpAndSettle();
+    expect(saves, 0);
+    expect(
+      find.text(
+        'This recipe belongs to another household and cannot be saved here.',
+      ),
+      findsOneWidget,
+    );
+  });
+
+  // The refusal must not take the success path's `context.go`, which would land the user on a
+  // detail page for a recipe that was never saved. Asserted on the Save button rather than the
+  // app bar title: `_body` is the only thing that paints it, so this goes red if the guard
+  // falls through to navigation, while 'Edit recipe' would survive a route that had moved on.
+  testWidgets('a refused edit leaves the user on the form', (tester) async {
+    useTallView(tester);
+    await tester.pumpWidget(
+      harness(
+        initial: '/recipes/r-1/edit',
+        household: () => twoMemberHousehold,
+        recipe: (_) => okRecipe,
+        saveRecipe: (_) async => okRecipe,
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tapVisible(tester, find.widgetWithText(FilledButton, 'Save recipe'));
+    await tester.pumpAndSettle();
+    expect(find.widgetWithText(FilledButton, 'Save recipe'), findsOneWidget);
+    expect(find.text('Recipe not found.'), findsNothing);
+  });
+
+  // Expected-to-pass: a create has no loaded recipe, so the live household is the only id there
+  // is and the guard above must stay out of its way. Runs under `twoMemberHousehold` so a fix
+  // that reached for the wrong id — or refused every save — is visible as `h-2` going missing.
+  testWidgets('a create still saves under the live household', (tester) async {
+    useTallView(tester);
+    RecipeDto? sent;
+    await tester.pumpWidget(
+      harness(
+        initial: '/recipes/new',
+        household: () => twoMemberHousehold,
+        saveRecipe: (dto) async {
+          sent = dto;
+          return okRecipe;
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.enterText(field('Title'), 'Toast');
+    await tapVisible(tester, find.widgetWithText(FilledButton, 'Save recipe'));
+    await tester.pumpAndSettle();
+    expect(sent?.householdId, 'h-2');
   });
 
   testWidgets('the form saves an entered prep time', (tester) async {

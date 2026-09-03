@@ -473,10 +473,16 @@ fn load_recipe_in(
 ) -> Result<Option<RecipeDto>, KimattaError> {
     let household = HouseholdId::new(household_id)?;
     let id = RecipeId::new(recipe_id)?;
+    // Fetch the recipe before its household's restrictions: `load_restrictions` rejects an
+    // absent household (the under-warn fix), while an unknown recipe/household here keeps its
+    // documented "reads as not found" contract. A found row implies the household exists (FK),
+    // so the annotation load below cannot spuriously reject.
+    let record = kimatta_storage::load_recipe(conn, &household, &id)?;
+    let Some(record) = record else {
+        return Ok(None);
+    };
     let restrictions = kimatta_storage::load_restrictions(conn, &household)?;
-    Ok(kimatta_storage::load_recipe(conn, &household, &id)?
-        .as_ref()
-        .map(|record| recipe_from_domain(record, &restrictions)))
+    Ok(Some(recipe_from_domain(&record, &restrictions)))
 }
 
 /// One restriction read per listing, not per recipe.
@@ -486,8 +492,15 @@ fn summaries(
     listing: RecipeListing,
 ) -> Result<Vec<RecipeSummaryDto>, KimattaError> {
     let household = HouseholdId::new(household_id)?;
+    // List first: an unknown household keeps its documented empty listing, and an empty
+    // listing needs no restriction annotation, so the absent-household rejection inside
+    // `load_restrictions` (the under-warn fix) never fires on this read-as-empty path.
+    let listed = kimatta_storage::list_recipes(conn, &household, listing)?;
+    if listed.is_empty() {
+        return Ok(Vec::new());
+    }
     let restrictions = kimatta_storage::load_restrictions(conn, &household)?;
-    Ok(kimatta_storage::list_recipes(conn, &household, listing)?
+    Ok(listed
         .into_iter()
         .map(|s| RecipeSummaryDto {
             id: s.id.as_str().to_owned(),

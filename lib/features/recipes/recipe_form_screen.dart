@@ -11,8 +11,11 @@ import 'package:meal_mate/src/rust/api/recipe.dart';
 /// Create (`recipeId == null`) or edit. Ephemeral form state lives here (PRD §13); the saved
 /// recipe is Rust's. Nothing is trimmed or normalised on the way out — the user's text goes
 /// verbatim and Rust reports what it rejects — because silent normalisation is this card's
-/// stop condition. Ingredient identity (`ingredient`) is not set by this card; MVP-009/011
-/// add matching on top.
+/// stop condition. Ingredient identity (`ingredient`) is not *chosen* by this card;
+/// MVP-009/011 add matching on top. A seeded line's existing ref rides through the edit
+/// untouched — a field the form does not render is a field it has no business erasing — right
+/// up until the user rewrites the row's name, at which point it is dropped rather than left to
+/// speak for a food the line no longer names. See `_LineDraft.emittedIngredient`.
 class RecipeFormScreen extends ConsumerStatefulWidget {
   const RecipeFormScreen({super.key, this.recipeId});
 
@@ -41,7 +44,9 @@ class _LineDraft {
         UnitDto_Other() => unitOtherKey,
         _ => unitNoneKey,
       },
-      optional = from?.optional ?? false;
+      optional = from?.optional ?? false,
+      ingredient = from?.ingredient,
+      seededName = from?.name;
 
   final TextEditingController original;
   final TextEditingController name;
@@ -50,6 +55,36 @@ class _LineDraft {
   final TextEditingController otherUnit;
   String unitKey;
   bool optional;
+
+  /// The line's catalog/custom identity as it was loaded. No control renders or changes it
+  /// (MVP-009/011 own matching), and that is exactly the hazard: FRB emits it as an *optional*
+  /// named parameter, so an emit that omits it compiles and silently re-saves the line with no
+  /// identity — the storage write replaces every line row, so the null is committed. `null` on
+  /// a row the user added, which is the truth for a new line. Read through
+  /// [emittedIngredient], never directly.
+  final IngredientRefDto? ingredient;
+
+  /// The `name` this row arrived with, so [emittedIngredient] can tell an untouched row from a
+  /// renamed one. `null` on a row the user added.
+  final String? seededName;
+
+  /// The ref to save for this row: the loaded one while the name it was matched under still
+  /// stands, and `null` once the user has rewritten that name.
+  ///
+  /// Nothing here re-matches — the ref is only ever kept or dropped, because deciding what a
+  /// renamed line now *is* belongs to MVP-009/011's explicit mapping, not to a form with no
+  /// control for it. The asymmetry is deliberate, and it is about which way each choice fails.
+  /// Keeping a stale ref is the unsafe direction: `Identities::status` matches on the ref
+  /// alone and never consults the name, so a line renamed away from a pantry-marked ingredient
+  /// would inherit that mark and vanish from the shopping list, and it could merge quantities
+  /// with a food it no longer names. Dropping it costs only precision — the line goes back to
+  /// `Unresolved`, so it lists separately, uncategorised, and always as `Needed`. That
+  /// over-lists; it never silently omits.
+  ///
+  /// Compared verbatim, with no `trim`, for the reason the whole form sends text verbatim: a
+  /// name the user altered at all is a name this card cannot vouch for.
+  IngredientRefDto? get emittedIngredient =>
+      name.text == seededName ? ingredient : null;
 
   /// What is wrong with this row, *without* the `Ingredient N:` prefix — `_row` applies the
   /// number at paint time from the live index. Baking it in here would outlive its own truth:
@@ -203,6 +238,7 @@ class _RecipeFormScreenState extends ConsumerState<RecipeFormScreen> {
         IngredientLineDto(
           originalText: l.original.text,
           name: l.name.text,
+          ingredient: l.emittedIngredient,
           quantity: quantity!,
           unit: switch (l.unitKey) {
             unitNoneKey => const UnitDto.none(),
@@ -260,14 +296,43 @@ class _RecipeFormScreenState extends ConsumerState<RecipeFormScreen> {
     });
   }
 
+  /// An edit's owning household comes from the recipe that was loaded, never from the live
+  /// provider: `_seedOnce` latches `_existing`, so a household that changes under a form
+  /// already on screen would otherwise re-stamp the recipe with whichever id is current
+  /// (invariant 1). The two ids agreeing is a precondition of saving at all — a form whose
+  /// recipe and household disagree was seeded from an entry that is no longer this
+  /// household's, and there is no field the user could correct to resolve it.
+  ///
+  /// Defence in depth rather than a reachable bug today: `write_recipe`'s owner probe rejects
+  /// the reassignment in Rust as well, and one household is all `bootstrapHousehold` ever
+  /// produces. It reports the refusal as `NoSuchRecipe` though, which reads as "recipe not
+  /// found" over a recipe plainly on screen — so the refusal is worth stating here, in the one
+  /// place that knows *why* the ids differ.
+  ///
+  /// Ahead of `_saving` because it neither throws nor awaits: entering the saving state only
+  /// to leave it in the same frame would flicker every control on the form.
+  ///
   /// `_validate` runs *inside* the `try`: this `Future` is discarded by the Save button's
   /// `VoidCallback`, so a synchronous throw out of validation would complete it with an error
   /// nothing reads — no inline error, no snackbar, no write, no sign the tap registered.
   /// The `finally`'s `setState` is what publishes the inline errors on the reject path.
   Future<void> _save(String householdId) async {
+    // `_existing` is null on a create, which makes `owner` the live id and this branch dead —
+    // so the mismatch is the whole condition and no separate `_editing` test is needed.
+    final owner = _existing?.householdId ?? householdId;
+    if (owner != householdId) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'This recipe belongs to another household and cannot be saved here.',
+          ),
+        ),
+      );
+      return;
+    }
     setState(() => _saving = true);
     try {
-      final dto = _validate(householdId);
+      final dto = _validate(owner);
       if (dto == null) {
         _revealFirstError();
         return;

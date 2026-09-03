@@ -993,12 +993,17 @@ pub fn save_restrictions(
     Ok(())
 }
 
-/// The household's restrictions in stored order, or an empty set — including for a household
-/// that does not exist, which has no restrictions in exactly the same sense.
+/// The household's restrictions in stored order. An absent household is rejected with
+/// [`StorageError::NoSuchHousehold`], as [`save_restrictions`] rejects one: this set is what the
+/// restriction *warning* surface is computed from, and an empty set there reads as "nothing to
+/// warn about", so a stale or foreign id has to fail loudly rather than silently disable every
+/// warning. Under-warning is the one direction this feature must not fail in — the same reason
+/// `restriction_from_row` reports a row it cannot parse instead of dropping it.
 pub fn load_restrictions(
     conn: &Connection,
     id: &HouseholdId,
 ) -> Result<HouseholdRestrictions, StorageError> {
+    require_household(conn, id)?;
     let restrictions = restriction_rows_in(conn, id)?
         .into_iter()
         .map(|(position, kind, text)| restriction_from_row(id, position as usize, kind, text))
@@ -1349,8 +1354,9 @@ fn alias_index(conn: &Connection) -> Result<HashMap<String, Vec<String>>, Storag
 
 /// Everything this household can mark: the whole catalog plus exactly its own custom
 /// ingredients, each carrying its current mark. An absent household reads as the catalog with
-/// nothing marked, the same "reads as empty" contract [`load_restrictions`] states — a
-/// household with no records has no records in exactly the same sense.
+/// nothing marked rather than as an error — deliberately unlike [`load_restrictions`], which
+/// rejects one. An unmarked catalog still shows the reader every ingredient, so the household's
+/// absence hides nothing; an empty restriction set would hide every warning.
 ///
 /// `COLLATE NOCASE` is load-bearing: BINARY collation would sort every capitalised custom
 /// name ahead of the entire lowercase catalog rather than interleaving them.
@@ -5451,16 +5457,36 @@ mod tests {
         let mut conn = open(":memory:").unwrap();
         seed(&mut conn, "h1");
         seed(&mut conn, "h2");
+        seed(&mut conn, "h3");
         let a = mixed_set();
         let b = HouseholdRestrictions::new([Restriction::Known(RestrictionKind::Gluten)]);
         save_restrictions(&mut conn, &hid("h1"), &a).unwrap();
         save_restrictions(&mut conn, &hid("h2"), &b).unwrap();
         assert_eq!(load_restrictions(&conn, &hid("h1")).unwrap(), a);
         assert_eq!(load_restrictions(&conn, &hid("h2")).unwrap(), b);
-        // A household with no set of its own reads empty, not someone else's.
+        // `h3` exists and has saved nothing, which is the case the reject below must not
+        // swallow: an empty set is a legal answer for a household that is really there, and
+        // only an *absent* household is an error. Expected-to-pass — this arm is unchanged by
+        // the `require_household` guard, and it is what proves the guard did not overreach.
         assert_eq!(
-            load_restrictions(&conn, &hid("absent")).unwrap(),
+            load_restrictions(&conn, &hid("h3")).unwrap(),
             HouseholdRestrictions::default()
+        );
+    }
+
+    /// The read is guarded like the write: an id naming no household is `NoSuchHousehold`, not
+    /// an empty set. An empty set reads as "no restrictions" on the warning surface, so a stale
+    /// or foreign id would silently disable every warning — the owner's 2026-08-29 audit
+    /// (HIGH, §6 item 1).
+    #[test]
+    fn loading_restrictions_for_an_absent_household_is_rejected() {
+        let mut conn = open(":memory:").unwrap();
+        seed(&mut conn, "h");
+        save_restrictions(&mut conn, &hid("h"), &mixed_set()).unwrap();
+        let err = load_restrictions(&conn, &hid("nope")).unwrap_err();
+        assert!(
+            matches!(&err, StorageError::NoSuchHousehold(id) if id == "nope"),
+            "{err:?}"
         );
     }
 
