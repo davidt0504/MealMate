@@ -386,7 +386,7 @@ Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-orch-8-2026-0
 
 Note: the review exists as two copies, and the `~/.claude/reviews/` one every `Full review:` line below points at
 is the **pre-fix snapshot** -- writes outside the worktree were blocked in the 2026-08-29 fix-pass session, so
-only the worktree copy, `.orch/redteam-impl-handoff-orch-8-2026-08-29T0120-ca0e.md`, carries the closed statuses
+only the worktree copy, `~/.claude/reviews/redteam-impl-handoff-orch-8-2026-08-29T0120-ca0e.md`, carries the closed statuses
 (`RESOLVED -- 5 fixed, 2 deferred, 0 retracted`) and the per-finding reasoning the entries below summarise. The
 two are otherwise byte-identical. Reconcile the copies when this branch merges.
 
@@ -1026,102 +1026,130 @@ Source: MVP-024 implementation (execute-plan step 12 dispositions).
 ## orch/37 -- 2026-09-02
 
 Source: /home/davidlinux/.claude/reviews/impl-handoff-orch-37-2026-09-02T1936-1e59.md
-Full review: .orch/redteam-impl-handoff-orch-37-2026-09-02T1949-115e.md
+Full review: ~/.claude/reviews/redteam-impl-handoff-orch-37-2026-09-02T1949-115e.md
 
 ### LOW
 
 - **`acceptedCopy` is defined and sampled but never rendered** (`lib/features/planning/cover_copy.dart:56`) -- `'Plan written.'` exists only at its definition and in `test/cover_copy_test.dart:25`'s sample list; `cover_screen.dart`'s accepted path (line 81) renders the shopping link alone. Being in the sample list makes the dead constant look exercised. Fix: render it beside the shopping link -- the accepted state currently has no textual confirmation -- or delete it and its sample.
-  Full review: .orch/redteam-impl-handoff-orch-37-2026-09-02T1949-115e.md
+  Full review: ~/.claude/reviews/redteam-impl-handoff-orch-37-2026-09-02T1949-115e.md
   **Status:** OPEN
 
 ---
 
 - **Unguarded `setState` after an await boundary in the cover screen** (`lib/features/planning/cover_screen.dart:302`) -- `_accept` (:302) and `_decide` (:314) open with an unguarded `setState(() => _busy = true)` while every other `setState` in the file is `mounted`-guarded (:305, :309, :320). Both are reached after an await that can outlive the route (`_openSwapPicker` :399, `_confirmVeto` :425), so a decision returning into a disposed state throws. Fix: `if (!mounted) return;` before the opening `setState` in both.
-  Full review: .orch/redteam-impl-handoff-orch-37-2026-09-02T1949-115e.md
+  Full review: ~/.claude/reviews/redteam-impl-handoff-orch-37-2026-09-02T1949-115e.md
   **Status:** OPEN
 
 ---
 
 - **The cover screen's error branch has no widget test** (`lib/features/planning/cover_screen.dart:44`) -- the `AsyncError` arm renders `describeFailure` plus a "Try again" that invalidates the provider; none of the eight cover widget tests (`test/app_test.dart:1183-1391`) put the provider in an error state. The planner's equivalent branch does have one (`test/app_test.dart:5597`), so the gap is against the file's own convention. Fix: mirror that test -- a throwing `cover` seam, assert the `describeFailure` text, tap "Try again" and assert the seam is re-invoked.
-  Full review: .orch/redteam-impl-handoff-orch-37-2026-09-02T1949-115e.md
+  Full review: ~/.claude/reviews/redteam-impl-handoff-orch-37-2026-09-02T1949-115e.md
   **Status:** OPEN
 
 ## orch/37 -- 2026-09-02
 
 Source: /home/davidlinux/.claude/reviews/impl-handoff-orch-37-2026-09-02T2033-1a2c.md
-Full review: .orch/redteam-impl-handoff-orch-37-2026-09-02T2041-c699.md
+Full review: ~/.claude/reviews/redteam-impl-handoff-orch-37-2026-09-02T2041-c699.md
 
 ### LOW
 
 - **`?offset=` outside i32 truncates silently past the ±520 bound** (`lib/app/router.dart:78`) -- `int.tryParse` yields a 64-bit int that reaches `sse_encode_i_32` -> `putInt32`, which keeps the low 32 bits without throwing, so `?offset=4294967297` narrows to `1`, passes `MAX_OFFSET_CYCLES`, and previews a window the URL did not ask for. Fix: clamp the parsed offset to `[-520, 520]` in the route builder.
-  Full review: .orch/redteam-impl-handoff-orch-37-2026-09-02T2041-c699.md
+  Full review: ~/.claude/reviews/redteam-impl-handoff-orch-37-2026-09-02T2041-c699.md
   **Status:** RESOLVED 2026-09-02 -- `coverOffset` in `lib/app/router.dart` saturates the parsed value to the i32 range before it crosses, so an out-of-range deep link can no longer narrow into an unrelated in-range window. Deliberately *not* the clamp to `[-520, 520]` this entry proposed: clamping to the bound would silently move the user to week 520, whereas saturating hands the intent to the bound, which now refuses in prose ("that week is too far away to plan"). Pinned by the `coverOffset` group in `test/app_test.dart`, including a case asserting `'1000'` is *not* clamped.
 
 ---
 
 - **`RESTRICTIONS_NOT_CONFIGURED` is rendered twice on the same screen** (`lib/features/planning/cover_screen.dart:110`) -- the reviewed-restrictions card and `assumptionLines` (:73) both fire on that code, so the household reads the same fact as an actionable card and again inside "What we couldn't check". Fix: add the code to `assumptionCopy`'s deliberately-unmapped set now that the reviewed row owns the message, or filter it from `assumptionLines` while the row shows.
-  Full review: .orch/redteam-impl-handoff-orch-37-2026-09-02T2041-c699.md
+  Full review: ~/.claude/reviews/redteam-impl-handoff-orch-37-2026-09-02T2041-c699.md
   **Status:** OPEN
 
 ---
 
 - **`coverCopySamples` has no completeness guard** (`test/cover_copy_test.dart:7`) -- the list is hand-maintained and the two invariant-19 regexes iterate only it; `isNotEmpty` is the sole structural assertion, so a constant added to `cover_copy.dart` and not to the list escapes both the safety and the reversal check silently. Fix: assert a count with a comment naming why, or derive the sample list from one exported map the widgets also read.
-  Full review: .orch/redteam-impl-handoff-orch-37-2026-09-02T2041-c699.md
+  Full review: ~/.claude/reviews/redteam-impl-handoff-orch-37-2026-09-02T2041-c699.md
   **Status:** OPEN 2026-09-02, narrowed -- the count guard is now asserted in both suites (`coverCopySamples.length == 31`, `plannerCopySamples.length == 36`), which pins each list against erosion. It does **not** close the stated failure scenario: a new constant added to `cover_copy.dart` and never sampled leaves the count unchanged, and Dart has no reflection over a library's top-level constants. Only the second direction -- deriving the samples from one exported map the widgets also read -- catches that, and it is a production-copy restructure across `cover_copy.dart`, `cover_screen.dart`, `planner_copy.dart` and `planner_screen.dart`. That restructure is what remains open here.
 
 ## orch/37 -- 2026-09-02
 
 Source: /home/davidlinux/.claude/reviews/impl-handoff-orch-37-2026-09-02T2117-c7db.md
-Full review: .orch/redteam-impl-handoff-orch-37-2026-09-02T2127-eb06.md
+Full review: ~/.claude/reviews/redteam-impl-handoff-orch-37-2026-09-02T2127-eb06.md
 
 ### LOW
 
 - **The Cover screen's decision-failure snackbar is untested** (`lib/features/planning/cover_screen.dart:334`) -- no test makes the `decide:` hook throw, so `_decide`/`_accept`'s `catch -> _report` and the `_busy` release in `finally` are never exercised, on a screen whose three refusals (`BlankVetoSubject`, `DecisionOutsideWindow`, `LockedPlannedMeal`) are all user-visible. Fix: one widget test with a throwing `decide:` hook asserting `find.byType(SnackBar)` carries `describeFailure`'s prose, as the pantry and household screens already do.
-  Full review: .orch/redteam-impl-handoff-orch-37-2026-09-02T2127-eb06.md
+  Full review: ~/.claude/reviews/redteam-impl-handoff-orch-37-2026-09-02T2127-eb06.md
   **Status:** RESOLVED 2026-09-02 -- `a refused decision surfaces as a snackbar and frees the screen` (`test/app_test.dart`) throws from the `decide:` hook, asserts the snackbar carries `describeFailure`'s prose, and asserts the tile's Swap is re-enabled afterwards (the `finally` half). Two of the three refusals this entry names have since changed identity in the same pass: `BlankVetoSubject` is now `UnmatchableVetoSubject`, and `LockedPlannedMeal` no longer reaches this screen -- the locked swap is refused as `ApplicationError::SwapOntoLockedSlot` and mapped to prose.
 
 ---
 
 - **One user-facing sentence lives in the widget, outside the sampled copy surface** (`lib/features/planning/cover_screen.dart:381`) -- `'Your recipe library could not be read.'` is prose, not a control label, yet it is neither in `cover_copy.dart` nor in `coverCopySamples`, so none of the three invariant-19 whole-surface regexes ever sees it and the count guard cannot detect a string that was never a constant. Distinct from the `coverCopySamples` entry above, which is scoped to unsampled constants *in* `cover_copy.dart`. Fix: move it to `cover_copy.dart` as a named constant and add it to `coverCopySamples`.
-  Full review: .orch/redteam-impl-handoff-orch-37-2026-09-02T2127-eb06.md
+  Full review: ~/.claude/reviews/redteam-impl-handoff-orch-37-2026-09-02T2127-eb06.md
   **Status:** RESOLVED 2026-09-02 -- the sentence is now `swapLibraryUnavailableCopy` in `cover_copy.dart` and sampled, so all three whole-surface regexes see it. `questionLockedCopy` was added in the same pass and sampled with it; the count guard moved 29 -> 31.
 
 ## orch/39 -- 2026-09-02
 
 Source: /home/davidlinux/.claude/reviews/impl-handoff-orch-39-2026-09-02T2310-dff6.md
-Full review: .orch/redteam-impl-handoff-orch-39-2026-09-02T2320-5b75.md
+Full review: ~/.claude/reviews/redteam-impl-handoff-orch-39-2026-09-02T2320-5b75.md
 
 ### LOW
 
 - **`commit_swap` destroys the previous `.pre-restore` before anything replaces it** (`rust/src/api/health.rs:118`) -- the one-generation cleanup runs before `rename(db_path, pre)` at line 125, so a restore that fails anywhere up to line 140 deletes the earlier backup generation without creating a new one; on Unix the rename would have replaced it atomically anyway. Fix: drop `remove_file(pre)` and let the rename replace it (keep the explicit `pre_journal` removal), or move both removals after the rename succeeds.
-  Full review: .orch/redteam-impl-handoff-orch-39-2026-09-02T2320-5b75.md
+  Full review: ~/.claude/reviews/redteam-impl-handoff-orch-39-2026-09-02T2320-5b75.md
   **Status:** RESOLVED 2026-09-03 -- `remove_file(pre)` is gone and the rename replaces `pre` atomically; the `pre_journal` removal and the journal move now sit inside the `db_path`-exists branch, with an `else` arm that removes a journal orphaned by an absent database rather than mispairing it with the kept generation.
 
 ---
 
 - **Export failures bypass corrupt-error typing** (`rust/crates/kimatta-storage/src/lib.rs:610`) -- `VACUUM INTO` (line 610) and `schema_version` (line 581) use a bare `?` rather than `typed_sqlite`, so page-level damage found during an export surfaces as `KimattaError::Storage` with the raw SQLite string instead of the honest `Corrupt` copy `household_screen.dart` supplies. Fix: `.map_err(typed_sqlite)` on both, matching `open` and `validate_export` in the same file.
-  Full review: .orch/redteam-impl-handoff-orch-39-2026-09-02T2320-5b75.md
+  Full review: ~/.claude/reviews/redteam-impl-handoff-orch-39-2026-09-02T2320-5b75.md
   **Status:** RESOLVED 2026-09-03 -- both sites now route through `typed_sqlite`, pinned by `an_export_of_a_damaged_database_is_typed_as_corrupt`.
 
 ---
 
 - **The live database path is constructed independently in two places** (`lib/features/settings/backup_provider.dart:29`) -- `BackupActions._dbPath()` and `healthReportProvider` (`lib/features/settings/health_provider.dart:13`) each build `'${dir.path}${Platform.pathSeparator}kimatta.db'`; if one is ever changed, restore/start-fresh act on a file the app never opens and report success while nothing visible changes. Fix: one exported `localDatabasePath()` called by both.
-  Full review: .orch/redteam-impl-handoff-orch-39-2026-09-02T2320-5b75.md
+  Full review: ~/.claude/reviews/redteam-impl-handoff-orch-39-2026-09-02T2320-5b75.md
   **Status:** RESOLVED 2026-09-03 -- `localDatabasePath()` in `health_provider.dart` is the single spelling; `healthReportProvider`, `restore` and `startFresh` all call it and `BackupActions._dbPath()` is gone.
 
 ## orch/39 -- 2026-09-03
 
 Source: /home/davidlinux/.claude/reviews/impl-handoff-orch-39-2026-09-03T0005-e036.md
-Full review: .orch/redteam-impl-handoff-orch-39-2026-09-03T0012-89d3.md
+Full review: ~/.claude/reviews/redteam-impl-handoff-orch-39-2026-09-03T0012-89d3.md
 
 ### LOW
 
 - **Post-verify staging cleanup is swallowed and covers only `-journal`** (`rust/src/api/health.rs:99`) -- `let _ = remove_file("{staging}-journal")` is the mirror of the strict three-suffix loop at line 79, but swallows failure and omits `-wal`/`-shm`; `commit_swap`'s assertion checks `{db_path}-wal`, not `{staging}-wal`, so nothing downstream notices. Fix: reuse the `ignore_not_found` + `?` loop shape here.
-  Full review: .orch/redteam-impl-handoff-orch-39-2026-09-03T0012-89d3.md
+  Full review: ~/.claude/reviews/redteam-impl-handoff-orch-39-2026-09-03T0012-89d3.md
   **Status:** RESOLVED 2026-09-03 -- both staging clears are the same strict loop over one `const SIDECARS` list, which every clear/move/put-back site in `health.rs` now drives off; pinned by `a_restore_leaves_no_staging_artefact_behind`.
 
 ---
 
 - **Failed `pre_journal` removal mispairs the kept generation** (`rust/src/api/health.rs:136`) -- the `exists` branch renames `db_path` onto `pre` before removing `{pre}-journal`; a non-`NotFound` failure there leaves generation N's database beside generation N-1's journal, which `recover_original`'s unconditional put-back (line 183) then moves next to the restored database (R0). Fix: remove `{pre}-journal` before the rename, so a failure aborts with nothing moved.
-  Full review: .orch/redteam-impl-handoff-orch-39-2026-09-03T0012-89d3.md
+  Full review: ~/.claude/reviews/redteam-impl-handoff-orch-39-2026-09-03T0012-89d3.md
   **Status:** RESOLVED 2026-09-03 -- not by that reorder, which plan review showed destroys the kept generation's journal when the rename then fails. Instead each `{pre}` sidecar is replaced-or-removed *after* the rename (its database is gone by then), and `recover_original` puts back only the sidecars this restore moved, so a foreign journal cannot reach the restored original; pinned by `a_foreign_pre_journal_is_not_carried_back_to_the_original`.
+
+## integration -- 2026-09-03
+
+Full review: /home/davidlinux/.claude/reviews/redteam-integration-ratification-2026-09-03T1119-b77c.md
+
+### LOW
+
+- **Bridge functions with no production caller** (`rust/src/api/recipe.rs:185`, `rust/src/api/planned_meals.rs:50`) -- `add_custom_ingredient`, `list_custom_ingredients`, and `load_planned_meal` are called only by `test/bridge_native_test.dart`; no `lib/` UI wired them. Fix: wire them or annotate as intentionally test-only like `derive_shopping_list`'s documented precedent.
+  Full review: /home/davidlinux/.claude/reviews/redteam-integration-ratification-2026-09-03T1119-b77c.md
+  **Status:** OPEN
+
+- **`#[frb(sync)]` applied inconsistently to constant functions** (`rust/src/api/restrictions.rs:20`) -- `core_version` is sync but the constant-vocabulary `known_restriction_kinds`/`known_unit_kinds`/`known_meal_component_kinds` are async Futures. Harmless; callers await them fine. Fix: annotate the `known_*` trio sync at the next codegen regeneration.
+  Full review: /home/davidlinux/.claude/reviews/redteam-integration-ratification-2026-09-03T1119-b77c.md
+  **Status:** OPEN
+
+- **Fresh-vs-migrated schema parity never asserted directly** (`rust/crates/kimatta-storage/src/lib.rs:3038`) -- `assert_db_equivalent` is called only by the export tests; parity holds by construction (single migration path) but nothing locks it against a future hand-written fast path. Fix: one test comparing a fresh `:memory:` DB vs a v1-origin migrated DB via the helper's schema half.
+  Full review: /home/davidlinux/.claude/reviews/redteam-integration-ratification-2026-09-03T1119-b77c.md
+  **Status:** OPEN
+
+- **No `foreign_key_check` backstop around migration** (`rust/crates/kimatta-storage/src/lib.rs:541`) -- `open()` disables FKs, migrates, re-enables, never runs `PRAGMA foreign_key_check`; safe while no migration rebuilds tables. Fix: per-migration `.foreign_key_check()` (rusqlite_migration supports it) or one check after a version advance.
+  Full review: /home/davidlinux/.claude/reviews/redteam-integration-ratification-2026-09-03T1119-b77c.md
+  **Status:** OPEN
+
+- **`shopping_line_state.from_date`/`to_date` lack the civil-date GLOB CHECK used everywhere else** (`rust/crates/kimatta-storage/src/lib.rs:423`) -- plain `TEXT NOT NULL` while `planning_cycle.anchor_date` and `planned_meal.date` carry the GLOB; a malformed window written raw silently orphans overlay rows, and CHECKs are immutable once shipped. Fix: add the GLOB CHECK in the next storage migration.
+  Full review: /home/davidlinux/.claude/reviews/redteam-integration-ratification-2026-09-03T1119-b77c.md
+  **Status:** OPEN
+
+---

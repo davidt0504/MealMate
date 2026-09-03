@@ -4,11 +4,11 @@ Additional LOW findings are tracked in `KNOWN_ISSUES-low.md`.
 
 ## orch/31 -- 2026-08-29
 
-Full review: `wt/31/.orch/redteam-impl-handoff-orch-31-2026-08-29T2331-d2ca.md`
+Full review: `~/.claude/reviews/redteam-impl-handoff-orch-31-2026-08-29T2331-d2ca.md`
 
 ### MEDIUM
 
-- **A pantry mark re-applied after being removed does not re-hide a line the user previously restored** (`lib/features/shopping/shopping_screen.dart:161`, cf. `lib/features/shopping/shopping_copy.dart:175`) -- residual of the `restored`-flag finding fixed in the same pass. `_setLine` now clamps `restored` to `false` unless the line's status is `omittedPantryMarked`, so an inert flag is dropped by the next write to that line; but the sequence *Add anyway → unmark the ingredient in Pantry → re-mark it* performs no line-state write between the unmark and the re-mark, so the clamp never fires and the stored `restored: true` still routes the line to **To buy** via `sectionFor`. The user sees a pantry mark that appears to have had no effect; the explain sheet's "Back to pantry" does render in that state and clears it. Closing it properly needs the pantry write path to clear `restored` for the ingredient's `m:` line keys — a cross-feature write into `shopping_line_state` coupled to the MVP-015 key format, on a card already approved Done — or a mark-generation stamp on the overlay row. It is also a defensible product reading that "Add anyway" is a durable statement of intent that a later mark should not silently overturn; that question should be settled before either implementation. Full review: `wt/31/.orch/redteam-impl-handoff-orch-31-2026-08-29T2331-d2ca.md`
+- **A pantry mark re-applied after being removed does not re-hide a line the user previously restored** (`lib/features/shopping/shopping_screen.dart:161`, cf. `lib/features/shopping/shopping_copy.dart:175`) -- residual of the `restored`-flag finding fixed in the same pass. `_setLine` now clamps `restored` to `false` unless the line's status is `omittedPantryMarked`, so an inert flag is dropped by the next write to that line; but the sequence *Add anyway → unmark the ingredient in Pantry → re-mark it* performs no line-state write between the unmark and the re-mark, so the clamp never fires and the stored `restored: true` still routes the line to **To buy** via `sectionFor`. The user sees a pantry mark that appears to have had no effect; the explain sheet's "Back to pantry" does render in that state and clears it. Closing it properly needs the pantry write path to clear `restored` for the ingredient's `m:` line keys — a cross-feature write into `shopping_line_state` coupled to the MVP-015 key format, on a card already approved Done — or a mark-generation stamp on the overlay row. It is also a defensible product reading that "Add anyway" is a durable statement of intent that a later mark should not silently overturn; that question should be settled before either implementation. Full review: `~/.claude/reviews/redteam-impl-handoff-orch-31-2026-08-29T2331-d2ca.md`
   **Status:** OPEN
 
 ---
@@ -22,7 +22,7 @@ Full review: /home/davidlinux/.claude/reviews/redteam-mvp003-integration-verify-
 - **MVP-024 AC-8 attention measurement is owed by the owner before DEC-003** (`docs/measurements/MVP-024_AC8_ATTENTION.md`, `docs/ROADMAP.md` MVP-024 Done row) -- approved Done 2026-09-02 under D-027 with the record unfilled. Fix: run the four-scenario stopwatch protocol (both arms, median of per-scenario ratios) at the step-40 sitting; an adverse result returns MVP-023 to Draft under D-031.
   **Status:** OPEN
 
-- **MVP-025 AC-4 device benchmark is discharged only by a real-hardware run** (`rust/crates/food-domain/examples/beam_width.rs`, `docs/ROADMAP.md` MVP-025 Done row) -- approved Done 2026-09-02 under D-027 with the host-run numbers verifier-reproduced. Fix: before `MVP-022` beta readiness, run the beam_width example on representative low/mid-range Android hardware and record the numbers; re-tune (B, K) only if Score index 0-2 regress.
+- **MVP-025 AC-4 device benchmark is discharged only by a real-hardware run** (`rust/crates/food-domain/examples/beam_width.rs`, `docs/ROADMAP.md` MVP-025 Done row) -- approved Done 2026-09-02 under D-027 with the host-run numbers verifier-reproduced. Fix: before `MVP-022` beta readiness, run the beam_width example on representative low/mid-range Android hardware and record the numbers; re-tune (B, K) only if the recorded device median wall time (5 runs, 1 warmup, cargo-ndk path per the ROADMAP clause) is unacceptable for interactive use — Score is hardware-independent and is not the trigger.
   **Status:** OPEN
 
 - **MVP-011 AC-3 (human cook log) is discharged only as cook reviews are recorded** (`rust/crates/food-domain/content/starter_recipes.json`, `docs/ROADMAP.md` MVP-011 Done row) -- approved Done 2026-08-29 under D-027 with 0/10 recipes reviewed, so no starter recipe installs yet. Fix: cook each recipe and add `"cook_review": {"cooked_on": "YYYY-MM-DD", "by": "...", "corrections": null}`; tests validate the shape and the installer ships reviewed entries. Must be revisited before `MVP-022` beta readiness; a beta with 0/10 is the accepted residual risk.
@@ -203,54 +203,66 @@ Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-orch-33-2026-
 ## orch/33 -- 2026-09-02
 
 Source: /home/davidlinux/.claude/reviews/impl-handoff-orch-33-2026-09-02T1354-52de.md
-Full review: .orch/redteam-impl-handoff-orch-33-2026-09-02T1401-4b38.md
+Full review: ~/.claude/reviews/redteam-impl-handoff-orch-33-2026-09-02T1401-4b38.md
 
 ### MEDIUM
 
 - **`save_planned_meal` accepts a `locked` flag it never writes** (`rust/crates/kimatta-storage/src/lib.rs:2146`) -- `PlannedMeal::new(..., locked)` takes a lock but the INSERT names only `(id, household_id, date, slot)` and the `ON CONFLICT` arm updates `date` and `slot`, so a caller constructing a locked occurrence gets an unlocked row and no error. Not a slip: documented at :2079-2081, at the DTO field (`rust/src/api/planned_meals.rs:38-39`), at :137 and on `stored()` at :159, and pinned by `a_sent_locked_flag_is_ignored_on_save` (:333) and `set_lock_then_save_keeps_it_locked` (:344). Both production writers hardcode `locked: false`, so nothing is presently wrong; the smell is a constructor parameter that is inert on the save path. Deferred: reversing it would break a contract three files depend on, for no caller. Fix: a second constructor for the loader (`meal_from_rows` at :2309-2329 needs the parameter), then drop it from `new` so `set_planned_meal_lock` is the only way to set a lock.
-  Full review: .orch/redteam-impl-handoff-orch-33-2026-09-02T1401-4b38.md
+  Full review: ~/.claude/reviews/redteam-impl-handoff-orch-33-2026-09-02T1401-4b38.md
   **Status:** OPEN
 
 ## orch/37 -- 2026-09-02
 
 Source: /home/davidlinux/.claude/reviews/impl-handoff-orch-37-2026-09-02T1936-1e59.md
-Full review: .orch/redteam-impl-handoff-orch-37-2026-09-02T1949-115e.md
+Full review: ~/.claude/reviews/redteam-impl-handoff-orch-37-2026-09-02T1949-115e.md
 
 ### MEDIUM
 
 - **Swap outside the assessed window records evidence about a window it did not change** (`rust/crates/kimatta-application/src/lib.rs:203`) -- `record_decision` snapshots `(today, offset_cycles)` but `PlanDecision::Swap` writes at `decision.date`, unchecked against that window; `save_planned_meal_in` checks household/cycle/slot, never the date. A far-dated swap commits a locked row beside a `correct` row whose hash and statuses say nothing changed. Deferred: unreachable from the UI (dates come from rendered slots). Fix: derive the window as `cover_in` does and reject an out-of-window date, or snapshot the window containing `date`.
-  Full review: .orch/redteam-impl-handoff-orch-37-2026-09-02T1949-115e.md
+  Full review: ~/.claude/reviews/redteam-impl-handoff-orch-37-2026-09-02T1949-115e.md
   **Status:** RESOLVED 2026-09-02 -- `record_decision` now derives the window from the `before` snapshot (`PlanningSnapshot::dates()`) and refuses a `Swap` outside it with `ApplicationError::DecisionOutsideWindow`, before any write, so the transaction rolls back. `Veto`/`RestrictionsReviewed` stay un-gated: their `date` is ledger-only.
 
-- **No command can read, edit or delete a `policy` row, so every policy write is permanent** (`rust/crates/kimatta-application/src/lib.rs`, `PolicyTypes::HARD_VETO` in `record_decision`) -- `record_decision` is the only policy writer and it only ever inserts or enables. `rust/src/api/` exposes no policies module and no Dart screen reads one, so a household cannot undo anything it has told the app. Two instances ship today: `food.hard_veto` -- "Never suggest X" tapped on the wrong tile rejects that dish at Tier 0 for the life of the install -- and `food.restrictions_reviewed`, where a mis-tap on "We don't have any" cannot be taken back from any screen. MVP-024 made the veto dialog's copy honest about this rather than pointing at a settings surface that does not exist, and made the reviewed marker retire itself when the restriction set changes; neither gives the household a way back. Fix: a policy list/disable command plus a surface on the restrictions or household screen, then restore reversal wording to `vetoConfirmBody`. Full review: .orch/redteam-impl-handoff-orch-37-2026-09-02T1949-115e.md
+- **No command can read, edit or delete a `policy` row, so every policy write is permanent** (`rust/crates/kimatta-application/src/lib.rs`, `PolicyTypes::HARD_VETO` in `record_decision`) -- `record_decision` is the only policy writer and it only ever inserts or enables. `rust/src/api/` exposes no policies module and no Dart screen reads one, so a household cannot undo anything it has told the app. Two instances ship today: `food.hard_veto` -- "Never suggest X" tapped on the wrong tile rejects that dish at Tier 0 for the life of the install -- and `food.restrictions_reviewed`, where a mis-tap on "We don't have any" cannot be taken back from any screen. MVP-024 made the veto dialog's copy honest about this rather than pointing at a settings surface that does not exist, and made the reviewed marker retire itself when the restriction set changes; neither gives the household a way back. Fix: a policy list/disable command plus a surface on the restrictions or household screen, then restore reversal wording to `vetoConfirmBody`. Full review: ~/.claude/reviews/redteam-impl-handoff-orch-37-2026-09-02T1949-115e.md
   **Status:** OPEN
 
 ## orch/39 -- 2026-09-03
 
 Source: /home/davidlinux/.claude/reviews/impl-handoff-orch-39-2026-09-02T2310-dff6.md
-Full review: .orch/redteam-impl-handoff-orch-39-2026-09-02T2320-5b75.md
+Full review: ~/.claude/reviews/redteam-impl-handoff-orch-39-2026-09-02T2320-5b75.md
 
 ### MEDIUM
 
 - **`.pre-restore` is preserved but unreachable from any UI path** (`lib/features/settings/backup_provider.dart:44`) -- when a restore fails at both the swap and the put-back, `preserved_aside_error` names `<db_path>.pre-restore` as the surviving copy. The only restore affordance is `latestExport()`, which lists `<applicationSupport>/exports/` and keeps `.endsWith('.db')`, so that file matches neither the directory nor the suffix, and on Android the application-support directory is not reachable from a file manager either. The message was softened to stop promising a retry that cannot work, which makes it truthful but leaves AC-3's "recoverable" half open. Fix: a sibling of `latestExport()` offering `<db_path>.pre-restore` when it exists -- `restore_database` already validates whatever path it is handed.
-  Full review: .orch/redteam-impl-handoff-orch-39-2026-09-02T2320-5b75.md
+  Full review: ~/.claude/reviews/redteam-impl-handoff-orch-39-2026-09-02T2320-5b75.md
   **Status:** OPEN
 
 - **`export_database` unlinks the destination before `VACUUM INTO` can replace it** (`rust/crates/kimatta-storage/src/lib.rs:599`) -- the pre-existing file at `dest` is removed first because `VACUUM INTO` refuses to overwrite, so a re-export that then fails (disk full, corruption found mid-read) has destroyed the previous export at that path and written nothing in its place. Same shape as the `.pre-restore` ordering defect fixed on the restore path, and more reachable: export filenames are second-granularity, so a retry within the same second targets the same path. Found while red-teaming the fix plan for that defect; out of scope for orch/39, which closed only the nine review findings. Fix: `VACUUM INTO` a temporary sibling, then rename over `dest`.
-  Full review: .orch/plan-review-fixplan-mvp017-offline-durability-2026-09-02T2351.md
+  Full review: ~/.claude/reviews/plan-review-fixplan-mvp017-offline-durability-2026-09-02T2351.md
   **Status:** OPEN
 
 ## orch/39 -- 2026-09-03
 
 Source: /home/davidlinux/.claude/reviews/impl-handoff-orch-39-2026-09-03T0005-e036.md
-Full review: .orch/redteam-impl-handoff-orch-39-2026-09-03T0012-89d3.md
+Full review: ~/.claude/reviews/redteam-impl-handoff-orch-39-2026-09-03T0012-89d3.md
 
 ### MEDIUM
 
 - **No guard against two concurrent restores sharing one staging path** (`rust/src/api/health.rs:71`) -- `{db_path}.restore-staging` is a fixed path and everything before `db::swap` runs outside the `DB` mutex, so a double tap on Restore (the button is never disabled in flight) lets one call's `fs::copy` truncate a staged file another call already verified and is about to commit. Fix: unique per-call staging name, or hold the mutex for all of `restore_database`.
-  Full review: .orch/redteam-impl-handoff-orch-39-2026-09-03T0012-89d3.md
+  Full review: ~/.claude/reviews/redteam-impl-handoff-orch-39-2026-09-03T0012-89d3.md
   **Status:** RESOLVED 2026-09-03 -- the whole of `restore_database` runs inside `crate::db::swap`, and both destructive buttons are disabled while an operation is in flight (`BackupBusy`): serialising alone would still let a second confirmed restore overwrite the single kept generation with the first restore's result.
 
 - **A failed restore that leaves no database behind reads as healthy in Settings** (`lib/features/settings/health_provider.dart:12`) -- `healthReportProvider` calls `openDatabase`, and `kimatta_storage::open` creates a fresh database when the file is missing (`rust/crates/kimatta-storage/src/lib.rs:515`). In the one branch where `recover_original` cannot put the original back, the invalidation added for the stale-cache fix therefore re-opens into a *new empty* database: the diagnostics tile reads "schema v10", no recovery row appears (it is gated on `health is AsyncError`), and the only mention of the user's data at `.pre-restore` is a snackbar that has since been dismissed. The sibling entry above ("`.pre-restore` is preserved but unreachable from any UI path") is the other half of this. Found while red-teaming the fix plan for the stale-cache finding; accepted deliberately, since a non-creating probe would change the create-on-missing contract first launch depends on. Fix: a health probe that distinguishes "missing" from "opened", or hold the last destructive failure in a provider the diagnostics tile renders.
-  Full review: .orch/plan-review-fixplan-orch39-backup-swap-2026-09-03T0026.md
+  Full review: ~/.claude/reviews/plan-review-fixplan-orch39-backup-swap-2026-09-03T0026.md
   **Status:** OPEN
+
+## integration -- 2026-09-03
+
+Full review: /home/davidlinux/.claude/reviews/redteam-integration-ratification-2026-09-03T1119-b77c.md
+
+### MEDIUM
+
+- **Historical-origin migration tests stop at v4** (`rust/crates/kimatta-storage/src/lib.rs:3726`) -- no test stands a DB up at v5-v9 with rows in the tables those versions introduced (`planned_meal`, `pantry_item`, `shopping_line_state`) and migrates to v10, so the first future table-rebuild migration has no data-preservation harness. Fix: extend the existing v1-v4 origin-test pattern to v7/v8/v9 origins when a card next touches storage.
+  Full review: /home/davidlinux/.claude/reviews/redteam-integration-ratification-2026-09-03T1119-b77c.md
+  **Status:** OPEN
+
+---

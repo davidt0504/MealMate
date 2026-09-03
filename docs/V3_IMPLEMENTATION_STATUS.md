@@ -1,6 +1,6 @@
 # V3 Pivot Checklist
 
-**Updated:** 2026-08-28 (MVP-004 at Verify). Update this file only when a pivot deliverable or deferral below changes; it is not a live task-status ledger.
+**Updated:** 2026-09-03 (ratification sweep; MVP implementation band complete). Update this file only when a pivot deliverable or deferral below changes; it is not a live task-status ledger.
 **Authoritative inputs:** `docs/PRD_v3.md`, `docs/HOUSEHOLD_CONTROL_PRINCIPLES.md`, `docs/CODEX_CLAUDE_PIVOT_PROMPT.md`.
 
 Live task status, current work, and next work are authoritative only in `docs/ROADMAP.md`.
