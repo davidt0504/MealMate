@@ -1,5 +1,6 @@
+use kimatta_storage::rusqlite::TransactionBehavior;
 use kimatta_storage::{
-    Connection, Household, HouseholdId, HouseholdMember, HouseholdRecord, MemberId,
+    Connection, Household, HouseholdId, HouseholdMember, HouseholdRecord, MemberId, StorageError,
 };
 use uuid::Uuid;
 
@@ -58,16 +59,25 @@ fn rename_in(
     id: &HouseholdId,
     name: Option<&str>,
 ) -> Result<HouseholdRecord, KimattaError> {
-    kimatta_storage::rename_household(conn, id, name)?;
+    // One IMMEDIATE transaction around the UPDATE and the read-back, as `save_recipe_in`
+    // uses (AC-2): without it a read-back that failed after the write had committed would
+    // report a rename that actually happened as a failure.
+    let tx = conn
+        .transaction_with_behavior(TransactionBehavior::Immediate)
+        .map_err(StorageError::from)?;
+    kimatta_storage::rename_household(&tx, id, name)?;
     // By id rather than `load_household`'s oldest-row read: this record is what the UI
     // stores and shows after a save, so it has to be the household that was renamed.
-    kimatta_storage::load_household_by_id(conn, id)?.ok_or_else(|| KimattaError::Storage {
-        // Unreachable today: `rename_household` already returns `NoSuchHousehold` when the
-        // UPDATE changes no rows, so an absent id never gets here. The window is open only
-        // because no transaction spans the UPDATE and this read — kept as an error rather
-        // than an unwrap so a second connection could not turn it into a panic.
-        message: "household vanished after rename".into(),
-    })
+    let record =
+        kimatta_storage::load_household_by_id(&tx, id)?.ok_or_else(|| KimattaError::Storage {
+            // Unreachable: `rename_household` already returns `NoSuchHousehold` when the
+            // UPDATE changes no rows, so an absent id never gets here, and the transaction
+            // closes the window a second connection could have used. Kept as an error
+            // rather than an unwrap so it could never become a panic.
+            message: "household vanished after rename".into(),
+        })?;
+    tx.commit().map_err(StorageError::from)?;
+    Ok(record)
 }
 
 /// Marks the local household onboarded, and returns it. Idempotent, so the button cannot fail
@@ -82,12 +92,19 @@ pub fn complete_onboarding(household_id: String) -> Result<HouseholdDto, Kimatta
 /// than one household present without installing the process-wide connection, which
 /// `db.rs`'s `with_no_connection_is_not_open` needs to stay uninstalled.
 fn complete_in(conn: &mut Connection, id: &HouseholdId) -> Result<HouseholdRecord, KimattaError> {
-    kimatta_storage::mark_onboarded(conn, id)?;
-    kimatta_storage::load_household_by_id(conn, id)?.ok_or_else(|| KimattaError::Storage {
-        // Unreachable for the same reason `rename_in`'s twin is: `mark_onboarded` already
-        // returns `NoSuchHousehold` when the UPDATE changes no rows.
-        message: "household vanished after completing onboarding".into(),
-    })
+    // Wrapped for the same reason `rename_in` is (AC-2).
+    let tx = conn
+        .transaction_with_behavior(TransactionBehavior::Immediate)
+        .map_err(StorageError::from)?;
+    kimatta_storage::mark_onboarded(&tx, id)?;
+    let record =
+        kimatta_storage::load_household_by_id(&tx, id)?.ok_or_else(|| KimattaError::Storage {
+            // Unreachable for the same reason `rename_in`'s twin is: `mark_onboarded`
+            // already returns `NoSuchHousehold` when the UPDATE changes no rows.
+            message: "household vanished after completing onboarding".into(),
+        })?;
+    tx.commit().map_err(StorageError::from)?;
+    Ok(record)
 }
 
 fn to_dto(record: HouseholdRecord) -> HouseholdDto {
@@ -161,6 +178,44 @@ mod tests {
             .unwrap()
             .unwrap()
             .onboarded
+    }
+
+    /// The transaction has to close, not just open: a body that forgot `tx.commit()` would
+    /// roll back on drop and lose the rename silently. `:memory:` cannot see that, so this
+    /// one writes a file, drops the connection and reads it back.
+    #[test]
+    fn a_rename_is_committed_not_left_open() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("household.db");
+        let mut conn = kimatta_storage::open(&path).unwrap();
+        seed(&mut conn, "h1");
+        let id = HouseholdId::new("h1").unwrap();
+        rename_in(&mut conn, &id, Some("Casa")).unwrap();
+        drop(conn);
+
+        let reopened = kimatta_storage::open(&path).unwrap();
+        let record = kimatta_storage::load_household_by_id(&reopened, &id)
+            .unwrap()
+            .unwrap();
+        assert_eq!(record.household.name.as_deref(), Some("Casa"));
+    }
+
+    /// The same durability check for `complete_in`, with a second household present so a
+    /// lost `WHERE` clause fails it too.
+    #[test]
+    fn an_onboarding_commit_survives_a_reopen_and_stays_scoped() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("household.db");
+        let mut conn = kimatta_storage::open(&path).unwrap();
+        seed(&mut conn, "h1");
+        seed(&mut conn, "h2");
+        let id = HouseholdId::new("h2").unwrap();
+        complete_in(&mut conn, &id).unwrap();
+        drop(conn);
+
+        let reopened = kimatta_storage::open(&path).unwrap();
+        assert!(onboarded_of(&reopened, &id));
+        assert!(!onboarded_of(&reopened, &HouseholdId::new("h1").unwrap()));
     }
 
     #[test]

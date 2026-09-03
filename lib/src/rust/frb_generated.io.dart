@@ -121,6 +121,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   CustomIngredientDto dco_decode_custom_ingredient_dto(dynamic raw);
 
   @protected
+  ExportReport dco_decode_export_report(dynamic raw);
+
+  @protected
   HealthReport dco_decode_health_report(dynamic raw);
 
   @protected
@@ -472,6 +475,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   CustomIngredientDto sse_decode_custom_ingredient_dto(
     SseDeserializer deserializer,
   );
+
+  @protected
+  ExportReport sse_decode_export_report(SseDeserializer deserializer);
 
   @protected
   HealthReport sse_decode_health_report(SseDeserializer deserializer);
@@ -917,6 +923,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
     CustomIngredientDto self,
     SseSerializer serializer,
   );
+
+  @protected
+  void sse_encode_export_report(ExportReport self, SseSerializer serializer);
 
   @protected
   void sse_encode_health_report(HealthReport self, SseSerializer serializer);

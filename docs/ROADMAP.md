@@ -5,8 +5,8 @@ This is the durable operational source of truth after the MVP as well as during 
 ## Current milestone
 
 - **Milestone:** LOCAL-CORE-LOOP-READY; EMULATOR-PERSISTENCE-READY achieved 2026-08-29, DOMAIN-READY achieved 2026-08-27.
-- **Current implementation task:** none — `MVP-024` reached `Done` 2026-09-02 (orchestrated); the implementation lane is clear.
-- **Next implementation task:** `MVP-017` — `Ready`; selected by the orchestrator as the next card in `docs/task/SEQUENCE.txt`.
+- **Current implementation task:** `MVP-017` — `In Progress` (execution started 2026-09-02 under the approved plan, SEQUENCE step 39).
+- **Next implementation task:** `DEC-003` — Draft; next per `docs/task/SEQUENCE.txt` step 40 once `MVP-017` reaches `Done` and DEC-003 passes its decision workflow gate.
 - **Concurrent owner-paced work:** `DEC-004` — `In Progress`; it does not occupy the implementation lane, but it still directly gates `MVP-018`, `MVP-021`, and `MVP-022` and transitively gates `MVP-019` and `MVP-020`.
 - **Platform:** Android MVP and initial launch. iOS is the first post-launch platform priority.
 
@@ -20,7 +20,7 @@ This is the durable operational source of truth after the MVP as well as during 
 |---|---|
 | DOMAIN-READY | DEC-001, PRE-001, MVP-001, PRE-002, DEC-005, and MVP-002 Done — met 2026-08-27 |
 | EMULATOR-PERSISTENCE-READY | DEC-002 Done and MVP-003 through MVP-005 Done with on-device SQLite persistence evidence (re-derived after DEC-005, D-029). **Closed 2026-08-29:** DEC-002, MVP-003 and MVP-004 are Done with on-device evidence; MVP-005 reached `Done` 2026-08-29 with independent-verifier PASS |
-| LOCAL-CORE-LOOP-READY | MVP-006 through MVP-017 and MVP-023 through MVP-025 Done, including offline recovery. **Progress (2026-08-29):** MVP-006, MVP-007, MVP-008, MVP-009 and MVP-011 `Done` (MVP-011 AC-3 `NOT VERIFIED` under D-027, owner-accepted 2026-08-29); MVP-010 `Cut`; MVP-012 `Done` 2026-08-29; MVP-014 `Done` 2026-08-29; MVP-013 `Done` 2026-08-29; MVP-015 `Done` 2026-08-29; MVP-016 `Done` 2026-08-30; MVP-023 `Done` 2026-09-02; MVP-025 `Done` 2026-09-02; MVP-024 `In Progress`; MVP-017 Draft |
+| LOCAL-CORE-LOOP-READY | MVP-006 through MVP-017 and MVP-023 through MVP-025 Done, including offline recovery. **Progress (2026-08-29):** MVP-006, MVP-007, MVP-008, MVP-009 and MVP-011 `Done` (MVP-011 AC-3 `NOT VERIFIED` under D-027, owner-accepted 2026-08-29); MVP-010 `Cut`; MVP-012 `Done` 2026-08-29; MVP-014 `Done` 2026-08-29; MVP-013 `Done` 2026-08-29; MVP-015 `Done` 2026-08-29; MVP-016 `Done` 2026-08-30; MVP-023 `Done` 2026-09-02; MVP-025 `Done` 2026-09-02; MVP-024 `Done` 2026-09-02; MVP-017 In Progress |
 | REAL-DEV-BACKEND-READY | DEC-003, MVP-018, and MVP-019 Done in a non-production project |
 | SHARING-SECURITY-READY | MVP-020 and MVP-021 security, projection, and routing evidence passes |
 | PRODUCTION-BETA-READY | DEC-004 Done and MVP-022 passes; production activation remains a separately authorized action |
@@ -50,7 +50,7 @@ This is the durable operational source of truth after the MVP as well as during 
 | MVP-014 | Done | Binary, optional pantry | MVP-003, MVP-004, MVP-007 |
 | MVP-015 | Done | Conservative shopping aggregation | MVP-012, MVP-014 |
 | MVP-016 | Done | Shopping-list experience | MVP-003, MVP-004, MVP-015 |
-| MVP-017 | Ready | Offline durability and recovery | MVP-008, MVP-009, MVP-013, MVP-014, MVP-016 |
+| MVP-017 | In Progress | Offline durability and recovery | MVP-008, MVP-009, MVP-013, MVP-014, MVP-016 |
 | DEC-003 | Draft | Cloud/sharing release boundary | MVP-017 |
 | DEC-004 | In Progress | Naming clearance and production identity | DEC-001 |
 | MVP-018 | Draft | Real dev backend and durable auth | MVP-017, DEC-003, DEC-004 |

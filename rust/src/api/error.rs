@@ -9,6 +9,12 @@ pub enum KimattaError {
     NotOpen,
     #[error("storage error: {message}")]
     Storage { message: String },
+    /// The database file itself is damaged (corrupt header, truncated file, page-level
+    /// damage). Its own variant, not `Storage`, because the recovery differs: the UI may
+    /// offer "start fresh" for corruption, which would silently lose data if shown for,
+    /// say, a disk-full `Storage` failure.
+    #[error("the local database is damaged: {message}")]
+    Corrupt { message: String },
     #[error("invalid planning input: {message}")]
     Planning { message: String },
     #[error("invalid recipe input: {message}")]
@@ -102,10 +108,18 @@ impl From<kimatta_storage::RecipeError> for KimattaError {
     }
 }
 
+/// `CorruptDatabase` gets its own bridge variant so the UI can offer corruption-specific
+/// recovery; every other storage failure — `NewerSchema` included, whose recovery is "update
+/// the app" and whose `Display` is already user prose — stays `Storage`.
 impl From<kimatta_storage::StorageError> for KimattaError {
     fn from(e: kimatta_storage::StorageError) -> Self {
-        KimattaError::Storage {
-            message: e.to_string(),
+        match e {
+            kimatta_storage::StorageError::CorruptDatabase { .. } => KimattaError::Corrupt {
+                message: e.to_string(),
+            },
+            other => KimattaError::Storage {
+                message: other.to_string(),
+            },
         }
     }
 }
@@ -126,6 +140,44 @@ impl From<kimatta_storage::IdError> for KimattaError {
     fn from(e: kimatta_storage::IdError) -> Self {
         KimattaError::Storage {
             message: e.to_string(),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_corrupt_database_maps_to_the_corrupt_variant() {
+        let err: KimattaError = kimatta_storage::StorageError::CorruptDatabase {
+            detail: "file is not a database".to_owned(),
+        }
+        .into();
+        assert!(
+            matches!(err, KimattaError::Corrupt { .. }),
+            "want Corrupt, got {err:?}"
+        );
+    }
+
+    /// Expected-to-pass pin: `NewerSchema` stays `Storage` — its recovery is "update the
+    /// app", not start-fresh, and its `Display` is already user prose that `describeFailure`
+    /// renders verbatim.
+    #[test]
+    fn a_newer_schema_stays_a_storage_error_with_its_prose() {
+        let err: KimattaError = kimatta_storage::StorageError::NewerSchema {
+            found: 11,
+            supported: 10,
+        }
+        .into();
+        match err {
+            KimattaError::Storage { ref message } => {
+                assert!(
+                    message.contains("newer version of the app"),
+                    "got {message:?}"
+                );
+            }
+            other => panic!("want Storage, got {other:?}"),
         }
     }
 }

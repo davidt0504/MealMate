@@ -8,6 +8,9 @@ import 'error.dart';
 
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
+// These functions are ignored because they are not marked as `pub`: `commit_swap`, `ignore_not_found`, `move_if_exists`, `preserved_aside_error`, `recover_original`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `fmt`
+
 String coreVersion() => RustLib.instance.api.crateApiHealthCoreVersion();
 
 /// Opens the SQLite database at `db_path` (creating it), applies migrations, installs it as
@@ -15,6 +18,59 @@ String coreVersion() => RustLib.instance.api.crateApiHealthCoreVersion();
 /// rejected before touching storage. Calling again replaces the connection.
 Future<HealthReport> openDatabase({required String dbPath}) =>
     RustLib.instance.api.crateApiHealthOpenDatabase(dbPath: dbPath);
+
+/// Exports a transactionally consistent copy of the live database to `dest_path` (creating
+/// parent directories) and reports where it landed and which schema version it carries.
+/// The database's own file format is the export format — see
+/// `kimatta_storage::export_database`.
+Future<ExportReport> exportDatabase({required String destPath}) =>
+    RustLib.instance.api.crateApiHealthExportDatabase(destPath: destPath);
+
+/// Replaces the live database at `db_path` with the export at `export_path`, validated
+/// first and staged beside the live file — prepare / stage / verify / commit (MVP-017
+/// AC-4). The overwritten database is kept as `<db_path>.pre-restore` (one generation),
+/// never destroyed; a failure mid-swap puts the original back and reopens it.
+Future<HealthReport> restoreDatabase({
+  required String exportPath,
+  required String dbPath,
+}) => RustLib.instance.api.crateApiHealthRestoreDatabase(
+  exportPath: exportPath,
+  dbPath: dbPath,
+);
+
+/// Moves the (presumed damaged) live database aside as `<db_path>.corrupt-<stamp>` together
+/// with its sidecar files, then opens and installs a fresh database at `db_path`. The
+/// damaged file is renamed, never deleted — deleting it would be silent destruction
+/// (invariant 8), and keeping the journal with it both preserves forensic value and stops
+/// SQLite from rolling an orphaned hot journal back into the fresh database (R0).
+///
+/// `stamp` is supplied by the caller — the UI owns timestamp formatting (compact sortable
+/// `yyyyMMdd-HHmmss`, as export filenames use) — and must be a bare filename fragment.
+Future<HealthReport> resetDatabase({
+  required String dbPath,
+  required String stamp,
+}) => RustLib.instance.api.crateApiHealthResetDatabase(
+  dbPath: dbPath,
+  stamp: stamp,
+);
+
+class ExportReport {
+  final String path;
+  final int schemaVersion;
+
+  const ExportReport({required this.path, required this.schemaVersion});
+
+  @override
+  int get hashCode => path.hashCode ^ schemaVersion.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ExportReport &&
+          runtimeType == other.runtimeType &&
+          path == other.path &&
+          schemaVersion == other.schemaVersion;
+}
 
 class HealthReport {
   final String dbPath;

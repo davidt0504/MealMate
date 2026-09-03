@@ -1085,3 +1085,43 @@ Full review: .orch/redteam-impl-handoff-orch-37-2026-09-02T2127-eb06.md
 - **One user-facing sentence lives in the widget, outside the sampled copy surface** (`lib/features/planning/cover_screen.dart:381`) -- `'Your recipe library could not be read.'` is prose, not a control label, yet it is neither in `cover_copy.dart` nor in `coverCopySamples`, so none of the three invariant-19 whole-surface regexes ever sees it and the count guard cannot detect a string that was never a constant. Distinct from the `coverCopySamples` entry above, which is scoped to unsampled constants *in* `cover_copy.dart`. Fix: move it to `cover_copy.dart` as a named constant and add it to `coverCopySamples`.
   Full review: .orch/redteam-impl-handoff-orch-37-2026-09-02T2127-eb06.md
   **Status:** RESOLVED 2026-09-02 -- the sentence is now `swapLibraryUnavailableCopy` in `cover_copy.dart` and sampled, so all three whole-surface regexes see it. `questionLockedCopy` was added in the same pass and sampled with it; the count guard moved 29 -> 31.
+
+## orch/39 -- 2026-09-02
+
+Source: /home/davidlinux/.claude/reviews/impl-handoff-orch-39-2026-09-02T2310-dff6.md
+Full review: .orch/redteam-impl-handoff-orch-39-2026-09-02T2320-5b75.md
+
+### LOW
+
+- **`commit_swap` destroys the previous `.pre-restore` before anything replaces it** (`rust/src/api/health.rs:118`) -- the one-generation cleanup runs before `rename(db_path, pre)` at line 125, so a restore that fails anywhere up to line 140 deletes the earlier backup generation without creating a new one; on Unix the rename would have replaced it atomically anyway. Fix: drop `remove_file(pre)` and let the rename replace it (keep the explicit `pre_journal` removal), or move both removals after the rename succeeds.
+  Full review: .orch/redteam-impl-handoff-orch-39-2026-09-02T2320-5b75.md
+  **Status:** RESOLVED 2026-09-03 -- `remove_file(pre)` is gone and the rename replaces `pre` atomically; the `pre_journal` removal and the journal move now sit inside the `db_path`-exists branch, with an `else` arm that removes a journal orphaned by an absent database rather than mispairing it with the kept generation.
+
+---
+
+- **Export failures bypass corrupt-error typing** (`rust/crates/kimatta-storage/src/lib.rs:610`) -- `VACUUM INTO` (line 610) and `schema_version` (line 581) use a bare `?` rather than `typed_sqlite`, so page-level damage found during an export surfaces as `KimattaError::Storage` with the raw SQLite string instead of the honest `Corrupt` copy `household_screen.dart` supplies. Fix: `.map_err(typed_sqlite)` on both, matching `open` and `validate_export` in the same file.
+  Full review: .orch/redteam-impl-handoff-orch-39-2026-09-02T2320-5b75.md
+  **Status:** RESOLVED 2026-09-03 -- both sites now route through `typed_sqlite`, pinned by `an_export_of_a_damaged_database_is_typed_as_corrupt`.
+
+---
+
+- **The live database path is constructed independently in two places** (`lib/features/settings/backup_provider.dart:29`) -- `BackupActions._dbPath()` and `healthReportProvider` (`lib/features/settings/health_provider.dart:13`) each build `'${dir.path}${Platform.pathSeparator}kimatta.db'`; if one is ever changed, restore/start-fresh act on a file the app never opens and report success while nothing visible changes. Fix: one exported `localDatabasePath()` called by both.
+  Full review: .orch/redteam-impl-handoff-orch-39-2026-09-02T2320-5b75.md
+  **Status:** RESOLVED 2026-09-03 -- `localDatabasePath()` in `health_provider.dart` is the single spelling; `healthReportProvider`, `restore` and `startFresh` all call it and `BackupActions._dbPath()` is gone.
+
+## orch/39 -- 2026-09-03
+
+Source: /home/davidlinux/.claude/reviews/impl-handoff-orch-39-2026-09-03T0005-e036.md
+Full review: .orch/redteam-impl-handoff-orch-39-2026-09-03T0012-89d3.md
+
+### LOW
+
+- **Post-verify staging cleanup is swallowed and covers only `-journal`** (`rust/src/api/health.rs:99`) -- `let _ = remove_file("{staging}-journal")` is the mirror of the strict three-suffix loop at line 79, but swallows failure and omits `-wal`/`-shm`; `commit_swap`'s assertion checks `{db_path}-wal`, not `{staging}-wal`, so nothing downstream notices. Fix: reuse the `ignore_not_found` + `?` loop shape here.
+  Full review: .orch/redteam-impl-handoff-orch-39-2026-09-03T0012-89d3.md
+  **Status:** RESOLVED 2026-09-03 -- both staging clears are the same strict loop over one `const SIDECARS` list, which every clear/move/put-back site in `health.rs` now drives off; pinned by `a_restore_leaves_no_staging_artefact_behind`.
+
+---
+
+- **Failed `pre_journal` removal mispairs the kept generation** (`rust/src/api/health.rs:136`) -- the `exists` branch renames `db_path` onto `pre` before removing `{pre}-journal`; a non-`NotFound` failure there leaves generation N's database beside generation N-1's journal, which `recover_original`'s unconditional put-back (line 183) then moves next to the restored database (R0). Fix: remove `{pre}-journal` before the rename, so a failure aborts with nothing moved.
+  Full review: .orch/redteam-impl-handoff-orch-39-2026-09-03T0012-89d3.md
+  **Status:** RESOLVED 2026-09-03 -- not by that reorder, which plan review showed destroys the kept generation's journal when the rename then fails. Instead each `{pre}` sidecar is replaced-or-removed *after* the rename (its database is gone by then), and `recover_original` puts back only the sidecars this restore moved, so a foreign journal cannot reach the restored original; pinned by `a_foreign_pre_journal_is_not_carried_back_to_the_original`.

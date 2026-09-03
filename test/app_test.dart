@@ -11,6 +11,8 @@ import 'package:meal_mate/app/app.dart';
 import 'package:meal_mate/app/router.dart';
 import 'package:meal_mate/features/household/household_provider.dart';
 import 'package:meal_mate/features/household/household_screen.dart';
+import 'package:meal_mate/features/settings/backup_copy.dart';
+import 'package:meal_mate/features/settings/backup_provider.dart';
 import 'package:meal_mate/features/settings/health_provider.dart';
 import 'package:meal_mate/src/rust/api/error.dart';
 import 'package:meal_mate/src/rust/api/health.dart';
@@ -962,6 +964,7 @@ Widget harness({
   setPantryMarks,
   FutureOr<CoverCycleOutcomeDto> Function(CoverCycleRequestDto)? cover,
   Future<PlanDecisionOutcomeDto> Function(PlanDecisionRequestDto)? decide,
+  BackupActions? backup,
 }) => ProviderScope(
   overrides: [
     // Unconditional, like the planner's: the Cover route is reachable from Plan, and an
@@ -1020,6 +1023,9 @@ Widget harness({
       (_) async => (unitKinds ?? () => unitKindTokens)(),
     ),
     healthReportProvider.overrideWith((_) => (health ?? () => okReport)()),
+    // Unconditional, like the other bridge seams: the backup buttons live on Settings,
+    // and an un-overridden provider would reach the real bridge and the filesystem.
+    backupActionsProvider.overrideWithValue(backup ?? _FakeBackupActions()),
     householdProvider.overrideWith(
       () => _FakeHouseholdNotifier(household, rename, completeOnboarding),
     ),
@@ -1762,6 +1768,26 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.text('Local database unavailable: disk full'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Settings reports a damaged database honestly', (tester) async {
+    usePixel5(tester);
+    await tester.pumpWidget(
+      harness(
+        initial: '/settings',
+        health: () =>
+            throw const KimattaError.corrupt(message: 'file is not a database'),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.text(
+        'Local database unavailable: '
+        "the local database is damaged and can't be opened",
+      ),
+      findsOneWidget,
+    );
     expect(tester.takeException(), isNull);
   });
 
@@ -6811,6 +6837,337 @@ void main() {
     handle.dispose();
   });
 
+  testWidgets('Export reports where the export landed', (tester) async {
+    usePixel5(tester);
+    final backup = _FakeBackupActions();
+    await tester.pumpWidget(harness(initial: '/settings', backup: backup));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(exportButtonLabel));
+    await tester.pumpAndSettle();
+    expect(backup.exports, 1);
+    expect(find.text(exportedCopy(_fakeExportPath)), findsOneWidget);
+    // The share sheet is offered with the file that was just written.
+    expect(backup.shared, [_fakeExportPath]);
+  });
+
+  testWidgets('Restore names the export, restores and refreshes', (
+    tester,
+  ) async {
+    usePixel5(tester);
+    var healthFetches = 0;
+    final backup = _FakeBackupActions(latest: _fakeExportPath);
+    await tester.pumpWidget(
+      harness(
+        initial: '/settings',
+        health: () {
+          healthFetches++;
+          return okReport;
+        },
+        backup: backup,
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(healthFetches, 1);
+    await tester.tap(find.text(restoreButtonLabel));
+    await tester.pumpAndSettle();
+    expect(
+      find.text(restoreConfirmBody('kimatta-export-20260902-010203.db')),
+      findsOneWidget,
+    );
+    await tester.tap(find.text(restoreConfirmAction));
+    await tester.pumpAndSettle();
+    expect(backup.restores, [_fakeExportPath]);
+    // The invalidation set ran: the health provider re-fetched even though the
+    // household id is unchanged — nothing cascades it.
+    expect(healthFetches, 2);
+    expect(find.text(restoredCopy), findsOneWidget);
+  });
+
+  testWidgets('Restore with no exports says so and restores nothing', (
+    tester,
+  ) async {
+    usePixel5(tester);
+    final backup = _FakeBackupActions();
+    await tester.pumpWidget(harness(initial: '/settings', backup: backup));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(restoreButtonLabel));
+    await tester.pumpAndSettle();
+    expect(find.text(noExportsCopy), findsOneWidget);
+    expect(backup.restores, isEmpty);
+  });
+
+  // Adversarial: a non-corrupt failure must not offer start-fresh — trading
+  // recoverable data for nothing on, say, a disk-full error.
+  testWidgets('a non-corrupt failure offers retry only', (tester) async {
+    usePixel5(tester);
+    await tester.pumpWidget(
+      harness(
+        initial: '/settings',
+        health: () => throw const KimattaError.storage(message: 'disk full'),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text(tryAgainLabel), findsOneWidget);
+    expect(find.text(startFreshLabel), findsNothing);
+  });
+
+  testWidgets('a corrupt database offers retry and a confirmed start fresh', (
+    tester,
+  ) async {
+    usePixel5(tester);
+    var healthFetches = 0;
+    final backup = _FakeBackupActions();
+    await tester.pumpWidget(
+      harness(
+        initial: '/settings',
+        health: () {
+          healthFetches++;
+          if (healthFetches == 1) {
+            throw const KimattaError.corrupt(message: 'file is not a database');
+          }
+          return okReport;
+        },
+        backup: backup,
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text(tryAgainLabel), findsOneWidget);
+    // The recovery buttons sit below the diagnostics tile, off the Pixel-5
+    // viewport; an off-screen tap silently misses.
+    await tester.ensureVisible(find.text(startFreshLabel));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(startFreshLabel));
+    await tester.pumpAndSettle();
+    expect(find.text(startFreshConfirmBody), findsOneWidget);
+    await tester.tap(find.text(startFreshConfirmAction));
+    await tester.pumpAndSettle();
+    expect(backup.freshes, 1);
+    // The reset invalidated the health provider, which now reports the fresh db.
+    expect(healthFetches, 2);
+    expect(find.textContaining('schema v5'), findsOneWidget);
+  });
+
+  // The confirmation dialogs are the only guard between a stray tap and an irreversible
+  // replacement, so the refusing branch is tested as deliberately as the confirming one.
+  testWidgets('Restore cancelled leaves the database alone', (tester) async {
+    usePixel5(tester);
+    var healthFetches = 0;
+    final backup = _FakeBackupActions(latest: _fakeExportPath);
+    await tester.pumpWidget(
+      harness(
+        initial: '/settings',
+        health: () {
+          healthFetches++;
+          return okReport;
+        },
+        backup: backup,
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(restoreButtonLabel));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(TextButton, 'Cancel'));
+    await tester.pumpAndSettle();
+    expect(backup.restores, isEmpty);
+    expect(find.text(restoredCopy), findsNothing);
+    // The invalidation set did not run either: a refused restore swapped nothing.
+    expect(healthFetches, 1);
+  });
+
+  testWidgets('Start fresh cancelled leaves the database alone', (
+    tester,
+  ) async {
+    usePixel5(tester);
+    final backup = _FakeBackupActions();
+    await tester.pumpWidget(
+      harness(
+        initial: '/settings',
+        health: () =>
+            throw const KimattaError.corrupt(message: 'file is not a database'),
+        backup: backup,
+      ),
+    );
+    await tester.pumpAndSettle();
+    // The recovery buttons sit below the diagnostics tile, off the Pixel-5
+    // viewport; an off-screen tap silently misses.
+    await tester.ensureVisible(find.text(startFreshLabel));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(startFreshLabel));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(TextButton, 'Cancel'));
+    await tester.pumpAndSettle();
+    expect(backup.freshes, 0);
+    expect(find.text(startedFreshCopy), findsNothing);
+  });
+
+  /// A dismissal is a refusal, not an unanswered question: `showDialog` completes with
+  /// `null` when the barrier is tapped, and that must not read as consent.
+  testWidgets('dismissing the restore dialog counts as a refusal', (
+    tester,
+  ) async {
+    usePixel5(tester);
+    final backup = _FakeBackupActions(latest: _fakeExportPath);
+    await tester.pumpWidget(harness(initial: '/settings', backup: backup));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(restoreButtonLabel));
+    await tester.pumpAndSettle();
+    expect(find.byType(AlertDialog), findsOneWidget);
+    await tester.tapAt(const Offset(10, 10));
+    await tester.pumpAndSettle();
+    expect(find.byType(AlertDialog), findsNothing);
+    expect(backup.restores, isEmpty);
+    expect(find.text(restoredCopy), findsNothing);
+  });
+
+  // The three destructive `catch` arms had no coverage at all: every backup test drove the
+  // success path, so the failure branches — the only place a user is told a destructive
+  // operation did not happen — were never executed. These three go here, above the
+  // must-be-last test below.
+  testWidgets(
+    'a failed restore reports it and re-fetches the health provider',
+    (tester) async {
+      usePixel5(tester);
+      var healthFetches = 0;
+      const failure = KimattaError.storage(message: 'disk full');
+      final backup = _FakeBackupActions(
+        latest: _fakeExportPath,
+        onRestore: () async => throw failure,
+      );
+      await tester.pumpWidget(
+        harness(
+          initial: '/settings',
+          health: () {
+            healthFetches++;
+            // The restore emptied the connection slot and `recover_original` did not refill
+            // it: the second read of the live database fails where the first succeeded.
+            if (healthFetches > 1) {
+              throw const KimattaError.notOpen();
+            }
+            return okReport;
+          },
+          backup: backup,
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(restoreButtonLabel));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(restoreConfirmAction));
+      await tester.pumpAndSettle();
+
+      expect(backup.restores, [_fakeExportPath]);
+      expect(
+        find.text(describeFailure(failure, subject: 'Restore')),
+        findsOneWidget,
+      );
+      // The invalidation runs on failure too, so the diagnostics tile stops advertising a
+      // database the app can no longer reach and the recovery row appears with it.
+      expect(healthFetches, 2);
+      expect(find.text(tryAgainLabel), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'a failed start fresh reports it and re-fetches the health provider',
+    (tester) async {
+      usePixel5(tester);
+      var healthFetches = 0;
+      const failure = KimattaError.storage(message: 'disk full');
+      final backup = _FakeBackupActions(
+        onStartFresh: () async => throw failure,
+      );
+      await tester.pumpWidget(
+        harness(
+          initial: '/settings',
+          health: () {
+            healthFetches++;
+            throw const KimattaError.corrupt(message: 'file is not a database');
+          },
+          backup: backup,
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text(startFreshLabel));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(startFreshLabel));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(startFreshConfirmAction));
+      await tester.pumpAndSettle();
+
+      expect(backup.freshes, 1);
+      expect(
+        find.text(describeFailure(failure, subject: 'Start fresh')),
+        findsOneWidget,
+      );
+      expect(healthFetches, 2);
+    },
+  );
+
+  // The export succeeded and was reported before the share sheet was offered, so a share
+  // that fails is not a data failure and must not overwrite that message.
+  testWidgets('a failed share leaves the export success message standing', (
+    tester,
+  ) async {
+    usePixel5(tester);
+    final backup = _FakeBackupActions(
+      onShareExport: () async => throw Exception('no share sheet'),
+    );
+    await tester.pumpWidget(harness(initial: '/settings', backup: backup));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(exportButtonLabel));
+    await tester.pumpAndSettle();
+
+    expect(backup.shared, [_fakeExportPath]);
+    expect(find.text(exportedCopy(_fakeExportPath)), findsOneWidget);
+    expect(find.textContaining('Export failed'), findsNothing);
+  });
+
+  // Only one `.pre-restore` generation is kept, so a second confirmed restore would move the
+  // first restore's result into it and destroy the database the user started with. The modal
+  // dialog is no guard: it closes as soon as it is answered.
+  testWidgets('a restore in flight disables the destructive buttons', (
+    tester,
+  ) async {
+    usePixel5(tester);
+    final pending = Completer<HealthReport>();
+    final backup = _FakeBackupActions(
+      latest: _fakeExportPath,
+      onRestore: () => pending.future,
+    );
+    await tester.pumpWidget(harness(initial: '/settings', backup: backup));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(restoreButtonLabel));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(restoreConfirmAction));
+    // Not `pumpAndSettle`: the restore is deliberately still in flight.
+    await tester.pump();
+
+    expect(
+      tester
+          .widget<FilledButton>(
+            find.widgetWithText(FilledButton, restoreButtonLabel),
+          )
+          .onPressed,
+      isNull,
+      reason: 'the button is disabled while the swap is in flight',
+    );
+    await tester.tap(find.text(restoreButtonLabel));
+    await tester.pump();
+    expect(backup.restores, [_fakeExportPath], reason: 'no second restore');
+
+    pending.complete(okReport);
+    await tester.pumpAndSettle();
+    expect(find.text(restoredCopy), findsOneWidget);
+    expect(
+      tester
+          .widget<FilledButton>(
+            find.widgetWithText(FilledButton, restoreButtonLabel),
+          )
+          .onPressed,
+      isNotNull,
+      reason: 'and enabled again once it finishes',
+    );
+  });
+
   // Keep this test last: the assertion it provokes leaves the element tree
   // half-updated, and every test pumped after it in the same file fails on a
   // framework "dependent is not our descendant" assertion (measured).
@@ -6835,4 +7192,54 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
     tester.takeException();
   });
+}
+
+const _fakeExportPath = '/x/exports/kimatta-export-20260902-010203.db';
+
+/// Same seam as the recipe fakes: each call is recorded and then handed to an optional hook,
+/// so a test can make the destructive operations fail (or hang) without the bridge. Recording
+/// happens before the hook runs, so a throwing hook still proves the call was made.
+class _FakeBackupActions extends BackupActions {
+  _FakeBackupActions({
+    this.latest,
+    this.onRestore,
+    this.onStartFresh,
+    this.onShareExport,
+  });
+
+  final String? latest;
+  final Future<HealthReport> Function()? onRestore;
+  final Future<HealthReport> Function()? onStartFresh;
+  final Future<void> Function()? onShareExport;
+  int exports = 0;
+  final List<String> shared = [];
+  final List<String> restores = [];
+  int freshes = 0;
+
+  @override
+  Future<ExportReport> export() async {
+    exports++;
+    return ExportReport(path: _fakeExportPath, schemaVersion: 5);
+  }
+
+  @override
+  Future<void> shareExport(String path) async {
+    shared.add(path);
+    await (onShareExport ?? () async {})();
+  }
+
+  @override
+  Future<String?> latestExport() async => latest;
+
+  @override
+  Future<HealthReport> restore(String exportPath) async {
+    restores.add(exportPath);
+    return (onRestore ?? () async => okReport)();
+  }
+
+  @override
+  Future<HealthReport> startFresh() async {
+    freshes++;
+    return (onStartFresh ?? () async => okReport)();
+  }
 }
