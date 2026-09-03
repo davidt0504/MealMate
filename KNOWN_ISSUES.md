@@ -19,7 +19,7 @@ Full review: /home/davidlinux/.claude/reviews/redteam-mvp003-integration-verify-
 
 ### MEDIUM
 
-- **MVP-024 AC-8 attention measurement is owed by the owner before DEC-003** (`docs/measurements/MVP-024_AC8_ATTENTION.md`, `docs/ROADMAP.md` MVP-024 Done row) -- approved Done 2026-09-02 under D-027 with the record unfilled. Fix: run the four-scenario stopwatch protocol (both arms, median of per-scenario ratios) at the step-40 sitting; an adverse result returns MVP-023 to Draft under D-031.
+- **MVP-024 AC-8 attention measurement is owed by the owner before MVP-022 (bound relaxed from before-DEC-003 by owner decision 2026-09-03)** (`docs/measurements/MVP-024_AC8_ATTENTION.md`, `docs/ROADMAP.md` MVP-024 Done row) -- approved Done 2026-09-02 under D-027 with the record unfilled. Fix: run the four-scenario stopwatch protocol (both arms, median of per-scenario ratios) before MVP-022; an adverse result returns MVP-023 to Draft under D-031.
   **Status:** OPEN
 
 - **MVP-025 AC-4 device benchmark is discharged only by a real-hardware run** (`rust/crates/food-domain/examples/beam_width.rs`, `docs/ROADMAP.md` MVP-025 Done row) -- approved Done 2026-09-02 under D-027 with the host-run numbers verifier-reproduced. Fix: before `MVP-022` beta readiness, run the beam_width example on representative low/mid-range Android hardware and record the numbers; re-tune (B, K) only if the recorded device median wall time (5 runs, 1 warmup, cargo-ndk path per the ROADMAP clause) is unacceptable for interactive use — Score is hardware-independent and is not the trigger.
