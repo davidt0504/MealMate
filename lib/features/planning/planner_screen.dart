@@ -266,7 +266,7 @@ class _PlannerScreenState extends ConsumerState<PlannerScreen> {
           Align(
             alignment: Alignment.centerLeft,
             child: TextButton(
-              onPressed: () => context.go('/plan/cover'),
+              onPressed: () => context.go('/plan/cover?offset=$_offset'),
               child: const Text('Cover My Week'),
             ),
           ),

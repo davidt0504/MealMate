@@ -351,6 +351,15 @@ pub(crate) fn tokens(text: &str) -> Vec<String> {
         .collect()
 }
 
+/// Whether a hard-veto subject can ever match. The matcher works on [`tokens`], not on trimmed
+/// text, so a subject with no alphanumeric character at all (`"🍝"`, `"—"`) tokenises to
+/// nothing and [`contains_phrase`]'s `!phrase.is_empty()` guard rejects it forever. Public —
+/// rather than replicated at each guard — so the write refusal and the read-side malformed
+/// report cannot drift from the matcher they both exist to agree with.
+pub fn is_vetoable(subject: &str) -> bool {
+    !tokens(subject).is_empty()
+}
+
 /// `phrase` (already tokenised) occurs contiguously in `hay`.
 pub(crate) fn contains_phrase(hay: &[String], phrase: &[String]) -> bool {
     !phrase.is_empty() && hay.windows(phrase.len()).any(|w| w == phrase)

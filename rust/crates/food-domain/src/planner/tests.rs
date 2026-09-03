@@ -134,6 +134,7 @@ fn base() -> PlanningSnapshot {
             dining_out_enabled: false,
             hard_vetoes: vec![],
             slot_windows: BTreeMap::from([(MealSlot::Dinner, 40)]),
+            restrictions_reviewed: false,
             unknown_policy_types: vec![],
         },
         recipes: vec![
@@ -203,6 +204,9 @@ fn canonical_text_covers_every_field() {
     v.policies.unknown_policy_types = vec!["food.mystery".to_owned()];
     variants.push(v);
     let mut v = s.clone();
+    v.policies.restrictions_reviewed = true;
+    variants.push(v);
+    let mut v = s.clone();
     v.recipes[0].prep_minutes = None;
     variants.push(v);
     let mut v = s.clone();
@@ -229,7 +233,7 @@ fn canonical_text_covers_every_field() {
     let mut v = s.clone();
     v.pantry_marked = vec![cat("rice")];
     variants.push(v);
-    assert_eq!(variants.len(), 17, "one variant per field");
+    assert_eq!(variants.len(), 18, "one variant per field");
     for (i, v) in variants.iter().enumerate() {
         assert_ne!(v.canonical_text(), text, "variant {i} must change the text");
         assert_ne!(
@@ -2283,6 +2287,73 @@ fn no_restrictions_configured_withholds_verification_claim() {
         .any(|t| t == issue_text(RESTRICTIONS_NOT_CONFIGURED)));
 }
 
+/// §10: reviewed absence is confirmed absence. With the marker set and no restrictions
+/// stored, no restriction check was skipped — the household said there is nothing to check —
+/// so the code is suppressed at both the cycle and the slot level and `Covered` is reachable.
+/// Households with configured restrictions never carried the code and are untouched.
+#[test]
+fn reviewed_and_empty_restrictions_suppress_the_code_and_allow_covered() {
+    let mut s = base();
+    s.restrictions = HouseholdRestrictions::new([]);
+    s.policies.restrictions_reviewed = true;
+    let r = run(&s);
+    assert!(!assumption(&r, RESTRICTIONS_NOT_CONFIGURED));
+    assert!(r.slots.iter().all(|x| {
+        !x.reason_codes
+            .contains(&RESTRICTIONS_NOT_CONFIGURED.to_owned())
+    }));
+    assert_eq!(r.assessment.status, OutcomeStatus::Covered);
+    assert!(r.slots.iter().all(|x| x.state == CoverageState::Covered));
+    // The paired unreviewed household: same fixture family the invariants use. Unreviewed +
+    // empty still withholds the claim (the base-derived pin is
+    // `no_restrictions_configured_withholds_verification_claim`).
+    let f = fixtures::by_name("restrictions_set_and_skipped");
+    let skipped = fixtures::restrictions_skipped_variant(&f);
+    let r_skipped = run(&skipped);
+    assert!(assumption(&r_skipped, RESTRICTIONS_NOT_CONFIGURED));
+    let mut reviewed = skipped.clone();
+    reviewed.policies.restrictions_reviewed = true;
+    assert!(!assumption(&run(&reviewed), RESTRICTIONS_NOT_CONFIGURED));
+}
+
+/// AC-3 at the engine layer, scoped by urgency — `Urgency::High` is what the UI's
+/// "N things need you" counts. Low-value side: `sparse_pantry` carries `PANTRY_INCOMPLETE`,
+/// `RESTRICTIONS_NOT_CONFIGURED` and `PREFERENCES_SPARSE`, and `PREFERENCES_SPARSE` always
+/// raises one Low request — so the honest assertion is zero *High*, not zero requests.
+/// Material side: `restrictions_set_and_skipped` carries an `Other` restriction whose
+/// wording-only match raises a High request (`busy_week` was tried first and raises none:
+/// its over-window preps are steered around, not infeasible). Expected-to-pass: pins the
+/// MVP-023 engine behavior AC-3 builds on, rather than proving a new change.
+#[test]
+fn low_value_uncertainty_raises_no_high_urgency_request_but_material_does() {
+    let low = fixtures::by_name("sparse_pantry");
+    let r_low = run(&low.snapshot);
+    assert!(
+        !r_low.attention.is_empty(),
+        "sparse_pantry still raises its Low request — the High filter must not be vacuous"
+    );
+    assert!(
+        r_low.attention.iter().all(|a| a.urgency != Urgency::High),
+        "low-value uncertainty must not demand attention"
+    );
+    let material = fixtures::by_name("restrictions_set_and_skipped");
+    let r_material = run(&material.snapshot);
+    let high: Vec<_> = r_material
+        .attention
+        .iter()
+        .filter(|a| a.urgency == Urgency::High)
+        .collect();
+    assert!(
+        !high.is_empty(),
+        "restrictions_set_and_skipped must raise a material (High) request; codes: {:?}",
+        r_material
+            .attention
+            .iter()
+            .map(|a| a.reason_codes.clone())
+            .collect::<Vec<_>>()
+    );
+}
+
 #[test]
 fn sparse_preferences_label_the_plan_conservative() {
     let mut s = base();
@@ -2342,11 +2413,13 @@ fn all_four_satisfied_yields_covered() {
 }
 
 /// A hard veto is the household's Tier-0 safety word, so losing one silently is the wrong
-/// failure mode. A blank subject is malformed — reported whether or not the policy is enabled,
-/// which is how the `SLOT_WINDOW` arm already treats its own malformed cases. A *well-formed*
-/// disabled veto stays silently ignored: known, not applied.
+/// failure mode. A subject the matcher can never match is malformed — and the matcher works on
+/// `tokens()`, not on trimmed text, so that is every subject with no alphanumeric character,
+/// not only the blank ones. Reported whether or not the policy is enabled, which is how the
+/// `SLOT_WINDOW` arm already treats its own malformed cases. A *well-formed* disabled veto
+/// stays silently ignored: known, not applied.
 #[test]
-fn an_enabled_blank_subject_veto_is_reported_not_dropped() {
+fn an_enabled_unmatchable_subject_veto_is_reported_not_dropped() {
     let veto = |subject: &str, enabled: bool| {
         Policy::new(
             PolicyId::new("p").unwrap(),
@@ -2359,7 +2432,18 @@ fn an_enabled_blank_subject_veto_is_reported_not_dropped() {
         )
         .unwrap()
     };
-    for (subject, enabled) in [(" ", true), ("", true), (" ", false), ("\u{0b}", true)] {
+    // The last three carry a character but no *token*: `tokens` splits on
+    // `!c.is_alphanumeric()` and drops the empties, so `contains_phrase`'s `!phrase.is_empty()`
+    // guard makes them match nothing forever. `trim()` alone accepts all three.
+    for (subject, enabled) in [
+        (" ", true),
+        ("", true),
+        (" ", false),
+        ("\u{0b}", true),
+        ("🍝", true),
+        ("—", true),
+        ("★", false),
+    ] {
         let parsed = FoodPolicies::from_policies(&[veto(subject, enabled)]);
         assert!(
             parsed.hard_vetoes.is_empty(),
@@ -2375,6 +2459,11 @@ fn an_enabled_blank_subject_veto_is_reported_not_dropped() {
     let off = FoodPolicies::from_policies(&[veto("tofu", false)]);
     assert!(off.hard_vetoes.is_empty());
     assert!(off.unknown_policy_types.is_empty());
+    // The guard tests matchability, not spelling: one alphanumeric token is enough, so a
+    // subject that merely *contains* an unmatchable character is still a real veto.
+    let on = FoodPolicies::from_policies(&[veto("🍝 pasta", true)]);
+    assert_eq!(on.hard_vetoes, vec!["🍝 pasta".to_owned()]);
+    assert!(on.unknown_policy_types.is_empty());
     // And the reported case reaches the user as an assumption, not silence.
     let mut s = base();
     s.policies = FoodPolicies::from_policies(&[veto(" ", true)]);
@@ -2384,6 +2473,53 @@ fn an_enabled_blank_subject_veto_is_reported_not_dropped() {
         .assumptions
         .iter()
         .any(|a| a.as_str() == coverage::UNKNOWN_POLICY_TYPE));
+}
+
+/// The reviewed marker is the household's explicit word that its restriction list is
+/// complete as stored (§10: reviewed absence is confirmed absence). A disabled marker is
+/// well-formed and silently ignored, like a disabled veto: known, not applied.
+#[test]
+fn restrictions_reviewed_policy_sets_the_flag_and_is_never_unknown() {
+    let mark = |enabled: bool| {
+        Policy::new(
+            PolicyId::new("p").unwrap(),
+            HouseholdId::new("h").unwrap(),
+            "food",
+            FoodPolicies::RESTRICTIONS_REVIEWED,
+            BTreeMap::new(),
+            enabled,
+            EvidenceSource::ExplicitUser,
+        )
+        .unwrap()
+    };
+    let on = FoodPolicies::from_policies(&[mark(true)]);
+    assert!(on.restrictions_reviewed);
+    assert!(
+        on.unknown_policy_types.is_empty(),
+        "a known type must not be reported as unknown"
+    );
+    let off = FoodPolicies::from_policies(&[mark(false)]);
+    assert!(!off.restrictions_reviewed);
+    assert!(off.unknown_policy_types.is_empty());
+}
+
+/// The marker line is emitted only when set, so every pre-existing snapshot's canonical
+/// text — and every pinned fixture hash — stays byte-identical, while presence/absence of
+/// the labeled line keeps the encoding injective.
+#[test]
+fn reviewed_marker_changes_canonical_text_and_hash_only_when_set() {
+    let s = base();
+    assert!(
+        !s.canonical_text().contains("policy.restrictions_reviewed"),
+        "unset marker must emit no line"
+    );
+    let mut v = s.clone();
+    v.policies.restrictions_reviewed = true;
+    assert!(v
+        .canonical_text()
+        .contains("policy.restrictions_reviewed=true"));
+    assert_ne!(v.canonical_text(), s.canonical_text());
+    assert_ne!(v.snapshot_hash(), s.snapshot_hash());
 }
 
 /// `PlanningSnapshot`'s fields are public, so a caller other than the loader can build one

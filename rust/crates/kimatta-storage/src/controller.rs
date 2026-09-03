@@ -74,7 +74,15 @@ fn decode_parameters(id: &str, raw: &str) -> Result<BTreeMap<String, String>, St
 /// household is `NoSuchHousehold` for the caller's household rather than hijacked.
 pub fn save_policy(conn: &mut Connection, policy: &Policy) -> Result<(), StorageError> {
     let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
-    require_household(&tx, &policy.household_id)?;
+    save_policy_in(&tx, policy)?;
+    tx.commit()?;
+    Ok(())
+}
+
+/// The body `save_policy` shares with the decision recorder; the caller owns the transaction,
+/// as `append_ledger_entry_in` is shaped.
+pub fn save_policy_in(tx: &Transaction<'_>, policy: &Policy) -> Result<(), StorageError> {
+    require_household(tx, &policy.household_id)?;
     let owner: Option<String> = tx
         .query_row(
             "SELECT household_id FROM policy WHERE id = ?1",
@@ -104,7 +112,25 @@ pub fn save_policy(conn: &mut Connection, policy: &Policy) -> Result<(), Storage
             policy.source.as_str(),
         ],
     )?;
-    tx.commit()?;
+    Ok(())
+}
+
+/// Disables every policy of one type for a household, inside the caller's transaction. The
+/// rows are kept rather than deleted: `list_policies` still returns them, and `save_policy_in`
+/// upserts on id, so a household that says the same thing again flips a row back rather than
+/// leaving a run of dead ones behind it.
+pub fn disable_policies_of_type_in(
+    tx: &Transaction<'_>,
+    household: &HouseholdId,
+    domain: &str,
+    policy_type: &str,
+) -> Result<(), StorageError> {
+    require_household(tx, household)?;
+    tx.execute(
+        "UPDATE policy SET enabled = 0
+         WHERE household_id = ?1 AND domain = ?2 AND policy_type = ?3",
+        params![household.as_str(), domain, policy_type],
+    )?;
     Ok(())
 }
 
@@ -195,6 +221,22 @@ pub fn append_ledger_entry_in(
         ],
     )?;
     Ok(())
+}
+
+/// The household's highest ledger `seq`, 0 when it has none — what a `correct` row's
+/// `corrects_seq` names. Read inside the caller's transaction so the answer cannot go stale
+/// before the correcting row lands.
+pub fn max_ledger_seq_in(
+    tx: &Transaction<'_>,
+    household: &HouseholdId,
+) -> Result<i64, StorageError> {
+    require_household(tx, household)?;
+    let seq: i64 = tx.query_row(
+        "SELECT COALESCE(MAX(seq), 0) FROM controller_ledger WHERE household_id = ?1",
+        params![household.as_str()],
+        |r| r.get(0),
+    )?;
+    Ok(seq)
 }
 
 pub fn append_ledger_entry(conn: &mut Connection, entry: &LedgerEntry) -> Result<(), StorageError> {

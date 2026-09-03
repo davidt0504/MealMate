@@ -801,6 +801,8 @@ pub fn load_planning_cycle(
 /// Replaces the household's whole restriction set in one IMMEDIATE transaction, so a partial
 /// set is never observable — the same shape as [`save_planning_cycle`]. IMMEDIATE because it
 /// reads (`require_household`) before it writes. An empty set is legal and clears the set.
+/// A set that actually changes also retires the household's `food.restrictions_reviewed`
+/// marker, in this same transaction.
 pub fn save_restrictions(
     conn: &mut Connection,
     id: &HouseholdId,
@@ -808,21 +810,40 @@ pub fn save_restrictions(
 ) -> Result<(), StorageError> {
     let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
     require_household(&tx, id)?;
+    // A stored review answers "is this set complete?" about the set that was reviewed. Any
+    // change to the set retires that answer, so the marker is disabled in the same
+    // transaction that changes the set — otherwise a set emptied again later would read as
+    // reviewed and `RESTRICTIONS_NOT_CONFIGURED` would stay suppressed for a state nobody
+    // confirmed. Unchanged saves leave the marker alone: re-saving the same set is not a
+    // change, and clearing it there would re-ask a question the household just answered.
+    //
+    // The guard asks only *whether* the set changed, so it compares raw rows rather than
+    // calling `load_restrictions`: a row this build cannot parse must not abort the save.
+    // Replacing the whole set is the only way to clear such a row — `restriction_from_row`
+    // rejects a `kind` a newer build wrote — and routing the guard through it would have
+    // closed that repair path. Raw equality is identical to the old domain comparison for any
+    // row set this build could have written; it additionally reads as *changed* for an
+    // unparseable row and for stored rows `HouseholdRestrictions::new`'s dedup would collapse.
+    // Both retire the marker, which is the safe direction: re-asking a question, never
+    // suppressing one.
+    let writing = restriction_rows_for(set);
+    if restriction_rows_in(&tx, id)? != writing {
+        disable_policies_of_type_in(
+            &tx,
+            id,
+            "food",
+            planner::FoodPolicies::RESTRICTIONS_REVIEWED,
+        )?;
+    }
     tx.execute(
         "DELETE FROM household_restriction WHERE household_id = ?1",
         params![id.as_str()],
     )?;
-    for (position, restriction) in set.restrictions().iter().enumerate() {
-        let (kind, text) = match restriction {
-            Restriction::Known(kind) => (kind.as_str(), None),
-            Restriction::Other(text) => ("other", Some(text.as_str())),
-        };
+    for (position, kind, text) in &writing {
         tx.execute(
             "INSERT INTO household_restriction (household_id, position, kind, text)
              VALUES (?1, ?2, ?3, ?4)",
-            // `u32`, as `length_days` is: rusqlite binds no `usize`, and the set is bounded
-            // by what a person will type into a checkbox list.
-            params![id.as_str(), position as u32, kind, text],
+            params![id.as_str(), position, kind, text],
         )?;
     }
     tx.commit()?;
@@ -835,6 +856,21 @@ pub fn load_restrictions(
     conn: &Connection,
     id: &HouseholdId,
 ) -> Result<HouseholdRestrictions, StorageError> {
+    let restrictions = restriction_rows_in(conn, id)?
+        .into_iter()
+        .map(|(position, kind, text)| restriction_from_row(id, position as usize, kind, text))
+        .collect::<Result<Vec<_>, StorageError>>()?;
+    Ok(HouseholdRestrictions::new(restrictions))
+}
+
+/// The stored `(position, kind, text)` triples, unparsed and in stored order. Split out of
+/// [`load_restrictions`] so [`save_restrictions`] can ask whether the set changed without
+/// going through `restriction_from_row`, whose refusal would otherwise abort the one
+/// operation that can clear a row this build cannot read.
+fn restriction_rows_in(
+    conn: &Connection,
+    id: &HouseholdId,
+) -> Result<Vec<(u32, String, Option<String>)>, StorageError> {
     let mut stmt = conn.prepare(
         "SELECT position, kind, text FROM household_restriction
          WHERE household_id = ?1 ORDER BY position",
@@ -848,11 +884,22 @@ pub fn load_restrictions(
             ))
         })?
         .collect::<Result<Vec<_>, _>>()?;
-    let restrictions = rows
-        .into_iter()
-        .map(|(position, kind, text)| restriction_from_row(id, position as usize, kind, text))
-        .collect::<Result<Vec<_>, StorageError>>()?;
-    Ok(HouseholdRestrictions::new(restrictions))
+    Ok(rows)
+}
+
+/// The rows [`save_restrictions`] writes for `set`, in the order it writes them: the one place
+/// the domain-to-column mapping lives, so the change guard and the INSERT can never disagree
+/// about what "the same set" means. Positions are `u32`, as `length_days` is — rusqlite binds
+/// no `usize`, and the set is bounded by what a person will type into a checkbox list.
+fn restriction_rows_for(set: &HouseholdRestrictions) -> Vec<(u32, String, Option<String>)> {
+    set.restrictions()
+        .iter()
+        .enumerate()
+        .map(|(position, restriction)| match restriction {
+            Restriction::Known(kind) => (position as u32, kind.as_str().to_owned(), None),
+            Restriction::Other(text) => (position as u32, "other".to_owned(), Some(text.clone())),
+        })
+        .collect()
 }
 
 /// One stored restriction row, back through the domain constructors. A row whose `kind`/`text`
@@ -2091,8 +2138,10 @@ pub fn save_planned_meal(
 }
 
 /// The body `save_planned_meal` and `apply_plan_and_record` share; the caller owns the
-/// transaction, as `set_pantry_mark_in` and `insert_rows` are shaped.
-pub(crate) fn save_planned_meal_in(
+/// transaction, as `set_pantry_mark_in` and `insert_rows` are shaped. Public for the same
+/// reason `load_planning_snapshot_in` is: the decision recorder composes it under one
+/// IMMEDIATE transaction with the ledger append.
+pub fn save_planned_meal_in(
     tx: &Transaction<'_>,
     meal: &PlannedMeal,
     source: WriteSource,
@@ -2190,10 +2239,25 @@ pub fn set_planned_meal_lock(
     locked: bool,
     source: WriteSource,
 ) -> Result<(), StorageError> {
+    let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    set_planned_meal_lock_in(&tx, household, id, locked, source)?;
+    tx.commit()?;
+    Ok(())
+}
+
+/// The body `set_planned_meal_lock` shares with the decision recorder; the caller owns the
+/// transaction. The `Automation` refusal travels with the body: a lock is the user's Tier-0
+/// word wherever the write comes from.
+pub fn set_planned_meal_lock_in(
+    tx: &Transaction<'_>,
+    household: &HouseholdId,
+    id: &PlannedMealId,
+    locked: bool,
+    source: WriteSource,
+) -> Result<(), StorageError> {
     if source == WriteSource::Automation {
         return Err(StorageError::LockedPlannedMeal(id.as_str().to_owned()));
     }
-    let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
     let changed = tx.execute(
         "UPDATE planned_meal SET locked = ?1 WHERE id = ?2 AND household_id = ?3",
         params![locked, id.as_str(), household.as_str()],
@@ -2204,7 +2268,6 @@ pub fn set_planned_meal_lock(
             household: household.as_str().to_owned(),
         });
     }
-    tx.commit()?;
     Ok(())
 }
 
@@ -2225,8 +2288,8 @@ pub fn delete_planned_meal(
 }
 
 /// The body `delete_planned_meal` and `apply_plan_and_record` share; the caller owns the
-/// transaction.
-pub(crate) fn delete_planned_meal_in(
+/// transaction. Public for the decision recorder, like `save_planned_meal_in`.
+pub fn delete_planned_meal_in(
     tx: &Transaction<'_>,
     household: &HouseholdId,
     id: &PlannedMealId,
@@ -4837,6 +4900,112 @@ mod tests {
             HouseholdRestrictions::default()
         );
         assert_eq!(count(&conn, "household_restriction"), 0);
+    }
+
+    /// The reviewed marker, enabled, for `id`.
+    fn reviewed_marker(id: &str) -> Policy {
+        Policy::new(
+            PolicyId::new(format!("{id}:food.restrictions_reviewed")).unwrap(),
+            hid(id),
+            "food",
+            planner::FoodPolicies::RESTRICTIONS_REVIEWED,
+            std::collections::BTreeMap::new(),
+            true,
+            EvidenceSource::ExplicitUser,
+        )
+        .unwrap()
+    }
+
+    fn marker_is_live(conn: &Connection, id: &str) -> bool {
+        planner::FoodPolicies::from_policies(&list_policies(conn, &hid(id), "food").unwrap())
+            .restrictions_reviewed
+    }
+
+    /// A review answers "is this set complete?" about the set that was reviewed, so changing
+    /// the set retires the answer in the same transaction.
+    #[test]
+    fn changing_the_restriction_set_retires_the_reviewed_marker() {
+        let mut conn = open(":memory:").unwrap();
+        seed(&mut conn, "h");
+        save_policy(&mut conn, &reviewed_marker("h")).unwrap();
+        assert!(marker_is_live(&conn, "h"));
+        save_restrictions(&mut conn, &hid("h"), &mixed_set()).unwrap();
+        assert!(!marker_is_live(&conn, "h"));
+    }
+
+    /// The latch the marker used to be: reviewed while empty, a restriction added, then
+    /// removed again. The set is empty exactly as it was, but nobody has confirmed *this*
+    /// emptiness, so `RESTRICTIONS_NOT_CONFIGURED` must be free to fire again.
+    #[test]
+    fn an_emptied_restriction_set_does_not_read_as_reviewed() {
+        let mut conn = open(":memory:").unwrap();
+        seed(&mut conn, "h");
+        save_restrictions(&mut conn, &hid("h"), &HouseholdRestrictions::default()).unwrap();
+        save_policy(&mut conn, &reviewed_marker("h")).unwrap();
+        let peanuts = HouseholdRestrictions::new([Restriction::Known(RestrictionKind::Peanuts)]);
+        save_restrictions(&mut conn, &hid("h"), &peanuts).unwrap();
+        save_restrictions(&mut conn, &hid("h"), &HouseholdRestrictions::default()).unwrap();
+        assert!(load_restrictions(&conn, &hid("h"))
+            .unwrap()
+            .restrictions()
+            .is_empty());
+        assert!(!marker_is_live(&conn, "h"));
+    }
+
+    /// Expected-to-pass: re-saving the same set is not a change, so the marker survives —
+    /// otherwise opening the Restrictions screen and pressing Save would re-ask a question
+    /// the household just answered. And the clear is household-scoped.
+    #[test]
+    fn an_unchanged_save_keeps_the_marker_and_never_crosses_households() {
+        let mut conn = open(":memory:").unwrap();
+        seed(&mut conn, "h1");
+        seed(&mut conn, "h2");
+        save_restrictions(&mut conn, &hid("h1"), &mixed_set()).unwrap();
+        save_policy(&mut conn, &reviewed_marker("h1")).unwrap();
+        save_policy(&mut conn, &reviewed_marker("h2")).unwrap();
+        save_restrictions(&mut conn, &hid("h1"), &mixed_set()).unwrap();
+        assert!(
+            marker_is_live(&conn, "h1"),
+            "an identical set is not a change"
+        );
+        save_restrictions(&mut conn, &hid("h1"), &HouseholdRestrictions::default()).unwrap();
+        assert!(!marker_is_live(&conn, "h1"));
+        assert!(marker_is_live(&conn, "h2"), "h2 said nothing");
+    }
+
+    /// A row a newer build wrote reads back as `CorruptRestriction` (`rust/src/api/recipe.rs`
+    /// seeds exactly this shape), and replacing the whole set is the only operation that can
+    /// clear it. The marker-retire guard must therefore not read the stored set through
+    /// `restriction_from_row`, or the repair path closes on the state it exists to repair.
+    #[test]
+    fn a_restriction_row_this_build_cannot_read_can_still_be_replaced() {
+        let mut conn = open(":memory:").unwrap();
+        seed(&mut conn, "h");
+        raw_restriction(&conn, "h", "sulphites", None);
+        assert!(
+            load_restrictions(&conn, &hid("h")).is_err(),
+            "the starting state is the unreadable one"
+        );
+        save_restrictions(&mut conn, &hid("h"), &mixed_set()).unwrap();
+        assert_eq!(load_restrictions(&conn, &hid("h")).unwrap(), mixed_set());
+    }
+
+    /// An unreadable row is not the set being written, so it counts as a change and the
+    /// reviewed marker retires — the safe direction: re-asking whether the set is complete,
+    /// never suppressing the question for a state nobody confirmed.
+    #[test]
+    fn replacing_an_unreadable_row_retires_the_reviewed_marker() {
+        let mut conn = open(":memory:").unwrap();
+        seed(&mut conn, "h");
+        raw_restriction(&conn, "h", "sulphites", None);
+        save_policy(&mut conn, &reviewed_marker("h")).unwrap();
+        assert!(marker_is_live(&conn, "h"));
+        save_restrictions(&mut conn, &hid("h"), &HouseholdRestrictions::default()).unwrap();
+        assert!(load_restrictions(&conn, &hid("h"))
+            .unwrap()
+            .restrictions()
+            .is_empty());
+        assert!(!marker_is_live(&conn, "h"));
     }
 
     /// The owner's 2026-08-28 scope resolution, pinned: restrictions belong to a household,

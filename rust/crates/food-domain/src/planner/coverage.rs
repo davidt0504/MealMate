@@ -250,7 +250,12 @@ pub fn slot_coverage(
             reason_codes.push(NO_PREP_TIME_ESTIMATES.to_owned());
             tentative = true;
         }
-        if !f.candidate.views.is_empty() && snapshot.restrictions.restrictions().is_empty() {
+        // Suppressed when the household explicitly reviewed its (empty) restriction list:
+        // reviewed absence is confirmed absence, not a skipped check (§10).
+        if !f.candidate.views.is_empty()
+            && snapshot.restrictions.restrictions().is_empty()
+            && !snapshot.policies.restrictions_reviewed
+        {
             reason_codes.push(RESTRICTIONS_NOT_CONFIGURED.to_owned());
             tentative = true;
         }
@@ -299,7 +304,7 @@ pub fn sufficiency(snapshot: &PlanningSnapshot, slots: &[SlotCoverage]) -> Vec<S
         out.push(NO_PREP_TIME_ESTIMATES.to_owned());
     }
     out.push(PANTRY_INCOMPLETE.to_owned());
-    if snapshot.restrictions.restrictions().is_empty() {
+    if snapshot.restrictions.restrictions().is_empty() && !snapshot.policies.restrictions_reviewed {
         out.push(RESTRICTIONS_NOT_CONFIGURED.to_owned());
     }
     let entries: usize = snapshot

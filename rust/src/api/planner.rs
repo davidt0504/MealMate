@@ -185,7 +185,7 @@ pub fn cover_cycle(request: CoverCycleRequestDto) -> Result<CoverCycleOutcomeDto
     crate::db::with(|conn| cover_in(conn, request))
 }
 
-fn status_from_domain(s: OutcomeStatus) -> OutcomeStatusDto {
+pub(crate) fn status_from_domain(s: OutcomeStatus) -> OutcomeStatusDto {
     match s {
         OutcomeStatus::Unresolved => OutcomeStatusDto::Unresolved,
         OutcomeStatus::TentativelyCovered => OutcomeStatusDto::TentativelyCovered,
@@ -341,6 +341,16 @@ fn result_from_domain(r: &kimatta_storage::planner::PlanningResult) -> PlanningR
     }
 }
 
+/// The bound every command carrying `offset_cycles` enforces (`cover_in`, `record_in`).
+pub(crate) const MAX_OFFSET_CYCLES: i32 = 520;
+
+/// The bound's refusal, in the household's words. `describeFailure` renders a `Planning`
+/// message verbatim, so the field name and the number stay in the comments here and out of the
+/// snackbar — the same correction `UnmatchableVetoSubject`, `SwapOntoLockedSlot` and
+/// `DecisionOutsideWindow` carry. Shared
+/// by both call sites so the two cannot drift apart.
+pub(crate) const OFFSET_OUT_OF_RANGE: &str = "that week is too far away to plan";
+
 /// Split out from the command, as `derive_in` is, so it can be tested with more than one
 /// household present. Dates are parsed before storage is touched, so a malformed `today` is
 /// a typed `Planning` error.
@@ -350,6 +360,15 @@ pub(crate) fn cover_in(
 ) -> Result<CoverCycleOutcomeDto, KimattaError> {
     let household_id = HouseholdId::new(request.household_id)?;
     let today = kimatta_storage::parse_civil_date(&request.today)?;
+    // ±520 cycles is ±520 days at the 1-day minimum cycle (~1.4 years) and ±520 weeks at a
+    // 7-day cycle (~10 years): generous for real use, small enough to catch garbage. Checked
+    // by comparison, not `.abs()` — `i32::MIN.abs()` panics. Typed before storage is touched,
+    // like the date parse above.
+    if request.offset_cycles > MAX_OFFSET_CYCLES || request.offset_cycles < -MAX_OFFSET_CYCLES {
+        return Err(KimattaError::Planning {
+            message: OFFSET_OUT_OF_RANGE.to_owned(),
+        });
+    }
     let defaults = SearchParams::default();
     let req = CoverCycleRequest {
         household_id,
@@ -368,9 +387,10 @@ pub(crate) fn cover_in(
         // (`score.rs:103-109`), so there is no overflow or memory path; an absurd value instead
         // makes `near_term` true for every date, applying `NEAR_TERM_CHURN` (-3) uniformly and
         // so effectively freezing the existing plan against change. That is bounded behaviour,
-        // not a bounded number, and a fixed ceiling would be wrong: `offset_cycles` lets a cycle
-        // sit arbitrarily far from `today`, so the meaningful ceiling is the caller's own offset
-        // rather than a day count.
+        // not a bounded number, and a fixed ceiling would still be wrong: even inside the
+        // ±520-cycle bound above, `offset_cycles` can place a window years from `today`
+        // (520 × 31-day cycles ≈ 44 years), so the meaningful ceiling is the caller's own
+        // offset rather than a day count.
         params: SearchParams {
             beam_width: request
                 .beam_width
@@ -515,6 +535,55 @@ mod tests {
             candidates_per_slot: None,
             commitment_horizon_days: None,
         }
+    }
+
+    /// KNOWN_ISSUES pairing: `offset_cycles` crosses from Dart unvalidated. ±520 cycles is
+    /// ±520 days at the 1-day minimum cycle (~1.4 years) and ±520 weeks at a 7-day cycle
+    /// (~10 years) — generous for real use, small enough to catch garbage.
+    #[test]
+    fn offset_cycles_beyond_the_bound_is_a_typed_planning_error() {
+        let mut conn = open_seeded(&["h"]);
+        for offset in [521, -521, i32::MAX, i32::MIN] {
+            let err = cover_in(
+                &mut conn,
+                CoverCycleRequestDto {
+                    offset_cycles: offset,
+                    ..request("h", false)
+                },
+            )
+            .unwrap_err();
+            assert!(
+                matches!(&err, KimattaError::Planning { message }
+                    if message == OFFSET_OUT_OF_RANGE),
+                "{offset}: {err:?}"
+            );
+        }
+        // Nothing was rejected before the bound was read: no ledger row landed.
+        assert!(list_ledger_entries(&conn, &hid("h")).unwrap().is_empty());
+        // At the bound itself the request passes through to normal behavior.
+        let out = cover_in(
+            &mut conn,
+            CoverCycleRequestDto {
+                offset_cycles: 520,
+                ..request("h", false)
+            },
+        )
+        .unwrap();
+        assert!(!out.ledger_entry_id.is_empty());
+    }
+
+    /// Independent of either call site: `describeFailure` renders a `Planning` message
+    /// verbatim, so the refusal itself must carry no engine vocabulary. Asserted on the
+    /// constant rather than on a returned error, so re-introducing the field name or the
+    /// number fails here even if both call sites stop using it.
+    #[test]
+    fn the_offset_refusal_carries_no_engine_vocabulary() {
+        assert!(!OFFSET_OUT_OF_RANGE.contains("offset_cycles"));
+        assert!(!OFFSET_OUT_OF_RANGE.contains('_'));
+        assert!(
+            !OFFSET_OUT_OF_RANGE.chars().any(|c| c.is_ascii_digit()),
+            "{OFFSET_OUT_OF_RANGE:?}"
+        );
     }
 
     #[test]

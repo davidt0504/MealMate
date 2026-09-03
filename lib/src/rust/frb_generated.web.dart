@@ -6,6 +6,7 @@
 // Static analysis wrongly picks the IO variant, thus ignore this
 // ignore_for_file: argument_type_not_assignable
 
+import 'api/decisions.dart';
 import 'api/error.dart';
 import 'api/health.dart';
 import 'api/household.dart';
@@ -61,6 +62,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   IngredientRefDto dco_decode_box_autoadd_ingredient_ref_dto(dynamic raw);
+
+  @protected
+  PlanDecisionRequestDto dco_decode_box_autoadd_plan_decision_request_dto(
+    dynamic raw,
+  );
 
   @protected
   PlannedMealDto dco_decode_box_autoadd_planned_meal_dto(dynamic raw);
@@ -261,6 +267,15 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   PantryEntryDto dco_decode_pantry_entry_dto(dynamic raw);
 
   @protected
+  PlanDecisionDto dco_decode_plan_decision_dto(dynamic raw);
+
+  @protected
+  PlanDecisionOutcomeDto dco_decode_plan_decision_outcome_dto(dynamic raw);
+
+  @protected
+  PlanDecisionRequestDto dco_decode_plan_decision_request_dto(dynamic raw);
+
+  @protected
   PlannedMealDto dco_decode_planned_meal_dto(dynamic raw);
 
   @protected
@@ -386,6 +401,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   IngredientRefDto sse_decode_box_autoadd_ingredient_ref_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  PlanDecisionRequestDto sse_decode_box_autoadd_plan_decision_request_dto(
     SseDeserializer deserializer,
   );
 
@@ -642,6 +662,19 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   PantryEntryDto sse_decode_pantry_entry_dto(SseDeserializer deserializer);
 
   @protected
+  PlanDecisionDto sse_decode_plan_decision_dto(SseDeserializer deserializer);
+
+  @protected
+  PlanDecisionOutcomeDto sse_decode_plan_decision_outcome_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  PlanDecisionRequestDto sse_decode_plan_decision_request_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   PlannedMealDto sse_decode_planned_meal_dto(SseDeserializer deserializer);
 
   @protected
@@ -791,6 +824,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_box_autoadd_ingredient_ref_dto(
     IngredientRefDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_plan_decision_request_dto(
+    PlanDecisionRequestDto self,
     SseSerializer serializer,
   );
 
@@ -1118,6 +1157,24 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_pantry_entry_dto(
     PantryEntryDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_plan_decision_dto(
+    PlanDecisionDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_plan_decision_outcome_dto(
+    PlanDecisionOutcomeDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_plan_decision_request_dto(
+    PlanDecisionRequestDto self,
     SseSerializer serializer,
   );
 

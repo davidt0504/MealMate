@@ -7,8 +7,8 @@ use std::collections::BTreeMap;
 use household_core::{HouseholdId, MemberId, Policy};
 
 use crate::{
-    format_civil_date, CivilDate, HouseholdRestrictions, IngredientRef, MealComponent, MealScope,
-    MealSlot, MemberPreferences, PlannedMeal, RecipeId, Restriction, StarterRecipe,
+    format_civil_date, is_vetoable, CivilDate, HouseholdRestrictions, IngredientRef, MealComponent,
+    MealScope, MealSlot, MemberPreferences, PlannedMeal, RecipeId, Restriction, StarterRecipe,
 };
 
 /// Search knobs. The defaults are this card's choices, recorded in the card's decision gates
@@ -41,12 +41,16 @@ pub struct FoodPolicies {
     pub hard_vetoes: Vec<String>,
     /// Minutes available per slot, when the household has said so.
     pub slot_windows: BTreeMap<MealSlot, u32>,
+    /// The household explicitly reviewed its restriction list and confirmed it is complete
+    /// as stored (§10: reviewed absence is confirmed absence, not a skipped check).
+    pub restrictions_reviewed: bool,
     pub unknown_policy_types: Vec<String>,
 }
 
 impl FoodPolicies {
     pub const DINING_OUT: &'static str = "food.dining_out";
     pub const HARD_VETO: &'static str = "food.hard_veto";
+    pub const RESTRICTIONS_REVIEWED: &'static str = "food.restrictions_reviewed";
     pub const SLOT_WINDOW: &'static str = "food.slot_window";
 
     /// Disabled policies are known but not applied; a malformed parameter set on a known
@@ -61,15 +65,19 @@ impl FoodPolicies {
             }
             match policy.policy_type.as_str() {
                 Self::DINING_OUT => out.dining_out_enabled |= policy.enabled,
-                // A blank subject is malformed, not "known but not applied": it is reported
-                // whether or not the policy is enabled, which is how the `SLOT_WINDOW` arm
-                // below already treats its own malformed cases. Only a *well-formed* disabled
-                // policy is silently ignored.
+                Self::RESTRICTIONS_REVIEWED => out.restrictions_reviewed |= policy.enabled,
+                // A subject the matcher can never match is malformed, not "known but not
+                // applied": it is reported whether or not the policy is enabled, which is how
+                // the `SLOT_WINDOW` arm below already treats its own malformed cases. Only a
+                // *well-formed* disabled policy is silently ignored. The test is `is_vetoable`,
+                // not `trim().is_empty()`, because `veto_hit` matches through `tokens` — a
+                // subject with no alphanumeric character survives a trim and then matches
+                // nothing for the life of the row.
                 Self::HARD_VETO => match policy.parameters.get("subject") {
-                    Some(subject) if policy.enabled && !subject.trim().is_empty() => {
+                    Some(subject) if policy.enabled && is_vetoable(subject) => {
                         out.hard_vetoes.push(subject.trim().to_owned());
                     }
-                    Some(subject) if subject.trim().is_empty() => {
+                    Some(subject) if !is_vetoable(subject) => {
                         out.unknown_policy_types.push(policy.policy_type.clone());
                     }
                     Some(_) => {}
@@ -230,6 +238,12 @@ impl PlanningSnapshot {
                     .map(|(s, m)| format!("{}:{m}", s.as_str())),
             ),
         );
+        // Emitted only when set: every pre-existing snapshot's canonical text — and every
+        // pinned fixture hash — stays byte-identical, and presence/absence of the labeled
+        // line keeps the encoding injective.
+        if self.policies.restrictions_reviewed {
+            line("policy.restrictions_reviewed", "true".to_owned());
+        }
         line(
             "policy.unknown",
             join(self.policies.unknown_policy_types.iter().cloned()),
@@ -333,7 +347,9 @@ pub(crate) fn component_text(c: &MealComponent) -> String {
     }
 }
 
-pub(crate) fn components_text(components: &[MealComponent]) -> String {
+/// Public alongside the DTO layer's needs: the decision recorder's ledger payload names the
+/// swapped components in exactly the shape every plan text and rejection uses.
+pub fn components_text(components: &[MealComponent]) -> String {
     components
         .iter()
         .map(component_text)

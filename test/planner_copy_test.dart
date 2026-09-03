@@ -76,7 +76,12 @@ void main() {
       r'contains no|ok for|okay for|cleared)\b',
       caseSensitive: false,
     );
+    // Size pinned for the same reason `cover_copy_test.dart` pins its own: the list is
+    // hand-maintained and this regex iterates only it, so a sample lost in a merge shrinks the
+    // surface without failing anything. It cannot see a new unsampled constant in
+    // `planner_copy.dart`; that residual is tracked alongside the cover one.
     expect(plannerCopySamples, isNotEmpty);
+    expect(plannerCopySamples.length, 36);
     for (final sample in plannerCopySamples) {
       expect(assurance.hasMatch(sample), isFalse, reason: sample);
     }
