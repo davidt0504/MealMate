@@ -886,7 +886,7 @@ Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-orch-33-2026-
 
 - **`KimattaError::Planner` is a dead variant already frozen into the FFI contract** (`rust/src/api/error.rs:23`) -- nothing constructs it: grepping `rust/src/` and `lib/features/` returns the definition plus three machine-generated `frb_generated.rs` arms (:1764, :3382, :4460) and nothing else, and the `From<ApplicationError>` impl at :30-36 is exhaustive over a one-variant enum with no catch-all. Its own doc concedes it is "reserved for planner-specific failures the application layer may grow". It generated ~60 lines of freezed Dart and an unreachable arm in `describeFailure` (`lib/features/household/household_screen.dart:43-45`). Fix: delete the variant and its Dart arm and regenerate -- cheap now, a breaking change to a Dart surface once MVP-024 ships against it.
   Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-orch-33-2026-09-02T1158-e249.md
-  **Status:** OPEN
+  **Status:** RESOLVED 2026-09-02 (MVP-024) -- already fixed before this card: `rust/src/api/error.rs` carries no `Planner` variant (verified by grep; variants are InvalidPath/NotOpen/Storage/Planning/Recipe/Restriction/PlannedMeal/Shopping) and `describeFailure` has no such arm.
 
 ---
 
@@ -952,7 +952,7 @@ Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-orch-33-2026-
 
 - **Bridge keeps `LOCK_CONFLICT` in `reason_codes` while dropping its rejections** (`rust/src/api/planner.rs:321`) -- the filter strips every `LOCK_CONFLICT` row from `PlanningResultDto.rejections`, but `planner/mod.rs:246` still chains the code into `assessment.reason_codes` and nothing filters it at the bridge. A Dart consumer indexing `rejections` by code finds zero rows, and `issue_text("LOCK_CONFLICT")` is `""` so there is no copy either. MVP-024 is the first UI that could trip on it. Fix: filter the code out of the DTO's `reason_codes`, or document on `PlanningResultDto.rejections` that `reason_codes` is a superset.
   Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-orch-33-2026-09-02T1401-4b38.md
-  **Status:** OPEN
+  **Status:** OPEN -- re-deferred 2026-09-02 (MVP-024), not mooted: the Rust-layer contract oddity remains (the field's contents are unchanged and any other consumer still sees it), but MVP-024's UI never reads `result.reason_codes` (a documented provider rule in `lib/features/planning/cover_provider.dart`), so no current consumer misbehaves. A Rust-side filter belongs with whichever later card first renders reason codes; re-scoped to that card.
 
 ## orch/33 -- 2026-09-02
 
@@ -1010,3 +1010,78 @@ Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-orch-35-2026-
 - **`by_name` rebuilds every fixture per call; the skipped-restrictions variant is never planned** (`rust/crates/food-domain/src/planner/fixtures/mod.rs:64`) -- `by_name` calls `all()` (line 65), so `fixture_shapes_hold`'s eleven lookups build 121 fixtures including 48-recipe `high_variety_household`. Separately `restrictions_skipped_variant` (line 96) has one caller (`invariant_tests.rs:286`) that only asserts its own shape; no invariant and not `beam_width.rs` ever plans it, so `fixtures/README.md:22`'s "tests, bench, §22" reuse cell overstates it. Fix: match-then-build or `OnceLock` in `by_name`; run one invariant over the variant or narrow the README cell.
   Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-orch-35-2026-09-02T1736-f8f4.md
   **Status:** RESOLVED 2026-09-02 -- `by_name` builds once via `OnceLock` (chosen over match-then-build, which would duplicate the eleven-name list; `all()` stays uncached so `fixtures_are_deterministic` still compares two independent builds), and the README's reuse and shape cells for that row now say the skipped variant is shape-asserted only.
+
+## orch/37 -- 2026-09-02
+
+Source: MVP-024 implementation (execute-plan step 12 dispositions).
+
+### LOW
+
+- **The declined-apply distinction never surfaces in any UI** -- `ACTION_DECLINED` is written to the ledger (`kimatta-application/src/lib.rs`, pinned by `a_declined_apply_is_distinguishable_from_a_preview`), and MVP-024's cover screen re-renders honestly from the returned `applied: false` outcome, but no screen tells the user "your apply was refused" in words distinct from an ordinary needs-attention preview. Residual of the resolved `KNOWN_ISSUES.md` `selected_action` entry, recorded as new rather than re-deferred. Fix: distinct copy on the `applied: false` path of an accept, with whichever card next touches cover-screen copy.
+  **Status:** OPEN
+
+- **Cover My Week plans the whole window at offset 0, past-dated empty slots included** (decision note, not a defect) -- MVP-024 kept MVP-023's tested whole-window behavior (`changed_slots == 7` in the native cover test; matches the MVP-013 grid, which renders the full window). Observed consequence: invoking Cover mid-cycle fills empty slots dated before `today` in the current window. Recorded as the closure of MVP-013's open note on the question; revisit only if a real household complains about backfilled past days.
+  **Status:** OPEN
+
+## orch/37 -- 2026-09-02
+
+Source: /home/davidlinux/.claude/reviews/impl-handoff-orch-37-2026-09-02T1936-1e59.md
+Full review: .orch/redteam-impl-handoff-orch-37-2026-09-02T1949-115e.md
+
+### LOW
+
+- **`acceptedCopy` is defined and sampled but never rendered** (`lib/features/planning/cover_copy.dart:56`) -- `'Plan written.'` exists only at its definition and in `test/cover_copy_test.dart:25`'s sample list; `cover_screen.dart`'s accepted path (line 81) renders the shopping link alone. Being in the sample list makes the dead constant look exercised. Fix: render it beside the shopping link -- the accepted state currently has no textual confirmation -- or delete it and its sample.
+  Full review: .orch/redteam-impl-handoff-orch-37-2026-09-02T1949-115e.md
+  **Status:** OPEN
+
+---
+
+- **Unguarded `setState` after an await boundary in the cover screen** (`lib/features/planning/cover_screen.dart:302`) -- `_accept` (:302) and `_decide` (:314) open with an unguarded `setState(() => _busy = true)` while every other `setState` in the file is `mounted`-guarded (:305, :309, :320). Both are reached after an await that can outlive the route (`_openSwapPicker` :399, `_confirmVeto` :425), so a decision returning into a disposed state throws. Fix: `if (!mounted) return;` before the opening `setState` in both.
+  Full review: .orch/redteam-impl-handoff-orch-37-2026-09-02T1949-115e.md
+  **Status:** OPEN
+
+---
+
+- **The cover screen's error branch has no widget test** (`lib/features/planning/cover_screen.dart:44`) -- the `AsyncError` arm renders `describeFailure` plus a "Try again" that invalidates the provider; none of the eight cover widget tests (`test/app_test.dart:1183-1391`) put the provider in an error state. The planner's equivalent branch does have one (`test/app_test.dart:5597`), so the gap is against the file's own convention. Fix: mirror that test -- a throwing `cover` seam, assert the `describeFailure` text, tap "Try again" and assert the seam is re-invoked.
+  Full review: .orch/redteam-impl-handoff-orch-37-2026-09-02T1949-115e.md
+  **Status:** OPEN
+
+## orch/37 -- 2026-09-02
+
+Source: /home/davidlinux/.claude/reviews/impl-handoff-orch-37-2026-09-02T2033-1a2c.md
+Full review: .orch/redteam-impl-handoff-orch-37-2026-09-02T2041-c699.md
+
+### LOW
+
+- **`?offset=` outside i32 truncates silently past the ±520 bound** (`lib/app/router.dart:78`) -- `int.tryParse` yields a 64-bit int that reaches `sse_encode_i_32` -> `putInt32`, which keeps the low 32 bits without throwing, so `?offset=4294967297` narrows to `1`, passes `MAX_OFFSET_CYCLES`, and previews a window the URL did not ask for. Fix: clamp the parsed offset to `[-520, 520]` in the route builder.
+  Full review: .orch/redteam-impl-handoff-orch-37-2026-09-02T2041-c699.md
+  **Status:** RESOLVED 2026-09-02 -- `coverOffset` in `lib/app/router.dart` saturates the parsed value to the i32 range before it crosses, so an out-of-range deep link can no longer narrow into an unrelated in-range window. Deliberately *not* the clamp to `[-520, 520]` this entry proposed: clamping to the bound would silently move the user to week 520, whereas saturating hands the intent to the bound, which now refuses in prose ("that week is too far away to plan"). Pinned by the `coverOffset` group in `test/app_test.dart`, including a case asserting `'1000'` is *not* clamped.
+
+---
+
+- **`RESTRICTIONS_NOT_CONFIGURED` is rendered twice on the same screen** (`lib/features/planning/cover_screen.dart:110`) -- the reviewed-restrictions card and `assumptionLines` (:73) both fire on that code, so the household reads the same fact as an actionable card and again inside "What we couldn't check". Fix: add the code to `assumptionCopy`'s deliberately-unmapped set now that the reviewed row owns the message, or filter it from `assumptionLines` while the row shows.
+  Full review: .orch/redteam-impl-handoff-orch-37-2026-09-02T2041-c699.md
+  **Status:** OPEN
+
+---
+
+- **`coverCopySamples` has no completeness guard** (`test/cover_copy_test.dart:7`) -- the list is hand-maintained and the two invariant-19 regexes iterate only it; `isNotEmpty` is the sole structural assertion, so a constant added to `cover_copy.dart` and not to the list escapes both the safety and the reversal check silently. Fix: assert a count with a comment naming why, or derive the sample list from one exported map the widgets also read.
+  Full review: .orch/redteam-impl-handoff-orch-37-2026-09-02T2041-c699.md
+  **Status:** OPEN 2026-09-02, narrowed -- the count guard is now asserted in both suites (`coverCopySamples.length == 31`, `plannerCopySamples.length == 36`), which pins each list against erosion. It does **not** close the stated failure scenario: a new constant added to `cover_copy.dart` and never sampled leaves the count unchanged, and Dart has no reflection over a library's top-level constants. Only the second direction -- deriving the samples from one exported map the widgets also read -- catches that, and it is a production-copy restructure across `cover_copy.dart`, `cover_screen.dart`, `planner_copy.dart` and `planner_screen.dart`. That restructure is what remains open here.
+
+## orch/37 -- 2026-09-02
+
+Source: /home/davidlinux/.claude/reviews/impl-handoff-orch-37-2026-09-02T2117-c7db.md
+Full review: .orch/redteam-impl-handoff-orch-37-2026-09-02T2127-eb06.md
+
+### LOW
+
+- **The Cover screen's decision-failure snackbar is untested** (`lib/features/planning/cover_screen.dart:334`) -- no test makes the `decide:` hook throw, so `_decide`/`_accept`'s `catch -> _report` and the `_busy` release in `finally` are never exercised, on a screen whose three refusals (`BlankVetoSubject`, `DecisionOutsideWindow`, `LockedPlannedMeal`) are all user-visible. Fix: one widget test with a throwing `decide:` hook asserting `find.byType(SnackBar)` carries `describeFailure`'s prose, as the pantry and household screens already do.
+  Full review: .orch/redteam-impl-handoff-orch-37-2026-09-02T2127-eb06.md
+  **Status:** RESOLVED 2026-09-02 -- `a refused decision surfaces as a snackbar and frees the screen` (`test/app_test.dart`) throws from the `decide:` hook, asserts the snackbar carries `describeFailure`'s prose, and asserts the tile's Swap is re-enabled afterwards (the `finally` half). Two of the three refusals this entry names have since changed identity in the same pass: `BlankVetoSubject` is now `UnmatchableVetoSubject`, and `LockedPlannedMeal` no longer reaches this screen -- the locked swap is refused as `ApplicationError::SwapOntoLockedSlot` and mapped to prose.
+
+---
+
+- **One user-facing sentence lives in the widget, outside the sampled copy surface** (`lib/features/planning/cover_screen.dart:381`) -- `'Your recipe library could not be read.'` is prose, not a control label, yet it is neither in `cover_copy.dart` nor in `coverCopySamples`, so none of the three invariant-19 whole-surface regexes ever sees it and the count guard cannot detect a string that was never a constant. Distinct from the `coverCopySamples` entry above, which is scoped to unsampled constants *in* `cover_copy.dart`. Fix: move it to `cover_copy.dart` as a named constant and add it to `coverCopySamples`.
+  Full review: .orch/redteam-impl-handoff-orch-37-2026-09-02T2127-eb06.md
+  **Status:** RESOLVED 2026-09-02 -- the sentence is now `swapLibraryUnavailableCopy` in `cover_copy.dart` and sampled, so all three whole-surface regexes see it. `questionLockedCopy` was added in the same pass and sampled with it; the count guard moved 29 -> 31.

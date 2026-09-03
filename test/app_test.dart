@@ -1,11 +1,14 @@
 import 'dart:async';
 
+import 'package:flutter_rust_bridge/flutter_rust_bridge.dart' show Int64List;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:meal_mate/app/app.dart';
+import 'package:meal_mate/app/router.dart';
 import 'package:meal_mate/features/household/household_provider.dart';
 import 'package:meal_mate/features/household/household_screen.dart';
 import 'package:meal_mate/features/settings/health_provider.dart';
@@ -29,6 +32,10 @@ import 'package:meal_mate/src/rust/api/recipe.dart';
 import 'package:meal_mate/src/rust/api/restrictions.dart';
 import 'package:meal_mate/src/rust/api/starter.dart';
 import 'package:meal_mate/features/recipes/starter_provider.dart';
+import 'package:meal_mate/features/planning/cover_copy.dart';
+import 'package:meal_mate/features/planning/cover_provider.dart';
+import 'package:meal_mate/src/rust/api/decisions.dart';
+import 'package:meal_mate/src/rust/api/planner.dart';
 import 'package:meal_mate/features/shopping/shopping_copy.dart';
 import 'package:meal_mate/features/shopping/shopping_provider.dart';
 import 'package:meal_mate/src/rust/api/shopping.dart';
@@ -953,8 +960,13 @@ Widget harness({
   Future<void> Function(String, String)? resetShopping,
   Future<List<IngredientRefDto>> Function(List<IngredientRefDto>, bool)?
   setPantryMarks,
+  FutureOr<CoverCycleOutcomeDto> Function(CoverCycleRequestDto)? cover,
+  Future<PlanDecisionOutcomeDto> Function(PlanDecisionRequestDto)? decide,
 }) => ProviderScope(
   overrides: [
+    // Unconditional, like the planner's: the Cover route is reachable from Plan, and an
+    // un-overridden provider would reach the real bridge.
+    coverProvider.overrideWith(() => _FakeCoverNotifier(cover, decide)),
     // Unconditional, as the planner override is: the destinations, restoration,
     // accessibility and text-scale tests all visit Shopping.
     shoppingProvider.overrideWith(
@@ -1030,6 +1042,89 @@ Widget harness({
   child: App(initialLocation: initial),
 );
 
+/// A Cover outcome, defaults benign: one covered slot, no attention, quiet assumptions.
+CoverCycleOutcomeDto coverOutcome({
+  OutcomeStatusDto status = OutcomeStatusDto.covered,
+  List<SlotCoverageDto> slots = const [
+    SlotCoverageDto(
+      date: '2026-08-29',
+      slot: MealSlotDto.dinner,
+      state: CoverageStateDto.covered,
+      components: [MealComponentDto(kind: 'recipe', recipeId: 'r-1')],
+      reasonCodes: [],
+    ),
+  ],
+  List<AttentionRequestDto> attention = const [],
+  List<String> assumptions = const ['PANTRY_INCOMPLETE'],
+  bool applied = false,
+}) => CoverCycleOutcomeDto(
+  result: PlanningResultDto(
+    algorithmVersion: 2,
+    snapshotHash: 'aaaaaaaaaaaaaaaa',
+    status: status,
+    horizonFrom: '2026-08-29',
+    horizonTo: '2026-09-04',
+    slots: slots,
+    proposed: const [],
+    rejections: const [],
+    unresolvedIssues: const [],
+    assumptions: assumptions,
+    reasonCodes: const [],
+    proposals: const [],
+    attention: attention,
+    search: const SearchTraceDto(
+      beamWidth: 8,
+      candidatesPerSlot: 12,
+      slotOrder: 'chronological',
+      statesScored: 1,
+    ),
+    scoreTiers: Int64List(6),
+  ),
+  ledgerEntryId: 'le-1',
+  applied: applied,
+  changedSlots: applied ? 1 : 0,
+);
+
+AttentionRequestDto attentionRequest({
+  String id = 'food:infeasible:2026-08-29:dinner',
+  UrgencyDto urgency = UrgencyDto.high,
+  List<String> options = const [],
+  List<String> codes = const ['PLAN_INFEASIBLE'],
+}) => AttentionRequestDto(
+  id: id,
+  controllerId: 'food',
+  urgency: urgency,
+  decisionBenefitBand: BandDto.high,
+  estimatedEffortBand: BandDto.low,
+  options: options,
+  reasonCodes: codes,
+);
+
+/// The Cover seams, faked like every other notifier: `cover` maps `apply` to an outcome;
+/// `decide` captures the decision requests the screen issues.
+class _FakeCoverNotifier extends CoverNotifier {
+  _FakeCoverNotifier(this._cover, this._decide);
+
+  final FutureOr<CoverCycleOutcomeDto> Function(CoverCycleRequestDto)? _cover;
+  final Future<PlanDecisionOutcomeDto> Function(PlanDecisionRequestDto)?
+  _decide;
+
+  @override
+  Future<CoverCycleOutcomeDto> runCover(CoverCycleRequestDto request) async =>
+      (_cover ?? (_) => coverOutcome())(request);
+
+  @override
+  Future<PlanDecisionOutcomeDto> recordDecision(
+    PlanDecisionRequestDto request,
+  ) {
+    final fake = _decide;
+    if (fake == null) {
+      throw StateError('this test records a decision without a `decide:` hook');
+    }
+    return fake(request);
+  }
+}
+
 const labels = ['Recipes', 'Plan', 'Pantry', 'Shopping', 'Settings'];
 
 /// Upper bound for the traversal test. The bar is entered one press after the
@@ -1075,6 +1170,31 @@ void useTallView(WidgetTester tester) {
 }
 
 void main() {
+  // `?offset=` is the only place a String becomes a cycle offset, and the value crosses to
+  // Rust as an i32: `sse_encode_i_32` is `putInt32`, which keeps the low 32 bits silently.
+  // Saturating is what stops an out-of-range deep link from previewing an unrelated window.
+  group('coverOffset', () {
+    test('an unreadable value is the active cycle, as before', () {
+      expect(coverOffset(null), 0);
+      expect(coverOffset(''), 0);
+      expect(coverOffset('abc'), 0);
+    });
+
+    test('an in-range value passes through untouched', () {
+      expect(coverOffset('-3'), -3);
+      // Past the ±520 bound but inside i32: deliberately *not* clamped here, so the bridge
+      // still refuses it in prose rather than the route silently moving the user to week 520.
+      expect(coverOffset('1000'), 1000);
+    });
+
+    test('a value outside i32 saturates rather than narrowing', () {
+      // Unsaturated these truncate to 1 and -1 — an in-range window the URL never asked for,
+      // which then passes the ±520 bound.
+      expect(coverOffset('4294967297'), 2147483647);
+      expect(coverOffset('-4294967297'), -2147483648);
+    });
+  });
+
   testWidgets('all five destinations are reachable', (tester) async {
     usePixel5(tester);
     await tester.pumpWidget(harness());
@@ -1096,11 +1216,489 @@ void main() {
     await tester.tap(find.text('Cover My Week'));
     await tester.pumpAndSettle();
     expect(title('Cover My Week'), findsOneWidget);
-    expect(find.textContaining('MVP-024'), findsOneWidget);
+    // The real result view (AC-1): a coherent preview from one action, no generate step.
+    expect(find.text(coveredCopy), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('cover:2026-08-29:dinner')),
+      findsOneWidget,
+    );
 
     await tester.tap(find.byType(BackButton));
     await tester.pumpAndSettle();
     expect(title('Plan'), findsOneWidget);
+  });
+
+  testWidgets('cover surfaces exactly the material questions (AC-3)', (
+    tester,
+  ) async {
+    usePixel5(tester);
+    // Material side: two High requests render two question cards and the count banner.
+    await tester.pumpWidget(
+      harness(
+        cover: (req) => coverOutcome(
+          status: OutcomeStatusDto.needsAttention,
+          attention: [
+            attentionRequest(),
+            attentionRequest(
+              id: 'food:wording:2026-08-30:dinner',
+              codes: ['HARD_CONSTRAINT_UNRESOLVED'],
+            ),
+          ],
+        ),
+        initial: '/plan/cover',
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text(needsYouCopy(2)), findsOneWidget);
+    expect(find.text(infeasibleQuestionCopy), findsOneWidget);
+    expect(find.text(wordingQuestionCopy), findsOneWidget);
+    // NeedsAttention hides Accept (AC-4 refusal path).
+    expect(find.text('Accept'), findsNothing);
+  });
+
+  testWidgets('a low-value-only cover result asks no question (AC-3)', (
+    tester,
+  ) async {
+    usePixel5(tester);
+    await tester.pumpWidget(
+      harness(
+        cover: (req) => coverOutcome(assumptions: const ['PANTRY_INCOMPLETE']),
+        initial: '/plan/cover',
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text(coveredCopy), findsOneWidget);
+    expect(find.text(questionsHeading), findsNothing);
+    // Pantry stays quiet: non-blocking, no disclosure entry (invariant 6).
+    expect(find.text(assumptionsHeading), findsNothing);
+    expect(find.text('Accept'), findsOneWidget);
+  });
+
+  testWidgets(
+    'accept reaches the seam with apply and links shopping (AC-4/5)',
+    (tester) async {
+      usePixel5(tester);
+      final applies = <bool>[];
+      await tester.pumpWidget(
+        harness(
+          cover: (req) {
+            applies.add(req.apply);
+            return coverOutcome(applied: req.apply);
+          },
+          initial: '/plan/cover',
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Accept'));
+      await tester.pumpAndSettle();
+      expect(applies, [false, true], reason: 'preview then one-tap apply');
+      expect(find.text(shoppingReadyCopy), findsOneWidget);
+      await tester.tap(find.text(shoppingReadyCopy));
+      await tester.pumpAndSettle();
+      expect(title('Shopping'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'a locked cover slot is marked and offers no swap or veto (AC-2)',
+    (tester) async {
+      usePixel5(tester);
+      await tester.pumpWidget(
+        harness(
+          cover: (req) => coverOutcome(
+            slots: const [
+              SlotCoverageDto(
+                date: '2026-08-29',
+                slot: MealSlotDto.dinner,
+                state: CoverageStateDto.lockedByUser,
+                components: [MealComponentDto(kind: 'recipe', recipeId: 'r-1')],
+                reasonCodes: [],
+              ),
+            ],
+          ),
+          initial: '/plan/cover',
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.byWidgetPredicate(
+          (w) => w is Semantics && w.properties.label == lockLabel(true),
+        ),
+        findsOneWidget,
+      );
+      expect(find.byIcon(Icons.lock), findsOneWidget);
+      expect(find.text('Swap'), findsNothing);
+      expect(find.text('Never suggest'), findsNothing);
+    },
+  );
+
+  testWidgets('swap and reviewed-marker reach the decision seam (AC-4)', (
+    tester,
+  ) async {
+    usePixel5(tester);
+    final decisions = <PlanDecisionDto>[];
+    await tester.pumpWidget(
+      harness(
+        cover: (req) => coverOutcome(
+          status: OutcomeStatusDto.tentativelyCovered,
+          assumptions: const [
+            'PANTRY_INCOMPLETE',
+            'RESTRICTIONS_NOT_CONFIGURED',
+          ],
+        ),
+        decide: (req) async {
+          decisions.add(req.decision);
+          return const PlanDecisionOutcomeDto(
+            ledgerEntryId: 'le-2',
+            priorStatus: OutcomeStatusDto.tentativelyCovered,
+            resultingStatus: OutcomeStatusDto.tentativelyCovered,
+          );
+        },
+        recipes: () => const [okSummary],
+        initial: '/plan/cover',
+      ),
+    );
+    await tester.pumpAndSettle();
+    // Two taps: Swap on the tile, then a recipe in the picker.
+    await tester.tap(find.text('Swap'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('cover:pick:r-1')));
+    await tester.pumpAndSettle();
+    expect(decisions, hasLength(1));
+    expect(
+      decisions.single,
+      const PlanDecisionDto.swap(
+        date: '2026-08-29',
+        slot: MealSlotDto.dinner,
+        components: [MealComponentDto(kind: 'recipe', recipeId: 'r-1')],
+      ),
+    );
+    // The reviewed-marker row shows only while the assumption is present; one tap records.
+    await tester.tap(find.text(reviewedRowNoneLabel));
+    await tester.pumpAndSettle();
+    expect(decisions.last, const PlanDecisionDto.restrictionsReviewed());
+  });
+
+  // The one irreversible action on the screen. The native test drives the bridge with a
+  // hand-built DTO, so only this can catch a wrong `subject` — the recipe id instead of the
+  // title would tokenise to nothing and silently veto nothing.
+  testWidgets('the veto path confirms, cancels, and reaches the seam (AC-4)', (
+    tester,
+  ) async {
+    usePixel5(tester);
+    final decisions = <PlanDecisionDto>[];
+    await tester.pumpWidget(
+      harness(
+        cover: (req) => coverOutcome(),
+        decide: (req) async {
+          decisions.add(req.decision);
+          return const PlanDecisionOutcomeDto(
+            ledgerEntryId: 'le-3',
+            priorStatus: OutcomeStatusDto.covered,
+            resultingStatus: OutcomeStatusDto.covered,
+          );
+        },
+        recipes: () => const [okSummary],
+        initial: '/plan/cover',
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Never suggest'));
+    await tester.pumpAndSettle();
+    expect(find.text(vetoConfirmTitle('Pancakes')), findsOneWidget);
+    expect(find.text(vetoConfirmBody('Pancakes')), findsOneWidget);
+    // Cancelling is a real answer: nothing reaches the seam.
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(decisions, isEmpty);
+    // Both the tile button and the dialog's confirm read "Never suggest".
+    await tester.tap(find.text('Never suggest'));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.descendant(
+        of: find.byType(AlertDialog),
+        matching: find.text('Never suggest'),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      decisions.single,
+      const PlanDecisionDto.veto(
+        subject: 'Pancakes',
+        date: '2026-08-29',
+        slot: MealSlotDto.dinner,
+      ),
+    );
+  });
+
+  // An option the screen cannot name is not a control: `wording_only` options are the
+  // household's own restriction phrases, which never parse as `recipe:` tokens.
+  testWidgets('unnameable options render no chip of their own', (tester) async {
+    usePixel5(tester);
+    await tester.pumpWidget(
+      harness(
+        cover: (req) => coverOutcome(
+          status: OutcomeStatusDto.needsAttention,
+          attention: [
+            attentionRequest(
+              codes: const ['HARD_CONSTRAINT_UNRESOLVED'],
+              options: const ['no shellfish', 'nothing with peanuts'],
+            ),
+          ],
+        ),
+        recipes: () => const [okSummary],
+        initial: '/plan/cover',
+      ),
+    );
+    await tester.pumpAndSettle();
+    final card = find.byKey(
+      const ValueKey('cover:question:food:infeasible:2026-08-29:dinner'),
+    );
+    // Only the card's own generic Swap chip, and the header label is not duplicated.
+    expect(
+      find.descendant(of: card, matching: find.byType(ActionChip)),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: card, matching: find.text('2026-08-29 · Dinner')),
+      findsOneWidget,
+    );
+  });
+
+  // A wording question is raised from `chosen` with no filter on slot state, and Tier 0 keeps
+  // a locked candidate feasible, so a locked slot does reach this card. Its Swap could never
+  // succeed — `record_decision` refuses a swap onto a locked row (invariant 18) — so offering
+  // it was a dead end. `_slotTile` has always gated its own Swap on the lock; the card now
+  // does the same, and says why in the household's terms rather than automation's.
+  testWidgets('a question on a locked slot offers no swap, and says why', (
+    tester,
+  ) async {
+    usePixel5(tester);
+    await tester.pumpWidget(
+      harness(
+        cover: (req) => coverOutcome(
+          status: OutcomeStatusDto.tentativelyCovered,
+          slots: const [
+            SlotCoverageDto(
+              date: '2026-08-29',
+              slot: MealSlotDto.dinner,
+              state: CoverageStateDto.lockedByUser,
+              components: [MealComponentDto(kind: 'recipe', recipeId: 'r-1')],
+              reasonCodes: [],
+            ),
+          ],
+          attention: [
+            attentionRequest(
+              id: 'food:wording:2026-08-29:dinner',
+              codes: const ['HARD_CONSTRAINT_UNRESOLVED'],
+              options: const ['no shellfish'],
+            ),
+          ],
+        ),
+        recipes: () => const [okSummary],
+        initial: '/plan/cover',
+      ),
+    );
+    await tester.pumpAndSettle();
+    final card = find.byKey(
+      const ValueKey('cover:question:food:wording:2026-08-29:dinner'),
+    );
+    expect(
+      find.descendant(of: card, matching: find.byType(ActionChip)),
+      findsNothing,
+    );
+    expect(
+      find.descendant(of: card, matching: find.text(questionLockedCopy)),
+      findsOneWidget,
+    );
+    // The question itself still stands — the card explains the missing action, it does not
+    // withdraw the question.
+    expect(
+      find.descendant(of: card, matching: find.text(wordingQuestionCopy)),
+      findsOneWidget,
+    );
+  });
+
+  // Expected-to-pass: pins the gate's deliberate open branch. A question whose `(date, slot)`
+  // is not among the rendered slots has no lock state to read, so it keeps its Swap chip —
+  // the refusal below it is now honest prose either way.
+  testWidgets('a question addressing no rendered slot keeps its swap chip', (
+    tester,
+  ) async {
+    usePixel5(tester);
+    await tester.pumpWidget(
+      harness(
+        cover: (req) => coverOutcome(
+          status: OutcomeStatusDto.needsAttention,
+          attention: [
+            attentionRequest(
+              id: 'food:wording:2026-09-01:dinner',
+              codes: const ['HARD_CONSTRAINT_UNRESOLVED'],
+            ),
+          ],
+        ),
+        recipes: () => const [okSummary],
+        initial: '/plan/cover',
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.descendant(
+        of: find.byKey(
+          const ValueKey('cover:question:food:wording:2026-09-01:dinner'),
+        ),
+        matching: find.byType(ActionChip),
+      ),
+      findsOneWidget,
+    );
+  });
+
+  // Expected-to-pass: `_report` and the `_busy` release in `finally` already work; this is the
+  // coverage pin they never had, on a screen where every mutation is irreversible or
+  // lock-bearing. The message is the one `error.rs` maps `SwapOntoLockedSlot` to — the test
+  // constructs the error itself, so a reword there must be mirrored here.
+  testWidgets(
+    'a refused decision surfaces as a snackbar and frees the screen',
+    (tester) async {
+      usePixel5(tester);
+      const refusal = KimattaError.planning(
+        message: 'that meal is locked, so it cannot be swapped',
+      );
+      await tester.pumpWidget(
+        harness(
+          cover: (req) => coverOutcome(),
+          decide: (req) async => throw refusal,
+          recipes: () => const [okSummary],
+          initial: '/plan/cover',
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Swap'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('cover:pick:r-1')));
+      await tester.pumpAndSettle();
+      expect(
+        find.descendant(
+          of: find.byType(SnackBar),
+          matching: find.text(
+            describeFailure(refusal, subject: 'Cover My Week'),
+          ),
+        ),
+        findsOneWidget,
+      );
+      // `_busy` is released in `finally`, so the screen is not left inert after a refusal.
+      expect(
+        tester
+            .widget<TextButton>(find.widgetWithText(TextButton, 'Swap'))
+            .onPressed,
+        isNotNull,
+      );
+    },
+  );
+
+  testWidgets('only a resolvable recipe option becomes a swap chip', (
+    tester,
+  ) async {
+    usePixel5(tester);
+    await tester.pumpWidget(
+      harness(
+        cover: (req) => coverOutcome(
+          status: OutcomeStatusDto.needsAttention,
+          attention: [
+            // Resolvable, unresolvable id, and a multi-component join.
+            attentionRequest(
+              options: const [
+                'recipe:r-1:1/1',
+                'recipe:r-missing:1/1',
+                'recipe:r-1:1/1,recipe:r-2:1/1',
+              ],
+            ),
+          ],
+        ),
+        recipes: () => const [okSummary],
+        initial: '/plan/cover',
+      ),
+    );
+    await tester.pumpAndSettle();
+    final card = find.byKey(
+      const ValueKey('cover:question:food:infeasible:2026-08-29:dinner'),
+    );
+    expect(
+      find.descendant(of: card, matching: find.text(swapToLabel('Pancakes'))),
+      findsOneWidget,
+    );
+    // The swap chip plus the card's own Swap — the two unnameable options add nothing.
+    expect(
+      find.descendant(of: card, matching: find.byType(ActionChip)),
+      findsNWidgets(2),
+    );
+  });
+
+  testWidgets('the cover screen renders a load failure and Try again retries', (
+    tester,
+  ) async {
+    usePixel5(tester);
+    var reads = 0;
+    await tester.pumpWidget(
+      harness(
+        cover: (req) =>
+            ++reads == 1 ? throw const KimattaError.notOpen() : coverOutcome(),
+        initial: '/plan/cover',
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.text(
+        describeFailure(const KimattaError.notOpen(), subject: 'Cover My Week'),
+      ),
+      findsOneWidget,
+    );
+    await tester.tap(find.text('Try again'));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('cover:2026-08-29:dinner')),
+      findsOneWidget,
+    );
+  });
+
+  // AC-7 — the cover screen through the same bounded checks every destination passes,
+  // over a result that renders every affordance: a question card with options, an
+  // unlocked tile with Swap/veto, the reviewed row and the disclosure.
+  testWidgets('the cover screen meets the accessibility guidelines', (
+    tester,
+  ) async {
+    usePixel5(tester);
+    for (final brightness in Brightness.values) {
+      tester.platformDispatcher.platformBrightnessTestValue = brightness;
+      await tester.pumpWidget(
+        harness(
+          cover: (req) => coverOutcome(
+            status: OutcomeStatusDto.needsAttention,
+            attention: [
+              attentionRequest(options: const ['recipe:r-1:1/1']),
+            ],
+            assumptions: const [
+              'PANTRY_INCOMPLETE',
+              'RESTRICTIONS_NOT_CONFIGURED',
+            ],
+          ),
+          recipes: () => const [okSummary],
+          initial: '/plan/cover',
+        ),
+      );
+      await tester.pumpAndSettle();
+      await expectLater(tester, meetsGuideline(androidTapTargetGuideline));
+      await expectLater(tester, meetsGuideline(labeledTapTargetGuideline));
+      await expectLater(tester, meetsGuideline(textContrastGuideline));
+    }
+  });
+
+  testWidgets('/plan/cover survives text scale 2.0', (tester) async {
+    usePixel5(tester);
+    tester.platformDispatcher.textScaleFactorTestValue = 2.0;
+    await tester.pumpWidget(harness(initial: '/plan/cover'));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('an unknown route renders not-found with a return action', (

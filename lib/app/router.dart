@@ -6,6 +6,7 @@ import 'package:meal_mate/app/shell.dart';
 import 'package:meal_mate/features/household/household_screen.dart';
 import 'package:meal_mate/features/onboarding/welcome_screen.dart';
 import 'package:meal_mate/features/pantry/pantry_screen.dart';
+import 'package:meal_mate/features/planning/cover_screen.dart';
 import 'package:meal_mate/features/planning/cycle_editor_screen.dart';
 import 'package:meal_mate/features/planning/planner_screen.dart';
 import 'package:meal_mate/features/recipes/recipe_detail_screen.dart';
@@ -20,6 +21,19 @@ const homeLocation = '/plan';
 
 /// First run. Outside the shell, so no navigation bar is shown while it is up.
 const welcomeLocation = '/welcome';
+
+/// The `?offset=` query value as a cycle offset. `offset` crosses to Rust as an i32 and
+/// `sse_encode_i_32` narrows with `putInt32`, which keeps the low 32 bits and does not throw —
+/// so an unsaturated 64-bit value arrives as an unrelated in-range window instead of being
+/// refused, and `?offset=4294967297` would quietly preview next cycle. Saturating here hands an
+/// out-of-range *intent* to the ±520 bound, which answers in prose; the bound is deliberately
+/// not applied here, so an in-range value past it is still refused rather than silently moved.
+/// An unreadable value is the active cycle, as it already was.
+int coverOffset(String? raw) {
+  final parsed = int.tryParse(raw ?? '');
+  if (parsed == null) return 0;
+  return parsed.clamp(-2147483648, 2147483647);
+}
 
 GoRouter buildRouter({String initialLocation = homeLocation}) => GoRouter(
   initialLocation: initialLocation,
@@ -74,11 +88,8 @@ GoRouter buildRouter({String initialLocation = homeLocation}) => GoRouter(
               routes: [
                 GoRoute(
                   path: 'cover',
-                  builder: (_, _) => const PlaceholderScreen(
-                    title: 'Cover My Week',
-                    message:
-                        'The planner that fills your week arrives with MVP-024. '
-                        'Nothing is planned yet.',
+                  builder: (context, state) => CoverScreen(
+                    offset: coverOffset(state.uri.queryParameters['offset']),
                   ),
                 ),
               ],

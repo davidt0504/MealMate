@@ -84,7 +84,7 @@ pub fn known_meal_component_kinds() -> Vec<String> {
         .collect()
 }
 
-fn component_to_domain(c: MealComponentDto) -> Result<MealComponent, KimattaError> {
+pub(crate) fn component_to_domain(c: MealComponentDto) -> Result<MealComponent, KimattaError> {
     let recipe_id = c.recipe_id.map(RecipeId::new).transpose()?;
     let scale = c
         .scale

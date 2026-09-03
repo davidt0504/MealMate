@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:meal_mate/src/rust/api/decisions.dart';
 import 'package:meal_mate/src/rust/api/error.dart';
 import 'package:meal_mate/src/rust/api/health.dart';
 import 'package:meal_mate/src/rust/api/household.dart';
@@ -14,6 +15,8 @@ import 'package:meal_mate/src/rust/api/restrictions.dart';
 import 'package:meal_mate/src/rust/api/shopping.dart';
 import 'package:meal_mate/src/rust/api/starter.dart';
 import 'package:meal_mate/src/rust/frb_generated.dart';
+import 'package:meal_mate/features/household/household_screen.dart'
+    show describeFailure;
 import 'package:meal_mate/features/recipes/recipe_fields.dart';
 import 'package:meal_mate/features/restrictions/restriction_copy.dart';
 
@@ -592,6 +595,144 @@ void main() {
       ),
       throwsA(isA<KimattaError_Planning>()),
     );
+  });
+
+  /// MVP-024 AC-1/2/4 at the real bridge: preview → swap → apply preserves the swapped,
+  /// locked slot; a veto is evidence the next run obeys; the reviewed marker clears the
+  /// restrictions assumption. Every outcome's ledger entry id is the AC-4 evidence assert.
+  test('plan decisions cross the bridge and steer the next cover', () async {
+    await openDatabase(dbPath: await tempDb());
+    final h = await bootstrapHousehold();
+    await ensurePlanningCycle(
+      householdId: h.id,
+      defaultAnchorDate: '2026-08-30',
+    );
+    final pancakes = await saveRecipe(recipe: recipeFor(h.id, const []));
+    final waffles = await saveRecipe(
+      recipe: RecipeDto(
+        id: '',
+        householdId: h.id,
+        title: 'Waffles',
+        servings: 4,
+        instructions: 'Mix. Bake.',
+        lines: const [],
+        provenance: const RecipeProvenanceDto(kind: 'authored'),
+      ),
+    );
+
+    final preview = await coverCycle(
+      request: CoverCycleRequestDto(
+        householdId: h.id,
+        today: '2026-08-30',
+        offsetCycles: 0,
+        apply: false,
+      ),
+    );
+    expect(preview.ledgerEntryId, isNotEmpty);
+    expect(preview.applied, isFalse);
+
+    final swapped = await recordPlanDecision(
+      request: PlanDecisionRequestDto(
+        householdId: h.id,
+        today: '2026-08-30',
+        offsetCycles: 0,
+        decision: PlanDecisionDto.swap(
+          date: '2026-08-30',
+          slot: MealSlotDto.dinner,
+          components: [MealComponentDto(kind: 'recipe', recipeId: waffles.id)],
+        ),
+      ),
+    );
+    expect(swapped.ledgerEntryId, isNotEmpty);
+
+    final applied = await coverCycle(
+      request: CoverCycleRequestDto(
+        householdId: h.id,
+        today: '2026-08-30',
+        offsetCycles: 0,
+        apply: true,
+      ),
+    );
+    expect(applied.applied, isTrue);
+    final swappedSlot = applied.result.slots.firstWhere(
+      (s) => s.date == '2026-08-30',
+    );
+    // Invariant 18 at the real bridge: the swapped slot is locked and unmoved.
+    expect(swappedSlot.state, CoverageStateDto.lockedByUser);
+    expect(swappedSlot.components.single.recipeId, waffles.id);
+
+    final vetoed = await recordPlanDecision(
+      request: PlanDecisionRequestDto(
+        householdId: h.id,
+        today: '2026-08-30',
+        offsetCycles: 0,
+        decision: const PlanDecisionDto.veto(
+          subject: 'Pancakes',
+          date: '2026-08-31',
+          slot: MealSlotDto.dinner,
+        ),
+      ),
+    );
+    expect(vetoed.ledgerEntryId, isNotEmpty);
+    final afterVeto = await coverCycle(
+      request: CoverCycleRequestDto(
+        householdId: h.id,
+        today: '2026-08-30',
+        offsetCycles: 0,
+        apply: false,
+      ),
+    );
+    expect(
+      afterVeto.result.proposed.every(
+        (p) => p.components.every((c) => c.recipeId != pancakes.id),
+      ),
+      isTrue,
+      reason: 'the vetoed dish is Tier-0-rejected on the next run',
+    );
+
+    final reviewed = await recordPlanDecision(
+      request: PlanDecisionRequestDto(
+        householdId: h.id,
+        today: '2026-08-30',
+        offsetCycles: 0,
+        decision: const PlanDecisionDto.restrictionsReviewed(),
+      ),
+    );
+    expect(reviewed.ledgerEntryId, isNotEmpty);
+    final afterReviewed = await coverCycle(
+      request: CoverCycleRequestDto(
+        householdId: h.id,
+        today: '2026-08-30',
+        offsetCycles: 0,
+        apply: false,
+      ),
+    );
+    expect(
+      afterReviewed.result.assumptions,
+      isNot(contains('RESTRICTIONS_NOT_CONFIGURED')),
+      reason: 'reviewed absence is confirmed absence',
+    );
+
+    // The step-4 mirror the KNOWN_ISSUES entry asks for: an out-of-range offset is the
+    // typed Planning error, and `describeFailure` renders it as planning prose.
+    try {
+      await coverCycle(
+        request: CoverCycleRequestDto(
+          householdId: h.id,
+          today: '2026-08-30',
+          offsetCycles: 521,
+          apply: false,
+        ),
+      );
+      fail('offset 521 must be refused');
+    } on KimattaError catch (e) {
+      expect(e, isA<KimattaError_Planning>());
+      // The bound's own vocabulary — `offset_cycles`, `520` — is what `describeFailure` must
+      // never reach the user with, so the assertion is on the prose, not on the number.
+      final shown = describeFailure(e, subject: 'Cover My Week');
+      expect(shown, contains('too far away to plan'));
+      expect(shown, isNot(contains('offset_cycles')));
+    }
   });
 
   /// MVP-016 at the real bridge: the overlay is durable (AC-2), the view carries it back

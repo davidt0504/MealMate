@@ -22,14 +22,38 @@ pub enum KimattaError {
 }
 
 /// The application layer's storage failures stay `Storage`, exactly as they would arriving
-/// from any other command — a ghost household reads the same on every screen. There is no
-/// planner-specific arm: `ApplicationError` has one variant and this `match` is exhaustive
-/// without a catch-all, so nothing could construct one. Add it back with the first failure
-/// that needs it, rather than freezing a speculative variant into the generated Dart.
+/// from any other command — a ghost household reads the same on every screen. The decision
+/// refusals are the failures the earlier note here was waiting for, and they land on the
+/// existing `Planning` variant rather than new ones: they are refusals of an out-of-contract
+/// call, and no screen has a different recovery for them, so nothing is frozen into the
+/// generated Dart. Their messages are written here, not forwarded from the variants'
+/// `Display` — `describeFailure` renders `Planning`'s message verbatim, so the user-facing
+/// sentence must be prose, while the `Display` keeps the addressing detail a caller debugging
+/// the refusal needs. `SwapOntoLockedSlot` is why the locked case is its own variant rather
+/// than a `StorageError`: forwarded, it put a raw meal id and the word "automation" on the
+/// Cover screen for a `WriteSource::User` write.
 impl From<kimatta_application::ApplicationError> for KimattaError {
     fn from(e: kimatta_application::ApplicationError) -> Self {
         match e {
             kimatta_application::ApplicationError::Storage(inner) => inner.into(),
+            kimatta_application::ApplicationError::UnmatchableVetoSubject => {
+                KimattaError::Planning {
+                    // "we can match" rather than a bare "must have a name": the subject is the
+                    // dish's own title, which the household has just read in the confirm
+                    // dialog, so telling them it has no name contradicts the screen.
+                    message: "a meal to never suggest must have a name we can match".to_owned(),
+                }
+            }
+            kimatta_application::ApplicationError::SwapOntoLockedSlot { .. } => {
+                KimattaError::Planning {
+                    message: "that meal is locked, so it cannot be swapped".to_owned(),
+                }
+            }
+            kimatta_application::ApplicationError::DecisionOutsideWindow { .. } => {
+                KimattaError::Planning {
+                    message: "that decision is for a day outside the week being planned".to_owned(),
+                }
+            }
         }
     }
 }
