@@ -33,7 +33,7 @@ pub use household_core::{
 };
 pub use rusqlite;
 pub use rusqlite::Connection;
-use rusqlite::{params, OptionalExtension, Transaction, TransactionBehavior};
+use rusqlite::{params, OpenFlags, OptionalExtension, Transaction, TransactionBehavior};
 use rusqlite_migration::{Migrations, M};
 use thiserror::Error;
 
@@ -172,6 +172,24 @@ pub enum StorageError {
          re-run the planner"
     )]
     StalePlan { expected: String, found: String },
+    /// The file at the database path is not a readable SQLite database: a corrupt header,
+    /// a truncated file, or page-level damage. Distinct from `Sqlite` so the UI can offer
+    /// corruption-specific recovery (start fresh / restore) that would be wrong for, say,
+    /// a disk-full failure.
+    #[error("the database file is damaged and cannot be read: {detail}")]
+    CorruptDatabase { detail: String },
+    /// A filesystem operation around export/restore (creating the export directory,
+    /// replacing a stale destination, staging a restore copy) failed.
+    #[error("file operation failed: {0}")]
+    Io(#[from] std::io::Error),
+    /// The file is a healthy database written by a newer app version. The `Display` text is
+    /// user prose because `describeFailure` renders `Storage.message` verbatim, and the
+    /// recovery here is "update the app", not start-fresh.
+    #[error(
+        "This data was written by a newer version of the app (schema {found}, this app \
+         supports {supported}). Update the app and try again."
+    )]
+    NewerSchema { found: u32, supported: u32 },
 }
 
 // Two consts: `M` has drop glue, so an inline `&[M::up(..)]` argument is not promoted
@@ -481,20 +499,145 @@ const MIGRATION_ARRAY: &[M] = &[
 ];
 pub const MIGRATIONS: Migrations<'static> = Migrations::from_slice(MIGRATION_ARRAY);
 
-/// Opens (creating if absent) the database at `path`, migrates to latest, enables foreign keys.
+/// Opens (creating if absent) the database at `path`, checks integrity, migrates to latest,
+/// enables foreign keys.
 /// Foreign keys are off across `to_latest` because migrations run inside one transaction, so a
 /// migration cannot disable them itself; a migration that rebuilds a table should therefore carry
 /// `.foreign_key_check()`.
+///
+/// Durability decisions (MVP-017), pinned by test where noted:
+/// - Journal mode stays the default DELETE rollback journal with default `synchronous=FULL`:
+///   one process, one mutex-serialised connection, so WAL's concurrency benefit is zero, and a
+///   single durable file (no `-wal`/`-shm`) keeps restore's rename-swap and the corrupt
+///   rename-aside correct with only the `-journal` sidecar to carry along.
+/// - Busy timeout: rusqlite 0.40 already sets 5s on every connection it opens — pinned by
+///   `the_default_busy_timeout_is_five_seconds`, not set here.
+/// - A missing file silently creates a fresh database: "no data" is the true state, nothing in
+///   the data directory survives to distinguish first launch from a cleared one, and an
+///   out-of-directory marker would be a second durable store (invariant 17).
+///
+/// Failure typing: any corrupt-class SQLite error (`NotADatabase`, `DatabaseCorrupt`) from the
+/// first file-touching statement onward maps to [`StorageError::CorruptDatabase`], and a healthy
+/// database written by a newer app version is refused as [`StorageError::NewerSchema`] before
+/// migrations run — `rusqlite_migration` would otherwise fail with an untyped
+/// `DatabaseTooFarAhead`.
 pub fn open(path: impl AsRef<Path>) -> Result<Connection, StorageError> {
-    let mut conn = Connection::open(path)?;
-    conn.pragma_update(None, "foreign_keys", "OFF")?;
-    MIGRATIONS.to_latest(&mut conn)?;
-    conn.pragma_update(None, "foreign_keys", "ON")?;
+    let mut conn = Connection::open(path).map_err(typed_sqlite)?;
+    // The first statement that reads the file: a garbage or truncated header errors here,
+    // and page-level damage in a readable file comes back as a non-"ok" verdict row.
+    let verdict: String = conn
+        .query_row("PRAGMA quick_check(1)", [], |r| r.get(0))
+        .map_err(typed_sqlite)?;
+    if verdict != "ok" {
+        return Err(StorageError::CorruptDatabase { detail: verdict });
+    }
+    let found: u32 = conn
+        .pragma_query_value(None, "user_version", |row| row.get(0))
+        .map_err(typed_sqlite)?;
+    let supported = MIGRATION_ARRAY.len() as u32;
+    if found > supported {
+        return Err(StorageError::NewerSchema { found, supported });
+    }
+    conn.pragma_update(None, "foreign_keys", "OFF")
+        .map_err(typed_sqlite)?;
+    MIGRATIONS.to_latest(&mut conn).map_err(typed_migration)?;
+    conn.pragma_update(None, "foreign_keys", "ON")
+        .map_err(typed_sqlite)?;
     Ok(conn)
 }
 
+fn corrupt_class(e: &rusqlite::Error) -> bool {
+    matches!(
+        e.sqlite_error_code(),
+        Some(rusqlite::ErrorCode::NotADatabase | rusqlite::ErrorCode::DatabaseCorrupt)
+    )
+}
+
+/// Corrupt-class SQLite errors become `CorruptDatabase`; everything else stays `Sqlite`.
+fn typed_sqlite(e: rusqlite::Error) -> StorageError {
+    if corrupt_class(&e) {
+        StorageError::CorruptDatabase {
+            detail: e.to_string(),
+        }
+    } else {
+        StorageError::Sqlite(e)
+    }
+}
+
+/// A migration step that failed on a corrupt-class SQLite error is corruption surfacing
+/// mid-`to_latest`, not a bad migration definition.
+fn typed_migration(e: rusqlite_migration::Error) -> StorageError {
+    match e {
+        rusqlite_migration::Error::RusqliteError { query, err } if corrupt_class(&err) => {
+            StorageError::CorruptDatabase {
+                detail: format!("{err} (during {query})"),
+            }
+        }
+        other => StorageError::Migration(other),
+    }
+}
+
 pub fn schema_version(conn: &Connection) -> Result<u32, StorageError> {
-    Ok(conn.pragma_query_value(None, "user_version", |row| row.get(0))?)
+    conn.pragma_query_value(None, "user_version", |row| row.get(0))
+        .map_err(typed_sqlite)
+}
+
+/// Exports a transactionally consistent, compacted copy of the open database to `dest` via
+/// `VACUUM INTO` (MVP-017 AC-4) and returns the source's `user_version`, which the copy
+/// carries as its own — the export's schema version. The export directory is created if
+/// absent, and a pre-existing file at `dest` is removed first: `VACUUM INTO` refuses to
+/// overwrite, and replacing a stale export wholesale is the behavior a "re-export under the
+/// same name" caller wants.
+///
+/// The database's own file format is the export format (decision recorded in MVP-017):
+/// versioned by `user_version`, readable by [`validate_export`]-then-restore, and never a
+/// second serialization of the entities.
+pub fn export_database(conn: &Connection, dest: impl AsRef<Path>) -> Result<u32, StorageError> {
+    let dest = dest.as_ref();
+    if let Some(parent) = dest.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    match std::fs::remove_file(dest) {
+        Ok(()) => {}
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+        Err(e) => return Err(e.into()),
+    }
+    let dest_str = dest.to_str().ok_or_else(|| {
+        StorageError::Io(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            format!("export destination is not valid UTF-8: {}", dest.display()),
+        ))
+    })?;
+    conn.execute("VACUUM INTO ?1", params![dest_str])
+        .map_err(typed_sqlite)?;
+    schema_version(conn)
+}
+
+/// Validates a file as a restorable export without writing to it or creating it: a
+/// read-only open (a missing or unreadable path is an error, never a silently created
+/// fresh database), a full `integrity_check`, and the same newer-schema gate as [`open`].
+/// An *older* version passes — restore migrates the staged copy forward. Returns the
+/// export's schema version.
+pub fn validate_export(path: impl AsRef<Path>) -> Result<u32, StorageError> {
+    let conn = Connection::open_with_flags(
+        path,
+        OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
+    )
+    .map_err(typed_sqlite)?;
+    let verdict: String = conn
+        .query_row("PRAGMA integrity_check", [], |r| r.get(0))
+        .map_err(typed_sqlite)?;
+    if verdict != "ok" {
+        return Err(StorageError::CorruptDatabase { detail: verdict });
+    }
+    let found: u32 = conn
+        .pragma_query_value(None, "user_version", |row| row.get(0))
+        .map_err(typed_sqlite)?;
+    let supported = MIGRATION_ARRAY.len() as u32;
+    if found > supported {
+        return Err(StorageError::NewerSchema { found, supported });
+    }
+    Ok(found)
 }
 
 /// Inserts the household and its member rows atomically; any failure rolls back everything.
@@ -1490,11 +1633,18 @@ fn check_line_refs(conn: &Connection, recipe: &Recipe) -> Result<(), StorageErro
 /// recipe id owned by another household is `NoSuchRecipe`, never hijacked.
 pub fn save_recipe(conn: &mut Connection, recipe: &Recipe) -> Result<(), StorageError> {
     let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
-    require_household(&tx, recipe.household_id())?;
-    check_line_refs(&tx, recipe)?;
-    write_recipe(&tx, recipe)?;
+    save_recipe_in(&tx, recipe)?;
     tx.commit()?;
     Ok(())
+}
+
+/// The transaction-scoped body of [`save_recipe`], public so a caller composing the write
+/// with its own reads — the bridge's write → read-back contract (MVP-017 AC-2) — can run
+/// the whole composition in one transaction and commit only when every part succeeded.
+pub fn save_recipe_in(tx: &Transaction<'_>, recipe: &Recipe) -> Result<(), StorageError> {
+    require_household(tx, recipe.household_id())?;
+    check_line_refs(tx, recipe)?;
+    write_recipe(tx, recipe)
 }
 
 /// Ownership probe + the recipe/provenance/line writes. Callers own `require_household` and
@@ -2006,8 +2156,22 @@ pub fn archive_recipe(
     id: &RecipeId,
     at: CivilDate,
 ) -> Result<(), StorageError> {
+    let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    archive_recipe_in(&tx, household, id, at)?;
+    tx.commit()?;
+    Ok(())
+}
+
+/// The transaction-scoped body of [`archive_recipe`], public for the same composition
+/// contract as [`save_recipe_in`].
+pub fn archive_recipe_in(
+    tx: &Transaction<'_>,
+    household: &HouseholdId,
+    id: &RecipeId,
+    at: CivilDate,
+) -> Result<(), StorageError> {
     set_archive_marker(
-        conn,
+        tx,
         household,
         id,
         "UPDATE recipe SET archived_at = ?1
@@ -2022,8 +2186,21 @@ pub fn restore_recipe(
     household: &HouseholdId,
     id: &RecipeId,
 ) -> Result<(), StorageError> {
+    let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    restore_recipe_in(&tx, household, id)?;
+    tx.commit()?;
+    Ok(())
+}
+
+/// The transaction-scoped body of [`restore_recipe`], public for the same composition
+/// contract as [`save_recipe_in`].
+pub fn restore_recipe_in(
+    tx: &Transaction<'_>,
+    household: &HouseholdId,
+    id: &RecipeId,
+) -> Result<(), StorageError> {
     set_archive_marker(
-        conn,
+        tx,
         household,
         id,
         "UPDATE recipe SET archived_at = ?1
@@ -2034,15 +2211,14 @@ pub fn restore_recipe(
 
 /// The guarded UPDATE matches only rows on the other side of the marker, so zero rows means
 /// either "already there" (a no-op) or "no such recipe in this household" — the existence
-/// probe tells them apart, inside the same IMMEDIATE transaction so nothing moves between.
+/// probe tells them apart, inside the caller's IMMEDIATE transaction so nothing moves between.
 fn set_archive_marker(
-    conn: &mut Connection,
+    tx: &Transaction<'_>,
     household: &HouseholdId,
     id: &RecipeId,
     update: &str,
     marker: Option<String>,
 ) -> Result<(), StorageError> {
-    let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
     let changed = tx.execute(update, params![marker, id.as_str(), household.as_str()])?;
     if changed == 0 {
         let exists: bool = tx.query_row(
@@ -2057,7 +2233,6 @@ fn set_archive_marker(
             });
         }
     }
-    tx.commit()?;
     Ok(())
 }
 
@@ -2854,6 +3029,267 @@ mod tests {
     /// when that is not what they are testing.
     fn seed(conn: &mut Connection, id: &str) {
         insert_household(conn, &household(id), &[member(&format!("m-{id}"), id)]).unwrap();
+    }
+
+    /// Structural and content equivalence: same `sqlite_master` (minus SQLite's internal
+    /// tables), and per table the same full-row multiset. Row dumps are sorted before
+    /// comparison because `VACUUM INTO` may renumber rowids — these tables key on TEXT
+    /// primary keys — so physical order is not part of the contract.
+    fn assert_db_equivalent(a: &Connection, b: &Connection) {
+        fn master(c: &Connection) -> Vec<(String, String, String)> {
+            let mut stmt = c
+                .prepare(
+                    "SELECT type, name, COALESCE(sql, '') FROM sqlite_master
+                     WHERE name NOT LIKE 'sqlite_%' ORDER BY type, name",
+                )
+                .unwrap();
+            let rows = stmt
+                .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))
+                .unwrap()
+                .map(Result::unwrap)
+                .collect();
+            rows
+        }
+        fn dump(c: &Connection, table: &str) -> Vec<String> {
+            let mut stmt = c.prepare(&format!("SELECT * FROM \"{table}\"")).unwrap();
+            let width = stmt.column_count();
+            let mut rows: Vec<String> = stmt
+                .query_map([], |r| {
+                    let mut cells = Vec::with_capacity(width);
+                    for i in 0..width {
+                        cells.push(format!("{:?}", r.get_ref(i).unwrap()));
+                    }
+                    Ok(cells.join("|"))
+                })
+                .unwrap()
+                .map(Result::unwrap)
+                .collect();
+            rows.sort();
+            rows
+        }
+        let schema = master(a);
+        assert!(!schema.is_empty(), "an empty schema would pass vacuously");
+        assert_eq!(schema, master(b), "sqlite_master differs");
+        for (kind, name, _) in &schema {
+            if kind == "table" {
+                assert_eq!(dump(a, name), dump(b, name), "table {name} differs");
+            }
+        }
+    }
+
+    #[test]
+    fn an_export_is_equivalent_and_versioned() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("kimatta.db");
+        let mut conn = open(&path).unwrap();
+        seed(&mut conn, "h");
+        save_planning_cycle(&mut conn, &cycle("h", "2026-08-29", 7, &[MealSlot::Dinner])).unwrap();
+
+        // A parent that does not exist yet: export must create it.
+        let dest = dir.path().join("exports").join("kimatta-export.db");
+        let version = export_database(&conn, &dest).unwrap();
+        assert_eq!(version, schema_version(&conn).unwrap());
+
+        let copy = Connection::open(&dest).unwrap();
+        assert_eq!(schema_version_of(&copy), version);
+        assert_db_equivalent(&conn, &copy);
+    }
+
+    /// Adversarial: a stale file already at the destination — even unreadable garbage — is
+    /// replaced by a clean export, not appended to or half-overwritten.
+    #[test]
+    fn an_export_replaces_a_pre_existing_destination_cleanly() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("kimatta.db");
+        let mut conn = open(&path).unwrap();
+        seed(&mut conn, "h");
+
+        let dest = dir.path().join("kimatta-export.db");
+        std::fs::write(&dest, [b'x'; 512]).unwrap();
+        export_database(&conn, &dest).unwrap();
+
+        let copy = Connection::open(&dest).unwrap();
+        assert_db_equivalent(&conn, &copy);
+    }
+
+    /// The export path types corruption the way `open` and `validate_export` do: a user whose
+    /// database has developed damage since launch is protecting their data at exactly the
+    /// moment `VACUUM INTO` reads every page, and the honest `Corrupt` copy is the one signal
+    /// that names the real problem. The connection is opened raw, since `open` would refuse
+    /// the file before the export could be attempted.
+    #[test]
+    fn an_export_of_a_damaged_database_is_typed_as_corrupt() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("damaged.db");
+        std::fs::write(&path, [b'x'; 1024]).unwrap();
+        let conn = Connection::open(&path).unwrap();
+
+        assert!(
+            matches!(
+                schema_version(&conn).unwrap_err(),
+                StorageError::CorruptDatabase { .. }
+            ),
+            "schema_version must type corruption, not pass it through as Sqlite"
+        );
+        assert!(
+            matches!(
+                export_database(&conn, dir.path().join("out.db")).unwrap_err(),
+                StorageError::CorruptDatabase { .. }
+            ),
+            "export_database must type corruption, not pass it through as Sqlite"
+        );
+    }
+
+    #[test]
+    fn validate_refuses_a_missing_export_without_creating_it() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("no-such-export.db");
+        validate_export(&path).unwrap_err();
+        assert!(!path.exists(), "a read-only probe must not create the file");
+    }
+
+    #[test]
+    fn validate_types_a_garbage_export_as_corrupt() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("garbage.db");
+        std::fs::write(&path, [b'x'; 1024]).unwrap();
+        let err = validate_export(&path).unwrap_err();
+        assert!(
+            matches!(err, StorageError::CorruptDatabase { .. }),
+            "want CorruptDatabase, got {err:?}"
+        );
+    }
+
+    #[test]
+    fn validate_refuses_a_newer_export_and_accepts_a_real_one() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("kimatta.db");
+        let conn = open(&path).unwrap();
+        let dest = dir.path().join("export.db");
+        export_database(&conn, &dest).unwrap();
+        assert_eq!(validate_export(&dest).unwrap(), 10);
+
+        Connection::open(&dest)
+            .unwrap()
+            .pragma_update(None, "user_version", 11)
+            .unwrap();
+        let err = validate_export(&dest).unwrap_err();
+        assert!(
+            matches!(
+                err,
+                StorageError::NewerSchema {
+                    found: 11,
+                    supported: 10,
+                }
+            ),
+            "want NewerSchema, got {err:?}"
+        );
+    }
+
+    /// `user_version` read without `StorageError` plumbing, for asserting on raw copies.
+    fn schema_version_of(conn: &Connection) -> u32 {
+        conn.pragma_query_value(None, "user_version", |row| row.get(0))
+            .unwrap()
+    }
+
+    #[test]
+    fn a_garbage_header_is_typed_corrupt() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("kimatta.db");
+        std::fs::write(&path, [b'x'; 1024]).unwrap();
+        let err = open(&path).unwrap_err();
+        assert!(
+            matches!(err, StorageError::CorruptDatabase { .. }),
+            "want CorruptDatabase, got {err:?}"
+        );
+    }
+
+    /// Adversarial: the header survives but every page behind it is garbage, so the file
+    /// gets past "is this SQLite at all" and fails on content — the damage class a partial
+    /// disk write leaves behind.
+    #[test]
+    fn a_valid_header_over_garbage_pages_is_typed_corrupt() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("kimatta.db");
+        drop(open(&path).unwrap());
+        let mut bytes = std::fs::read(&path).unwrap();
+        for b in bytes.iter_mut().skip(100) {
+            *b = 0xFF;
+        }
+        std::fs::write(&path, bytes).unwrap();
+        let err = open(&path).unwrap_err();
+        assert!(
+            matches!(err, StorageError::CorruptDatabase { .. }),
+            "want CorruptDatabase, got {err:?}"
+        );
+    }
+
+    #[test]
+    fn a_truncated_file_is_typed_corrupt() {
+        // Shorter than the 100-byte SQLite header, and not empty (an empty file is a
+        // legitimate fresh database).
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("kimatta.db");
+        std::fs::write(&path, [b'x'; 50]).unwrap();
+        let err = open(&path).unwrap_err();
+        assert!(
+            matches!(err, StorageError::CorruptDatabase { .. }),
+            "want CorruptDatabase, got {err:?}"
+        );
+    }
+
+    #[test]
+    fn a_newer_schema_is_refused_with_versions() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("kimatta.db");
+        drop(open(&path).unwrap());
+        {
+            let conn = Connection::open(&path).unwrap();
+            conn.pragma_update(None, "user_version", 11).unwrap();
+        }
+        let err = open(&path).unwrap_err();
+        assert!(
+            matches!(
+                err,
+                StorageError::NewerSchema {
+                    found: 11,
+                    supported: 10,
+                }
+            ),
+            "want NewerSchema, got {err:?}"
+        );
+        // `describeFailure` renders this text verbatim, so it must be user prose naming
+        // the recovery.
+        let text = err.to_string();
+        assert!(text.contains("newer version of the app"), "got {text:?}");
+        assert!(text.contains("schema 11"), "got {text:?}");
+        assert!(text.contains("supports 10"), "got {text:?}");
+        assert!(text.contains("Update the app"), "got {text:?}");
+    }
+
+    /// Expected-to-pass pin, not a fix: a missing file silently creates a fresh database at
+    /// the latest schema. "No data" is the true state — nothing in the data directory can
+    /// distinguish first launch from a cleared one, and an out-of-directory marker would be
+    /// a second durable store (invariant 17).
+    #[test]
+    fn a_missing_file_creates_a_fresh_latest_schema_db() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("does-not-exist-yet.db");
+        let conn = open(&path).unwrap();
+        // Hard-coded, not derived from MIGRATIONS: a new migration must consciously bump it.
+        assert_eq!(schema_version(&conn).unwrap(), 10);
+        assert_eq!(count(&conn, "household"), 0);
+    }
+
+    /// Expected-to-pass pin of rusqlite's own default, not something `open` sets: rusqlite
+    /// 0.40 configures a 5s busy timeout on every connection it opens.
+    #[test]
+    fn the_default_busy_timeout_is_five_seconds() {
+        let conn = open(":memory:").unwrap();
+        let ms: i64 = conn
+            .pragma_query_value(None, "busy_timeout", |r| r.get(0))
+            .unwrap();
+        assert_eq!(ms, 5000);
     }
 
     #[test]
@@ -8129,5 +8565,152 @@ mod tests {
             .unwrap();
         assert_eq!(oil_line.status, LineStatus::Needed);
         assert_eq!(oil_line.quantity, Quantity::Exact(rat(1, 1)));
+    }
+}
+
+/// Deterministic fault-injection harness for process death (MVP-017 AC-2/AC-3a): a parent
+/// test re-invokes this test binary via `current_exe` with `KIMATTA_CRASH_ROLE` set, the
+/// scripted child dies by `abort()` at a chosen point, and the parent inspects what the
+/// database made of it. No helper binary, no cargo feature: the injection lives entirely in
+/// `#[cfg(test)]` code.
+#[cfg(test)]
+mod durability {
+    use std::path::Path;
+    use std::process::Command;
+
+    use rusqlite::TransactionBehavior;
+
+    use super::open;
+
+    /// The scripted child body, not an in-process test of anything: with
+    /// `KIMATTA_CRASH_ROLE` unset — every normal `cargo test` run — it no-ops and passes.
+    #[test]
+    fn crash_helper() {
+        let Ok(role) = std::env::var("KIMATTA_CRASH_ROLE") else {
+            return;
+        };
+        let db = std::env::var("KIMATTA_CRASH_DB").expect("KIMATTA_CRASH_DB must be set");
+        match role.as_str() {
+            "abort-mid-tx" => abort_mid_tx(&db),
+            other => panic!("unknown crash role {other:?}"),
+        }
+    }
+
+    /// Commits a baseline row, then dies with a multi-row IMMEDIATE transaction open — the
+    /// journal is hot and the uncommitted pages may already be in the database file.
+    fn abort_mid_tx(db: &str) -> ! {
+        let mut conn = open(db).unwrap();
+        conn.execute(
+            "INSERT INTO household (id, name) VALUES ('base', 'Base')",
+            [],
+        )
+        .unwrap();
+        let tx = conn
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .unwrap();
+        for i in 0..3 {
+            tx.execute(
+                "INSERT INTO household (id, name) VALUES (?1, 'Partial')",
+                [format!("partial-{i}")],
+            )
+            .unwrap();
+        }
+        // Die without unwinding: no Drop rollback, no journal cleanup — the process-death
+        // shape, not a tidy error path.
+        std::process::abort()
+    }
+
+    /// The filter must be module-qualified: a bare `crash_helper` matches zero tests under
+    /// `--exact` and the child exits 0 without running anything.
+    fn spawn_crash(role: &str, db: &Path) -> std::process::Output {
+        Command::new(std::env::current_exe().unwrap())
+            .args(["durability::crash_helper", "--exact", "--nocapture"])
+            .env("KIMATTA_CRASH_ROLE", role)
+            .env("KIMATTA_CRASH_DB", db)
+            .output()
+            .unwrap()
+    }
+
+    fn household_ids(conn: &rusqlite::Connection) -> Vec<String> {
+        let mut stmt = conn
+            .prepare("SELECT id FROM household ORDER BY id")
+            .unwrap();
+        let ids = stmt
+            .query_map([], |r| r.get(0))
+            .unwrap()
+            .map(Result::unwrap)
+            .collect();
+        ids
+    }
+
+    /// AC-2: a transaction interrupted by process death commits nothing. The abort leaves a
+    /// hot `-journal` beside the database; the reopen must roll it back, keep the committed
+    /// baseline, and drop every uncommitted row.
+    #[test]
+    fn an_aborted_transaction_leaves_no_partial_write() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("kimatta.db");
+        let out = spawn_crash("abort-mid-tx", &path);
+        // SIGABRT reports no exit code on Unix, so `!success` is the assertable shape.
+        assert!(
+            !out.status.success(),
+            "the child must die by abort, not exit; stdout:\n{}\nstderr:\n{}",
+            String::from_utf8_lossy(&out.stdout),
+            String::from_utf8_lossy(&out.stderr),
+        );
+        let journal = dir.path().join("kimatta.db-journal");
+        assert!(
+            journal.exists(),
+            "the abort must leave a journal beside the database for the reopen to handle"
+        );
+
+        let conn = open(&path).unwrap();
+        let verdict: String = conn
+            .query_row("PRAGMA quick_check(1)", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(verdict, "ok");
+        assert_eq!(household_ids(&conn), vec!["base".to_owned()]);
+        // The left-behind journal must not poison later work: the next write commits, and
+        // DELETE journal mode retires the journal file with it.
+        conn.execute(
+            "INSERT INTO household (id, name) VALUES ('after', NULL)",
+            [],
+        )
+        .unwrap();
+        assert_eq!(
+            household_ids(&conn),
+            vec!["after".to_owned(), "base".to_owned()]
+        );
+        assert!(
+            !journal.exists(),
+            "a committed write must retire the leftover journal"
+        );
+    }
+
+    /// Expected-to-pass pin, not a fix: the in-process analogue of the abort above —
+    /// dropping an uncommitted transaction rolls back, and the rollback holds across a
+    /// reopen.
+    #[test]
+    fn a_dropped_transaction_rolls_back_across_reopen() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("kimatta.db");
+        {
+            let mut conn = open(&path).unwrap();
+            conn.execute(
+                "INSERT INTO household (id, name) VALUES ('base', 'Base')",
+                [],
+            )
+            .unwrap();
+            let tx = conn
+                .transaction_with_behavior(TransactionBehavior::Immediate)
+                .unwrap();
+            tx.execute(
+                "INSERT INTO household (id, name) VALUES ('partial', NULL)",
+                [],
+            )
+            .unwrap();
+        }
+        let conn = open(&path).unwrap();
+        assert_eq!(household_ids(&conn), vec!["base".to_owned()]);
     }
 }

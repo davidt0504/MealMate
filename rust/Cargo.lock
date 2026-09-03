@@ -595,6 +595,7 @@ dependencies = [
  "flutter_rust_bridge",
  "kimatta-application",
  "kimatta-storage",
+ "tempfile",
  "thiserror",
  "uuid",
 ]

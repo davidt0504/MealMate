@@ -80,7 +80,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.13.0';
 
   @override
-  int get rustContentHash => -1611732978;
+  int get rustContentHash => 866689241;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -134,6 +134,8 @@ abstract class RustLibApi extends BaseApi {
     required String householdId,
     required String defaultAnchorDate,
   });
+
+  Future<ExportReport> crateApiHealthExportDatabase({required String destPath});
 
   Future<void> crateApiHealthInitApp();
 
@@ -206,10 +208,20 @@ abstract class RustLibApi extends BaseApi {
     String? name,
   });
 
+  Future<HealthReport> crateApiHealthResetDatabase({
+    required String dbPath,
+    required String stamp,
+  });
+
   Future<void> crateApiShoppingResetShoppingList({
     required String householdId,
     required String fromDate,
     required String toDate,
+  });
+
+  Future<HealthReport> crateApiHealthRestoreDatabase({
+    required String exportPath,
+    required String dbPath,
   });
 
   Future<RecipeDto> crateApiRecipeRestoreRecipe({
@@ -598,6 +610,36 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
+  Future<ExportReport> crateApiHealthExportDatabase({
+    required String destPath,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(destPath, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 11,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_export_report,
+          decodeErrorData: sse_decode_kimatta_error,
+        ),
+        constMeta: kCrateApiHealthExportDatabaseConstMeta,
+        argValues: [destPath],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiHealthExportDatabaseConstMeta =>
+      const TaskConstMeta(debugName: "export_database", argNames: ["destPath"]);
+
+  @override
   Future<void> crateApiHealthInitApp() {
     return handler.executeNormal(
       NormalTask(
@@ -606,7 +648,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 11,
+            funcId: 12,
             port: port_,
           );
         },
@@ -636,7 +678,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 12,
+            funcId: 13,
             port: port_,
           );
         },
@@ -666,7 +708,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 13,
+            funcId: 14,
             port: port_,
           );
         },
@@ -696,7 +738,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 14,
+            funcId: 15,
             port: port_,
           );
         },
@@ -723,7 +765,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 15,
+            funcId: 16,
             port: port_,
           );
         },
@@ -753,7 +795,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 16,
+            funcId: 17,
             port: port_,
           );
         },
@@ -786,7 +828,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 17,
+            funcId: 18,
             port: port_,
           );
         },
@@ -819,7 +861,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 18,
+            funcId: 19,
             port: port_,
           );
         },
@@ -853,7 +895,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 19,
+            funcId: 20,
             port: port_,
           );
         },
@@ -886,7 +928,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 20,
+            funcId: 21,
             port: port_,
           );
         },
@@ -918,7 +960,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 21,
+            funcId: 22,
             port: port_,
           );
         },
@@ -953,7 +995,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 22,
+            funcId: 23,
             port: port_,
           );
         },
@@ -985,7 +1027,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 23,
+            funcId: 24,
             port: port_,
           );
         },
@@ -1022,7 +1064,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 24,
+            funcId: 25,
             port: port_,
           );
         },
@@ -1053,7 +1095,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 25,
+            funcId: 26,
             port: port_,
           );
         },
@@ -1087,7 +1129,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 26,
+            funcId: 27,
             port: port_,
           );
         },
@@ -1120,7 +1162,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 27,
+            funcId: 28,
             port: port_,
           );
         },
@@ -1155,7 +1197,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 28,
+            funcId: 29,
             port: port_,
           );
         },
@@ -1177,6 +1219,41 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
+  Future<HealthReport> crateApiHealthResetDatabase({
+    required String dbPath,
+    required String stamp,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(dbPath, serializer);
+          sse_encode_String(stamp, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 30,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_health_report,
+          decodeErrorData: sse_decode_kimatta_error,
+        ),
+        constMeta: kCrateApiHealthResetDatabaseConstMeta,
+        argValues: [dbPath, stamp],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiHealthResetDatabaseConstMeta =>
+      const TaskConstMeta(
+        debugName: "reset_database",
+        argNames: ["dbPath", "stamp"],
+      );
+
+  @override
   Future<void> crateApiShoppingResetShoppingList({
     required String householdId,
     required String fromDate,
@@ -1192,7 +1269,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 29,
+            funcId: 31,
             port: port_,
           );
         },
@@ -1214,6 +1291,41 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
+  Future<HealthReport> crateApiHealthRestoreDatabase({
+    required String exportPath,
+    required String dbPath,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(exportPath, serializer);
+          sse_encode_String(dbPath, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 32,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_health_report,
+          decodeErrorData: sse_decode_kimatta_error,
+        ),
+        constMeta: kCrateApiHealthRestoreDatabaseConstMeta,
+        argValues: [exportPath, dbPath],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiHealthRestoreDatabaseConstMeta =>
+      const TaskConstMeta(
+        debugName: "restore_database",
+        argNames: ["exportPath", "dbPath"],
+      );
+
+  @override
   Future<RecipeDto> crateApiRecipeRestoreRecipe({
     required String householdId,
     required String recipeId,
@@ -1227,7 +1339,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 30,
+            funcId: 33,
             port: port_,
           );
         },
@@ -1260,7 +1372,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 31,
+            funcId: 34,
             port: port_,
           );
         },
@@ -1296,7 +1408,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 32,
+            funcId: 35,
             port: port_,
           );
         },
@@ -1327,7 +1439,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 33,
+            funcId: 36,
             port: port_,
           );
         },
@@ -1359,7 +1471,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 34,
+            funcId: 37,
             port: port_,
           );
         },
@@ -1392,7 +1504,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 35,
+            funcId: 38,
             port: port_,
           );
         },
@@ -1429,7 +1541,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 36,
+            funcId: 39,
             port: port_,
           );
         },
@@ -1466,7 +1578,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 37,
+            funcId: 40,
             port: port_,
           );
         },
@@ -1503,7 +1615,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 38,
+            funcId: 41,
             port: port_,
           );
         },
@@ -1542,7 +1654,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 39,
+            funcId: 42,
             port: port_,
           );
         },
@@ -1805,6 +1917,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  ExportReport dco_decode_export_report(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 2)
+      throw Exception('unexpected arr length: expect 2 but see ${arr.length}');
+    return ExportReport(
+      path: dco_decode_String(arr[0]),
+      schemaVersion: dco_decode_u_32(arr[1]),
+    );
+  }
+
+  @protected
   HealthReport dco_decode_health_report(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
@@ -1883,14 +2007,16 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       case 2:
         return KimattaError_Storage(message: dco_decode_String(raw[1]));
       case 3:
-        return KimattaError_Planning(message: dco_decode_String(raw[1]));
+        return KimattaError_Corrupt(message: dco_decode_String(raw[1]));
       case 4:
-        return KimattaError_Recipe(message: dco_decode_String(raw[1]));
+        return KimattaError_Planning(message: dco_decode_String(raw[1]));
       case 5:
-        return KimattaError_Restriction(message: dco_decode_String(raw[1]));
+        return KimattaError_Recipe(message: dco_decode_String(raw[1]));
       case 6:
-        return KimattaError_PlannedMeal(message: dco_decode_String(raw[1]));
+        return KimattaError_Restriction(message: dco_decode_String(raw[1]));
       case 7:
+        return KimattaError_PlannedMeal(message: dco_decode_String(raw[1]));
+      case 8:
         return KimattaError_Shopping(message: dco_decode_String(raw[1]));
       default:
         throw Exception("unreachable");
@@ -2909,6 +3035,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  ExportReport sse_decode_export_report(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_path = sse_decode_String(deserializer);
+    var var_schemaVersion = sse_decode_u_32(deserializer);
+    return ExportReport(path: var_path, schemaVersion: var_schemaVersion);
+  }
+
+  @protected
   HealthReport sse_decode_health_report(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var var_dbPath = sse_decode_String(deserializer);
@@ -3000,17 +3134,20 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         return KimattaError_Storage(message: var_message);
       case 3:
         var var_message = sse_decode_String(deserializer);
-        return KimattaError_Planning(message: var_message);
+        return KimattaError_Corrupt(message: var_message);
       case 4:
         var var_message = sse_decode_String(deserializer);
-        return KimattaError_Recipe(message: var_message);
+        return KimattaError_Planning(message: var_message);
       case 5:
         var var_message = sse_decode_String(deserializer);
-        return KimattaError_Restriction(message: var_message);
+        return KimattaError_Recipe(message: var_message);
       case 6:
         var var_message = sse_decode_String(deserializer);
-        return KimattaError_PlannedMeal(message: var_message);
+        return KimattaError_Restriction(message: var_message);
       case 7:
+        var var_message = sse_decode_String(deserializer);
+        return KimattaError_PlannedMeal(message: var_message);
+      case 8:
         var var_message = sse_decode_String(deserializer);
         return KimattaError_Shopping(message: var_message);
       default:
@@ -4305,6 +4442,13 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_export_report(ExportReport self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.path, serializer);
+    sse_encode_u_32(self.schemaVersion, serializer);
+  }
+
+  @protected
   void sse_encode_health_report(HealthReport self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_String(self.dbPath, serializer);
@@ -4374,20 +4518,23 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       case KimattaError_Storage(message: final message):
         sse_encode_i_32(2, serializer);
         sse_encode_String(message, serializer);
-      case KimattaError_Planning(message: final message):
+      case KimattaError_Corrupt(message: final message):
         sse_encode_i_32(3, serializer);
         sse_encode_String(message, serializer);
-      case KimattaError_Recipe(message: final message):
+      case KimattaError_Planning(message: final message):
         sse_encode_i_32(4, serializer);
         sse_encode_String(message, serializer);
-      case KimattaError_Restriction(message: final message):
+      case KimattaError_Recipe(message: final message):
         sse_encode_i_32(5, serializer);
         sse_encode_String(message, serializer);
-      case KimattaError_PlannedMeal(message: final message):
+      case KimattaError_Restriction(message: final message):
         sse_encode_i_32(6, serializer);
         sse_encode_String(message, serializer);
-      case KimattaError_Shopping(message: final message):
+      case KimattaError_PlannedMeal(message: final message):
         sse_encode_i_32(7, serializer);
+        sse_encode_String(message, serializer);
+      case KimattaError_Shopping(message: final message):
+        sse_encode_i_32(8, serializer);
         sse_encode_String(message, serializer);
     }
   }

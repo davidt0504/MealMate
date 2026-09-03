@@ -25,6 +25,12 @@ String describeFailure(
   KimattaError_InvalidPath() =>
     '$subject unavailable: the database path is invalid',
   KimattaError_Storage(:final message) => '$subject unavailable: $message',
+  // Fixed honest copy rather than the raw Rust message: the detail ("file is not a
+  // database") reads as jargon, and the recovery affordances live on the Settings
+  // diagnostics card (MVP-017), which matches on the variant, not this string.
+  KimattaError_Corrupt() =>
+    '$subject unavailable: '
+        "the local database is damaged and can't be opened",
   // Added with the variant itself, so the new error has prose rather than a raw
   // freezed `toString()` the first time MVP-006's editor can produce it.
   KimattaError_Planning(:final message) => '$subject unavailable: $message',

@@ -83,6 +83,39 @@ void main() {
     expect(again.members.length, 1);
   });
 
+  test('an export is an openable, versioned copy of the live data', () async {
+    final path = await tempDb();
+    await openDatabase(dbPath: path);
+    final h = await bootstrapHousehold();
+    final dest =
+        '${File(path).parent.path}${Platform.pathSeparator}exports'
+        '${Platform.pathSeparator}kimatta-export.db';
+    final report = await exportDatabase(destPath: dest);
+    expect(report.path, dest);
+    expect(report.schemaVersion, 10);
+    // Opening the export as the live database proves it is the database's own
+    // format, not a write-only artifact.
+    final opened = await openDatabase(dbPath: dest);
+    expect(opened.schemaVersion, 10);
+    expect((await bootstrapHousehold()).id, h.id);
+  });
+
+  test('a restore returns the exported content (AC-4)', () async {
+    final path = await tempDb();
+    await openDatabase(dbPath: path);
+    final h = await bootstrapHousehold();
+    await renameHousehold(householdId: h.id, name: 'Casa');
+    final dest = '${File(path).parent.path}${Platform.pathSeparator}export.db';
+    final report = await exportDatabase(destPath: dest);
+    await renameHousehold(householdId: h.id, name: 'Mutated');
+
+    final restored = await restoreDatabase(exportPath: dest, dbPath: path);
+    expect(restored.schemaVersion, report.schemaVersion);
+    expect((await bootstrapHousehold()).name, 'Casa');
+    // The overwritten database is kept aside, not destroyed.
+    expect(File('$path.pre-restore').existsSync(), isTrue);
+  });
+
   test('rename persists and blank clears', () async {
     await openDatabase(dbPath: await tempDb());
     final h = await bootstrapHousehold();

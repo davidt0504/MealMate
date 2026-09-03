@@ -179,7 +179,7 @@ Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-orch-16-2026-
 
 - **Restriction-load failure breaks every recipe read, and in `save_recipe_in` lands post-commit** (`rust/src/api/recipe.rs:373`) -- one unparseable `household_restriction` row (`CorruptRestriction`, reachable by downgrade past a vocabulary addition) kills list/load/save/archive/restore for the whole library. `db::with` is not transactional (`rust/src/db.rs:23`), so the save at `:399` has committed before `stored_recipe` errors: the user sees a write failure on a stored recipe, and because a create sends an empty id minted in Rust, each retry stores a duplicate. Deterministic, so it repeats. Fix: keep the recipe read paths independent of restriction-load failure, or keep the read-back free of newly fallible work.
   Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-orch-16-2026-08-29T1040-68c3.md
-  **Status:** OPEN
+  **Status:** PARTIALLY RESOLVED 2026-09-03 -- MVP-017 fixed the write-path half: the bridge save/archive/restore compositions now run load -> write -> read-back inside one IMMEDIATE transaction (`save_recipe_in`/`archive_recipe_in`/`restore_recipe_in` seams in kimatta-storage; `a_failing_read_back_rolls_the_save_back` pins rollback and no-duplicate-on-retry). The read-path half stays OPEN: one corrupt restriction row still fails every recipe list/load; out of MVP-017's minimal scope.
 
 ## orch/33 -- 2026-09-02
 
@@ -223,4 +223,34 @@ Full review: .orch/redteam-impl-handoff-orch-37-2026-09-02T1949-115e.md
   **Status:** RESOLVED 2026-09-02 -- `record_decision` now derives the window from the `before` snapshot (`PlanningSnapshot::dates()`) and refuses a `Swap` outside it with `ApplicationError::DecisionOutsideWindow`, before any write, so the transaction rolls back. `Veto`/`RestrictionsReviewed` stay un-gated: their `date` is ledger-only.
 
 - **No command can read, edit or delete a `policy` row, so every policy write is permanent** (`rust/crates/kimatta-application/src/lib.rs`, `PolicyTypes::HARD_VETO` in `record_decision`) -- `record_decision` is the only policy writer and it only ever inserts or enables. `rust/src/api/` exposes no policies module and no Dart screen reads one, so a household cannot undo anything it has told the app. Two instances ship today: `food.hard_veto` -- "Never suggest X" tapped on the wrong tile rejects that dish at Tier 0 for the life of the install -- and `food.restrictions_reviewed`, where a mis-tap on "We don't have any" cannot be taken back from any screen. MVP-024 made the veto dialog's copy honest about this rather than pointing at a settings surface that does not exist, and made the reviewed marker retire itself when the restriction set changes; neither gives the household a way back. Fix: a policy list/disable command plus a surface on the restrictions or household screen, then restore reversal wording to `vetoConfirmBody`. Full review: .orch/redteam-impl-handoff-orch-37-2026-09-02T1949-115e.md
+  **Status:** OPEN
+
+## orch/39 -- 2026-09-03
+
+Source: /home/davidlinux/.claude/reviews/impl-handoff-orch-39-2026-09-02T2310-dff6.md
+Full review: .orch/redteam-impl-handoff-orch-39-2026-09-02T2320-5b75.md
+
+### MEDIUM
+
+- **`.pre-restore` is preserved but unreachable from any UI path** (`lib/features/settings/backup_provider.dart:44`) -- when a restore fails at both the swap and the put-back, `preserved_aside_error` names `<db_path>.pre-restore` as the surviving copy. The only restore affordance is `latestExport()`, which lists `<applicationSupport>/exports/` and keeps `.endsWith('.db')`, so that file matches neither the directory nor the suffix, and on Android the application-support directory is not reachable from a file manager either. The message was softened to stop promising a retry that cannot work, which makes it truthful but leaves AC-3's "recoverable" half open. Fix: a sibling of `latestExport()` offering `<db_path>.pre-restore` when it exists -- `restore_database` already validates whatever path it is handed.
+  Full review: .orch/redteam-impl-handoff-orch-39-2026-09-02T2320-5b75.md
+  **Status:** OPEN
+
+- **`export_database` unlinks the destination before `VACUUM INTO` can replace it** (`rust/crates/kimatta-storage/src/lib.rs:599`) -- the pre-existing file at `dest` is removed first because `VACUUM INTO` refuses to overwrite, so a re-export that then fails (disk full, corruption found mid-read) has destroyed the previous export at that path and written nothing in its place. Same shape as the `.pre-restore` ordering defect fixed on the restore path, and more reachable: export filenames are second-granularity, so a retry within the same second targets the same path. Found while red-teaming the fix plan for that defect; out of scope for orch/39, which closed only the nine review findings. Fix: `VACUUM INTO` a temporary sibling, then rename over `dest`.
+  Full review: .orch/plan-review-fixplan-mvp017-offline-durability-2026-09-02T2351.md
+  **Status:** OPEN
+
+## orch/39 -- 2026-09-03
+
+Source: /home/davidlinux/.claude/reviews/impl-handoff-orch-39-2026-09-03T0005-e036.md
+Full review: .orch/redteam-impl-handoff-orch-39-2026-09-03T0012-89d3.md
+
+### MEDIUM
+
+- **No guard against two concurrent restores sharing one staging path** (`rust/src/api/health.rs:71`) -- `{db_path}.restore-staging` is a fixed path and everything before `db::swap` runs outside the `DB` mutex, so a double tap on Restore (the button is never disabled in flight) lets one call's `fs::copy` truncate a staged file another call already verified and is about to commit. Fix: unique per-call staging name, or hold the mutex for all of `restore_database`.
+  Full review: .orch/redteam-impl-handoff-orch-39-2026-09-03T0012-89d3.md
+  **Status:** RESOLVED 2026-09-03 -- the whole of `restore_database` runs inside `crate::db::swap`, and both destructive buttons are disabled while an operation is in flight (`BackupBusy`): serialising alone would still let a second confirmed restore overwrite the single kept generation with the first restore's result.
+
+- **A failed restore that leaves no database behind reads as healthy in Settings** (`lib/features/settings/health_provider.dart:12`) -- `healthReportProvider` calls `openDatabase`, and `kimatta_storage::open` creates a fresh database when the file is missing (`rust/crates/kimatta-storage/src/lib.rs:515`). In the one branch where `recover_original` cannot put the original back, the invalidation added for the stale-cache fix therefore re-opens into a *new empty* database: the diagnostics tile reads "schema v10", no recovery row appears (it is gated on `health is AsyncError`), and the only mention of the user's data at `.pre-restore` is a snackbar that has since been dismissed. The sibling entry above ("`.pre-restore` is preserved but unreachable from any UI path") is the other half of this. Found while red-teaming the fix plan for the stale-cache finding; accepted deliberately, since a non-creating probe would change the create-on-missing contract first launch depends on. Fix: a health probe that distinguishes "missing" from "opened", or hold the last destructive failure in a provider the diagnostics tile renders.
+  Full review: .orch/plan-review-fixplan-orch39-backup-swap-2026-09-03T0026.md
   **Status:** OPEN

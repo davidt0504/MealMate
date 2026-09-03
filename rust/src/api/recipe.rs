@@ -1,3 +1,4 @@
+use kimatta_storage::rusqlite::TransactionBehavior;
 use kimatta_storage::{
     format_civil_date, Connection, CustomIngredient, CustomIngredientId, HouseholdId,
     HouseholdRestrictions, IngredientId, IngredientLine, IngredientRef, ProvenanceKind, Quantity,
@@ -410,12 +411,12 @@ fn recipe_from_domain(record: &RecipeRecord, restrictions: &HouseholdRestriction
 /// what was stored — including the archive marker, which no write here can set, and the
 /// assessment against the stored restriction set, which no write here can supply.
 ///
-/// `restrictions` is a parameter rather than a load here because every caller has already
-/// committed by the time it calls: `db::with` hands out the connection without a transaction,
-/// so any fallible work on this side of the write would report failure on a recipe that *is*
-/// stored — and since a create sends an empty id minted fresh in Rust, the user's retry would
-/// store a second copy. Callers load the set before their write instead, so an unreadable one
-/// fails the command with nothing written.
+/// Every caller runs load → write → read-back inside one IMMEDIATE transaction (MVP-017
+/// AC-2) and commits only after this read-back succeeds, so a failure here rolls the write
+/// back rather than reporting failure on a recipe that *is* stored — which mattered because
+/// a create sends an empty id minted fresh in Rust, so a retry after such a report stored a
+/// second copy. `restrictions` stays a parameter loaded before the write, keeping the
+/// cheap failure order: an unreadable set fails the command before any row is touched.
 fn stored_recipe(
     conn: &Connection,
     household: &HouseholdId,
@@ -450,13 +451,19 @@ pub(crate) fn save_recipe_in(
     // `dto.assessment` is dropped here with the rest of the request shell: `recipe_to_domain`
     // never reads it, so a fabricated verdict cannot reach storage or the read-back.
     let recipe = recipe_to_domain(dto)?;
+    // One IMMEDIATE transaction around load → write → read-back — see `stored_recipe`.
+    let tx = conn
+        .transaction_with_behavior(TransactionBehavior::Immediate)
+        .map_err(StorageError::from)?;
     // Before the write, so an unreadable restriction set fails with nothing stored — see
     // `stored_recipe`.
-    let restrictions = kimatta_storage::load_restrictions(conn, recipe.household_id())?;
-    kimatta_storage::save_recipe(conn, &recipe)?;
+    let restrictions = kimatta_storage::load_restrictions(&tx, recipe.household_id())?;
+    kimatta_storage::save_recipe_in(&tx, &recipe)?;
     // Read back rather than echo the input: `archived_at` and `assessment` are not in the
     // request, and an edit of an archived recipe must keep reporting it archived.
-    stored_recipe(conn, recipe.household_id(), recipe.id(), &restrictions)
+    let stored = stored_recipe(&tx, recipe.household_id(), recipe.id(), &restrictions)?;
+    tx.commit().map_err(StorageError::from)?;
+    Ok(stored)
 }
 
 fn load_recipe_in(
@@ -515,11 +522,16 @@ fn archive_recipe_in(
     let household = HouseholdId::new(household_id)?;
     let id = RecipeId::new(recipe_id)?;
     let at = kimatta_storage::parse_civil_date(archived_on)?;
+    let tx = conn
+        .transaction_with_behavior(TransactionBehavior::Immediate)
+        .map_err(StorageError::from)?;
     // After the date parse, so a malformed date still wins the error, and before the write,
     // so an unreadable restriction set fails with nothing archived — see `stored_recipe`.
-    let restrictions = kimatta_storage::load_restrictions(conn, &household)?;
-    kimatta_storage::archive_recipe(conn, &household, &id, at)?;
-    stored_recipe(conn, &household, &id, &restrictions)
+    let restrictions = kimatta_storage::load_restrictions(&tx, &household)?;
+    kimatta_storage::archive_recipe_in(&tx, &household, &id, at)?;
+    let stored = stored_recipe(&tx, &household, &id, &restrictions)?;
+    tx.commit().map_err(StorageError::from)?;
+    Ok(stored)
 }
 
 fn restore_recipe_in(
@@ -529,10 +541,15 @@ fn restore_recipe_in(
 ) -> Result<RecipeDto, KimattaError> {
     let household = HouseholdId::new(household_id)?;
     let id = RecipeId::new(recipe_id)?;
+    let tx = conn
+        .transaction_with_behavior(TransactionBehavior::Immediate)
+        .map_err(StorageError::from)?;
     // Before the write, for the reason `save_recipe_in` and `archive_recipe_in` record.
-    let restrictions = kimatta_storage::load_restrictions(conn, &household)?;
-    kimatta_storage::restore_recipe(conn, &household, &id)?;
-    stored_recipe(conn, &household, &id, &restrictions)
+    let restrictions = kimatta_storage::load_restrictions(&tx, &household)?;
+    kimatta_storage::restore_recipe_in(&tx, &household, &id)?;
+    let stored = stored_recipe(&tx, &household, &id, &restrictions)?;
+    tx.commit().map_err(StorageError::from)?;
+    Ok(stored)
 }
 
 fn add_custom_ingredient_in(
@@ -689,6 +706,42 @@ mod tests {
             listing_ignoring_restrictions(&conn, "h-1", RecipeListing::Active),
             vec![stored.id],
             "restore must leave the archive marker as it found it"
+        );
+    }
+
+    /// AC-2 (MVP-017): the write and its read-back succeed or fail together. The temp
+    /// trigger deletes the provenance row the write just inserted, so the write itself
+    /// succeeds and the read-back then fails — the post-commit hazard KNOWN_ISSUES 180
+    /// records, where the user was shown a failure for a recipe that *was* stored and a
+    /// retry (a create sends an empty id, minted fresh in Rust) stored a second copy.
+    #[test]
+    fn a_failing_read_back_rolls_the_save_back() {
+        let mut conn = open_seeded(&["h-1"]);
+        conn.execute_batch(
+            "CREATE TEMP TRIGGER break_read_back AFTER INSERT ON recipe_provenance
+             BEGIN DELETE FROM recipe_provenance WHERE recipe_id = NEW.recipe_id; END",
+        )
+        .unwrap();
+        let err = save_recipe_in(&mut conn, recipe("h-1", "", vec![])).unwrap_err();
+        match &err {
+            KimattaError::Storage { message } => assert!(
+                message.contains("no provenance row"),
+                "expected the read-back failure, got {message:?}"
+            ),
+            other => panic!("expected a storage error, got {other:?}"),
+        }
+        assert!(
+            listing_ignoring_restrictions(&conn, "h-1", RecipeListing::Active).is_empty(),
+            "the failed save must leave no row"
+        );
+
+        // With the fault cleared, the retry stores exactly one copy.
+        conn.execute_batch("DROP TRIGGER break_read_back").unwrap();
+        save_recipe_in(&mut conn, recipe("h-1", "", vec![])).unwrap();
+        assert_eq!(
+            listing_ignoring_restrictions(&conn, "h-1", RecipeListing::Active).len(),
+            1,
+            "the retry must not duplicate"
         );
     }
 

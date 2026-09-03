@@ -19,6 +19,13 @@ sealed class KimattaError with _$KimattaError implements FrbException {
   const factory KimattaError.notOpen() = KimattaError_NotOpen;
   const factory KimattaError.storage({required String message}) =
       KimattaError_Storage;
+
+  /// The database file itself is damaged (corrupt header, truncated file, page-level
+  /// damage). Its own variant, not `Storage`, because the recovery differs: the UI may
+  /// offer "start fresh" for corruption, which would silently lose data if shown for,
+  /// say, a disk-full `Storage` failure.
+  const factory KimattaError.corrupt({required String message}) =
+      KimattaError_Corrupt;
   const factory KimattaError.planning({required String message}) =
       KimattaError_Planning;
   const factory KimattaError.recipe({required String message}) =
