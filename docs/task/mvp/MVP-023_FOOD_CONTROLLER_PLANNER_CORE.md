@@ -74,6 +74,17 @@ This is the card that makes the v3 claim real. PRD §22 names Cover My Week the 
 - Slot ordering (canonical versus most-constrained-first) and the initial beam width are this card's choices, recorded with the reason. `MVP-025`'s benchmark may revise them; this card must not assert either as settled product truth.
 - If household preference aggregation cannot satisfy PRD §9.10 without an owner tradeoff on fairness, stop for `deep-options` rather than picking a fairness rule unilaterally.
 
+### Decisions recorded by the approved plan (2026-08-30, revision 2 after two `/redteam-plan` rounds)
+
+- **Slot ordering:** canonical `(date, slot)`. Most-constrained-first is `MVP-025`'s benchmark question, not this card's product truth.
+- **Beam width `B = 8`, candidates per slot `K = 12`, commitment horizon 2 days.** States scored `= Σ_slots live_before × feasible_after_truncation`: a 7-day dinner-only cycle scores at most `12 + 6×96 = 588`; 21 slots (three meals, seven days) `12 + 20×96 = 1,932`; 93 slots (three meals, 31 days) `12 + 92×96 = 8,844`. Every count is bounded and transparent; `MVP-025` may revise all three numbers.
+- **§9.10 aggregation:** the per-member floor (step 4) is its own lexicographic sub-tier ordered *before* the aggregate (step 5), which is `Σ member_total − 2 × sacrifice` (step 6). This is the literal PRD step order, not a new fairness rule; the stop above still applies if a fixture shows a material fairness tradeoff.
+- **Existing `Open` component = explicit human decision:** resolved at Tier 0 like a lock (PRD §9.7 "explicit human decisions"), so the search never churns it.
+- **Zero configured restrictions ⇒ the cycle is never `Covered`:** storage cannot distinguish "reviewed, none" from "skipped", so the conservative reading applies. `MVP-024` follow-up: persist a reviewed marker so the claim can be made.
+- **No `correction` column on the ledger this card:** no writer exists until `MVP-024`; a correction is its own appended row (`selected_action = "correct"`, payload naming the prior `seq`).
+- **One bridge command (`cover_cycle`) with `apply: bool`; no policy bridge command:** no UI reads policies until `MVP-024`; storage tests exercise them.
+- **Snapshot identity:** FNV-1a 64 over a hand-written canonical text; no `serde` on any domain type (the `starter.rs` stance).
+
 ## Acceptance criteria
 
 - **AC-1:** A candidate with a known restriction conflict, an explicit hard veto, an impossible prep window, or a lock conflict is never selected — at any beam width.

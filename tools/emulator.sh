@@ -5,6 +5,7 @@
 #
 #   human:  S=$(tools/emulator.sh up) && [ -n "$S" ] && export ADB_SERVER_SOCKET=$S
 #   agent:  tools/emulator.sh adb devices
+#   reset:  tools/emulator.sh reset      # pm clear — next launch is a first run
 #
 # Never `adb reboot`: the AVD restores a Quick Boot snapshot and installed APKs vanish.
 # Process names depend on how the AVD was started (measured): via emulator.exe you get BOTH
@@ -22,6 +23,7 @@ AVD=${EMU_AVD:-pre001_avd}
 BOOT_TIMEOUT=${EMU_BOOT_TIMEOUT:-180}
 EMU_EXE='C:\Android\sdk\emulator\emulator.exe'
 PORT=5037                                   # constant: baked into the PS1's firewall rule
+APP_ID=dev.mealmate.temp                    # temporary applicationId pending DEC-004
 LOCK=/tmp/kimatta-emulator-up.lock
 LOCK_WAIT=300
 ERRLOG=""                                   # created lazily; `exec` in cmd_adb skips EXIT traps
@@ -198,11 +200,58 @@ cmd_down() {
   return $rc
 }
 
+# Wipes the app's private data (kimatta.db included) so the next launch is a true first run.
+# The AVD's Quick Boot snapshot can restore a state where the package is absent (header note);
+# `pm clear` on an absent package exits non-zero and the script is `set -euo pipefail`, so
+# probe first and treat "not installed" as already clean.
+cmd_reset() {
+  local sock; sock=$(socket) || { fail "no default route"; return 1; }
+  port_open || { fail "bridge is down — run 'tools/emulator.sh up' first"; return 1; }
+  if ADB_SERVER_SOCKET=$sock adb shell pm path "$APP_ID" >/dev/null 2>&1; then
+    ADB_SERVER_SOCKET=$sock adb shell pm clear "$APP_ID" >&2
+  else
+    info "reset: $APP_ID not installed; nothing to clear"
+  fi
+}
+
+# Development seed: today the only durable data is the household, which the app bootstraps
+# on first launch — so seeding is install + reset + launch. Grows real fixtures with MVP-007/011.
+cmd_seed() {
+  local sock; sock=$(socket) || { fail "no default route"; return 1; }
+  port_open || { fail "bridge is down — run 'tools/emulator.sh up' first"; return 1; }
+  # cwd-independent like every other command here: the APK is located from the script,
+  # not from wherever the caller happens to be standing.
+  local root; root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd) \
+    || { fail "cannot resolve the repo root from ${BASH_SOURCE[0]}"; return 1; }
+  local apk="$root/build/app/outputs/flutter-apk/app-debug.apk"
+  [ -f "$apk" ] || { fail "no debug APK at $apk — run 'flutter build apk --debug' first"; return 1; }
+  ADB_SERVER_SOCKET=$sock adb install -r "$apk" >&2
+  cmd_reset
+  # `am start` exits 0 even when it prints `Error: Activity not started`, so the output is
+  # what is checked, not the status. -W waits for the launch and reports it as `Status:`.
+  local out; out=$(ADB_SERVER_SOCKET=$sock adb shell am start -W -n "$APP_ID/.MainActivity" 2>&1) || true
+  printf '%s\n' "$out" >&2
+  if printf '%s' "$out" | grep -qi '^Error'; then
+    fail "launch failed: $APP_ID/.MainActivity did not start"
+    return 1
+  fi
+  # A launch that resolves but never comes up prints `Status: timeout` and no Error line.
+  if ! printf '%s' "$out" | grep -qi '^Status: ok'; then
+    fail "launch did not report 'Status: ok' — the activity may not be up"
+    return 1
+  fi
+  pass "launched $APP_ID/.MainActivity"
+}
+
 case "${1:-}" in
   up)     shift; cmd_up "$@" ;;
   adb)    shift; cmd_adb "$@" ;;
   status) shift; cmd_status "$@" ;;
   down)   shift; cmd_down "$@" ;;
-  -h|--help|help) say "usage: tools/emulator.sh {up|adb <args>|status|down}"; exit 0 ;;
-  *) say "usage: tools/emulator.sh {up|adb <args>|status|down}"; exit 2 ;;
+  # Neither takes an argument. Rejecting extras rather than passing them to a function that
+  # ignores them: `emulator.sh reset --wipe` used to silently do the plain default instead.
+  reset)  shift; [ $# -eq 0 ] || { say "reset takes no arguments (got: $*)"; exit 2; }; cmd_reset ;;
+  seed)   shift; [ $# -eq 0 ] || { say "seed takes no arguments (got: $*)"; exit 2; }; cmd_seed ;;
+  -h|--help|help) say "usage: tools/emulator.sh {up|adb <args>|status|down|reset|seed}"; exit 0 ;;
+  *) say "usage: tools/emulator.sh {up|adb <args>|status|down|reset|seed}"; exit 2 ;;
 esac

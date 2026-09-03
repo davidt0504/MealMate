@@ -3,7 +3,18 @@
 
 // ignore_for_file: unused_import, unused_element, unnecessary_import, duplicate_ignore, invalid_use_of_internal_member, annotate_overrides, non_constant_identifier_names, curly_braces_in_flow_control_structures, prefer_const_literals_to_create_immutables, unused_field
 
+import 'api/decisions.dart';
+import 'api/error.dart';
 import 'api/health.dart';
+import 'api/household.dart';
+import 'api/pantry.dart';
+import 'api/planned_meals.dart';
+import 'api/planner.dart';
+import 'api/planning.dart';
+import 'api/recipe.dart';
+import 'api/restrictions.dart';
+import 'api/shopping.dart';
+import 'api/starter.dart';
 
 import 'dart:async';
 import 'dart:convert';
@@ -69,7 +80,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.13.0';
 
   @override
-  int get rustContentHash => 1873331351;
+  int get rustContentHash => 866689241;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -81,11 +92,189 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
 }
 
 abstract class RustLibApi extends BaseApi {
+  Future<CustomIngredientDto> crateApiRecipeAddCustomIngredient({
+    required CustomIngredientDto item,
+  });
+
+  Future<RecipeDto> crateApiRecipeArchiveRecipe({
+    required String householdId,
+    required String recipeId,
+    required String archivedOn,
+  });
+
+  Future<HouseholdDto> crateApiHouseholdBootstrapHousehold();
+
+  Future<HouseholdDto> crateApiHouseholdCompleteOnboarding({
+    required String householdId,
+  });
+
   String crateApiHealthCoreVersion();
 
-  Future<HealthReport> crateApiHealthHealthCheck({required String dbPath});
+  Future<CoverCycleOutcomeDto> crateApiPlannerCoverCycle({
+    required CoverCycleRequestDto request,
+  });
+
+  Future<void> crateApiPlannedMealsDeletePlannedMeal({
+    required String householdId,
+    required String mealId,
+  });
+
+  Future<void> crateApiShoppingDeleteShoppingManualItem({
+    required String householdId,
+    required String itemId,
+  });
+
+  Future<ShoppingListDto> crateApiShoppingDeriveShoppingList({
+    required String householdId,
+    required String fromDate,
+    required String toDate,
+  });
+
+  Future<PlanningCycleDto> crateApiPlanningEnsurePlanningCycle({
+    required String householdId,
+    required String defaultAnchorDate,
+  });
+
+  Future<ExportReport> crateApiHealthExportDatabase({required String destPath});
 
   Future<void> crateApiHealthInitApp();
+
+  Future<StarterInstallReportDto> crateApiStarterInstallStarterContent({
+    required String householdId,
+  });
+
+  Future<List<String>> crateApiPlannedMealsKnownMealComponentKinds();
+
+  Future<List<String>> crateApiRestrictionsKnownRestrictionKinds();
+
+  Future<List<String>> crateApiRecipeKnownUnitKinds();
+
+  Future<List<RecipeSummaryDto>> crateApiRecipeListArchivedRecipes({
+    required String householdId,
+  });
+
+  Future<List<CustomIngredientDto>> crateApiRecipeListCustomIngredients({
+    required String householdId,
+  });
+
+  Future<List<PantryEntryDto>> crateApiPantryListPantry({
+    required String householdId,
+  });
+
+  Future<List<PlannedMealDto>> crateApiPlannedMealsListPlannedMeals({
+    required String householdId,
+    required String fromDate,
+    required String toDate,
+  });
+
+  Future<List<RecipeSummaryDto>> crateApiRecipeListRecipes({
+    required String householdId,
+  });
+
+  Future<PlannedMealDto?> crateApiPlannedMealsLoadPlannedMeal({
+    required String householdId,
+    required String mealId,
+  });
+
+  Future<RecipeDto?> crateApiRecipeLoadRecipe({
+    required String householdId,
+    required String recipeId,
+  });
+
+  Future<List<RestrictionDto>> crateApiRestrictionsLoadRestrictions({
+    required String householdId,
+  });
+
+  Future<ShoppingViewDto> crateApiShoppingLoadShoppingView({
+    required String householdId,
+    required String fromDate,
+    required String toDate,
+  });
+
+  Future<HealthReport> crateApiHealthOpenDatabase({required String dbPath});
+
+  Future<PlanningCycleDto> crateApiPlanningPlanningCycleWindow({
+    required String householdId,
+    required String today,
+    required int offsetCycles,
+  });
+
+  Future<PlanDecisionOutcomeDto> crateApiDecisionsRecordPlanDecision({
+    required PlanDecisionRequestDto request,
+  });
+
+  Future<HouseholdDto> crateApiHouseholdRenameHousehold({
+    required String householdId,
+    String? name,
+  });
+
+  Future<HealthReport> crateApiHealthResetDatabase({
+    required String dbPath,
+    required String stamp,
+  });
+
+  Future<void> crateApiShoppingResetShoppingList({
+    required String householdId,
+    required String fromDate,
+    required String toDate,
+  });
+
+  Future<HealthReport> crateApiHealthRestoreDatabase({
+    required String exportPath,
+    required String dbPath,
+  });
+
+  Future<RecipeDto> crateApiRecipeRestoreRecipe({
+    required String householdId,
+    required String recipeId,
+  });
+
+  Future<PlannedMealDto> crateApiPlannedMealsSavePlannedMeal({
+    required PlannedMealDto meal,
+  });
+
+  Future<PlanningCycleDto> crateApiPlanningSavePlanningCycle({
+    required String householdId,
+    required String anchorDate,
+    required int lengthDays,
+    required List<MealSlotDto> mealSlots,
+  });
+
+  Future<RecipeDto> crateApiRecipeSaveRecipe({required RecipeDto recipe});
+
+  Future<List<RestrictionDto>> crateApiRestrictionsSaveRestrictions({
+    required String householdId,
+    required List<RestrictionDto> restrictions,
+  });
+
+  Future<ShoppingManualItemDto> crateApiShoppingSaveShoppingManualItem({
+    required ShoppingManualItemDto item,
+  });
+
+  Future<PantryEntryDto> crateApiPantrySetPantryMark({
+    required String householdId,
+    required IngredientRefDto ingredient,
+    required bool marked,
+  });
+
+  Future<List<IngredientRefDto>> crateApiPantrySetPantryMarks({
+    required String householdId,
+    required List<IngredientRefDto> ingredients,
+    required bool marked,
+  });
+
+  Future<PlannedMealDto> crateApiPlannedMealsSetPlannedMealLock({
+    required String householdId,
+    required String mealId,
+    required bool locked,
+  });
+
+  Future<ShoppingLineStateDto> crateApiShoppingSetShoppingLineState({
+    required String householdId,
+    required String fromDate,
+    required String toDate,
+    required ShoppingLineStateDto state,
+  });
 }
 
 class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
@@ -97,12 +286,142 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   });
 
   @override
+  Future<CustomIngredientDto> crateApiRecipeAddCustomIngredient({
+    required CustomIngredientDto item,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_box_autoadd_custom_ingredient_dto(item, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 1,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_custom_ingredient_dto,
+          decodeErrorData: sse_decode_kimatta_error,
+        ),
+        constMeta: kCrateApiRecipeAddCustomIngredientConstMeta,
+        argValues: [item],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiRecipeAddCustomIngredientConstMeta =>
+      const TaskConstMeta(
+        debugName: "add_custom_ingredient",
+        argNames: ["item"],
+      );
+
+  @override
+  Future<RecipeDto> crateApiRecipeArchiveRecipe({
+    required String householdId,
+    required String recipeId,
+    required String archivedOn,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(householdId, serializer);
+          sse_encode_String(recipeId, serializer);
+          sse_encode_String(archivedOn, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 2,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_recipe_dto,
+          decodeErrorData: sse_decode_kimatta_error,
+        ),
+        constMeta: kCrateApiRecipeArchiveRecipeConstMeta,
+        argValues: [householdId, recipeId, archivedOn],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiRecipeArchiveRecipeConstMeta =>
+      const TaskConstMeta(
+        debugName: "archive_recipe",
+        argNames: ["householdId", "recipeId", "archivedOn"],
+      );
+
+  @override
+  Future<HouseholdDto> crateApiHouseholdBootstrapHousehold() {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 3,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_household_dto,
+          decodeErrorData: sse_decode_kimatta_error,
+        ),
+        constMeta: kCrateApiHouseholdBootstrapHouseholdConstMeta,
+        argValues: [],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiHouseholdBootstrapHouseholdConstMeta =>
+      const TaskConstMeta(debugName: "bootstrap_household", argNames: []);
+
+  @override
+  Future<HouseholdDto> crateApiHouseholdCompleteOnboarding({
+    required String householdId,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(householdId, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 4,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_household_dto,
+          decodeErrorData: sse_decode_kimatta_error,
+        ),
+        constMeta: kCrateApiHouseholdCompleteOnboardingConstMeta,
+        argValues: [householdId],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiHouseholdCompleteOnboardingConstMeta =>
+      const TaskConstMeta(
+        debugName: "complete_onboarding",
+        argNames: ["householdId"],
+      );
+
+  @override
   String crateApiHealthCoreVersion() {
     return handler.executeSync(
       SyncTask(
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 1)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 5)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_String,
@@ -119,32 +438,206 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       const TaskConstMeta(debugName: "core_version", argNames: []);
 
   @override
-  Future<HealthReport> crateApiHealthHealthCheck({required String dbPath}) {
+  Future<CoverCycleOutcomeDto> crateApiPlannerCoverCycle({
+    required CoverCycleRequestDto request,
+  }) {
     return handler.executeNormal(
       NormalTask(
         callFfi: (port_) {
           final serializer = SseSerializer(generalizedFrbRustBinding);
-          sse_encode_String(dbPath, serializer);
+          sse_encode_box_autoadd_cover_cycle_request_dto(request, serializer);
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 2,
+            funcId: 6,
             port: port_,
           );
         },
         codec: SseCodec(
-          decodeSuccessData: sse_decode_health_report,
+          decodeSuccessData: sse_decode_cover_cycle_outcome_dto,
           decodeErrorData: sse_decode_kimatta_error,
         ),
-        constMeta: kCrateApiHealthHealthCheckConstMeta,
-        argValues: [dbPath],
+        constMeta: kCrateApiPlannerCoverCycleConstMeta,
+        argValues: [request],
         apiImpl: this,
       ),
     );
   }
 
-  TaskConstMeta get kCrateApiHealthHealthCheckConstMeta =>
-      const TaskConstMeta(debugName: "health_check", argNames: ["dbPath"]);
+  TaskConstMeta get kCrateApiPlannerCoverCycleConstMeta =>
+      const TaskConstMeta(debugName: "cover_cycle", argNames: ["request"]);
+
+  @override
+  Future<void> crateApiPlannedMealsDeletePlannedMeal({
+    required String householdId,
+    required String mealId,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(householdId, serializer);
+          sse_encode_String(mealId, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 7,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_kimatta_error,
+        ),
+        constMeta: kCrateApiPlannedMealsDeletePlannedMealConstMeta,
+        argValues: [householdId, mealId],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiPlannedMealsDeletePlannedMealConstMeta =>
+      const TaskConstMeta(
+        debugName: "delete_planned_meal",
+        argNames: ["householdId", "mealId"],
+      );
+
+  @override
+  Future<void> crateApiShoppingDeleteShoppingManualItem({
+    required String householdId,
+    required String itemId,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(householdId, serializer);
+          sse_encode_String(itemId, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 8,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_kimatta_error,
+        ),
+        constMeta: kCrateApiShoppingDeleteShoppingManualItemConstMeta,
+        argValues: [householdId, itemId],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiShoppingDeleteShoppingManualItemConstMeta =>
+      const TaskConstMeta(
+        debugName: "delete_shopping_manual_item",
+        argNames: ["householdId", "itemId"],
+      );
+
+  @override
+  Future<ShoppingListDto> crateApiShoppingDeriveShoppingList({
+    required String householdId,
+    required String fromDate,
+    required String toDate,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(householdId, serializer);
+          sse_encode_String(fromDate, serializer);
+          sse_encode_String(toDate, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 9,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_shopping_list_dto,
+          decodeErrorData: sse_decode_kimatta_error,
+        ),
+        constMeta: kCrateApiShoppingDeriveShoppingListConstMeta,
+        argValues: [householdId, fromDate, toDate],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiShoppingDeriveShoppingListConstMeta =>
+      const TaskConstMeta(
+        debugName: "derive_shopping_list",
+        argNames: ["householdId", "fromDate", "toDate"],
+      );
+
+  @override
+  Future<PlanningCycleDto> crateApiPlanningEnsurePlanningCycle({
+    required String householdId,
+    required String defaultAnchorDate,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(householdId, serializer);
+          sse_encode_String(defaultAnchorDate, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 10,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_planning_cycle_dto,
+          decodeErrorData: sse_decode_kimatta_error,
+        ),
+        constMeta: kCrateApiPlanningEnsurePlanningCycleConstMeta,
+        argValues: [householdId, defaultAnchorDate],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiPlanningEnsurePlanningCycleConstMeta =>
+      const TaskConstMeta(
+        debugName: "ensure_planning_cycle",
+        argNames: ["householdId", "defaultAnchorDate"],
+      );
+
+  @override
+  Future<ExportReport> crateApiHealthExportDatabase({
+    required String destPath,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(destPath, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 11,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_export_report,
+          decodeErrorData: sse_decode_kimatta_error,
+        ),
+        constMeta: kCrateApiHealthExportDatabaseConstMeta,
+        argValues: [destPath],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiHealthExportDatabaseConstMeta =>
+      const TaskConstMeta(debugName: "export_database", argNames: ["destPath"]);
 
   @override
   Future<void> crateApiHealthInitApp() {
@@ -155,7 +648,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 3,
+            funcId: 12,
             port: port_,
           );
         },
@@ -173,10 +666,1266 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   TaskConstMeta get kCrateApiHealthInitAppConstMeta =>
       const TaskConstMeta(debugName: "init_app", argNames: []);
 
+  @override
+  Future<StarterInstallReportDto> crateApiStarterInstallStarterContent({
+    required String householdId,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(householdId, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 13,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_starter_install_report_dto,
+          decodeErrorData: sse_decode_kimatta_error,
+        ),
+        constMeta: kCrateApiStarterInstallStarterContentConstMeta,
+        argValues: [householdId],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiStarterInstallStarterContentConstMeta =>
+      const TaskConstMeta(
+        debugName: "install_starter_content",
+        argNames: ["householdId"],
+      );
+
+  @override
+  Future<List<String>> crateApiPlannedMealsKnownMealComponentKinds() {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 14,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_list_String,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiPlannedMealsKnownMealComponentKindsConstMeta,
+        argValues: [],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiPlannedMealsKnownMealComponentKindsConstMeta =>
+      const TaskConstMeta(
+        debugName: "known_meal_component_kinds",
+        argNames: [],
+      );
+
+  @override
+  Future<List<String>> crateApiRestrictionsKnownRestrictionKinds() {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 15,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_list_String,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiRestrictionsKnownRestrictionKindsConstMeta,
+        argValues: [],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiRestrictionsKnownRestrictionKindsConstMeta =>
+      const TaskConstMeta(debugName: "known_restriction_kinds", argNames: []);
+
+  @override
+  Future<List<String>> crateApiRecipeKnownUnitKinds() {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 16,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_list_String,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiRecipeKnownUnitKindsConstMeta,
+        argValues: [],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiRecipeKnownUnitKindsConstMeta =>
+      const TaskConstMeta(debugName: "known_unit_kinds", argNames: []);
+
+  @override
+  Future<List<RecipeSummaryDto>> crateApiRecipeListArchivedRecipes({
+    required String householdId,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(householdId, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 17,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_list_recipe_summary_dto,
+          decodeErrorData: sse_decode_kimatta_error,
+        ),
+        constMeta: kCrateApiRecipeListArchivedRecipesConstMeta,
+        argValues: [householdId],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiRecipeListArchivedRecipesConstMeta =>
+      const TaskConstMeta(
+        debugName: "list_archived_recipes",
+        argNames: ["householdId"],
+      );
+
+  @override
+  Future<List<CustomIngredientDto>> crateApiRecipeListCustomIngredients({
+    required String householdId,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(householdId, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 18,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_list_custom_ingredient_dto,
+          decodeErrorData: sse_decode_kimatta_error,
+        ),
+        constMeta: kCrateApiRecipeListCustomIngredientsConstMeta,
+        argValues: [householdId],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiRecipeListCustomIngredientsConstMeta =>
+      const TaskConstMeta(
+        debugName: "list_custom_ingredients",
+        argNames: ["householdId"],
+      );
+
+  @override
+  Future<List<PantryEntryDto>> crateApiPantryListPantry({
+    required String householdId,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(householdId, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 19,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_list_pantry_entry_dto,
+          decodeErrorData: sse_decode_kimatta_error,
+        ),
+        constMeta: kCrateApiPantryListPantryConstMeta,
+        argValues: [householdId],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiPantryListPantryConstMeta =>
+      const TaskConstMeta(debugName: "list_pantry", argNames: ["householdId"]);
+
+  @override
+  Future<List<PlannedMealDto>> crateApiPlannedMealsListPlannedMeals({
+    required String householdId,
+    required String fromDate,
+    required String toDate,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(householdId, serializer);
+          sse_encode_String(fromDate, serializer);
+          sse_encode_String(toDate, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 20,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_list_planned_meal_dto,
+          decodeErrorData: sse_decode_kimatta_error,
+        ),
+        constMeta: kCrateApiPlannedMealsListPlannedMealsConstMeta,
+        argValues: [householdId, fromDate, toDate],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiPlannedMealsListPlannedMealsConstMeta =>
+      const TaskConstMeta(
+        debugName: "list_planned_meals",
+        argNames: ["householdId", "fromDate", "toDate"],
+      );
+
+  @override
+  Future<List<RecipeSummaryDto>> crateApiRecipeListRecipes({
+    required String householdId,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(householdId, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 21,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_list_recipe_summary_dto,
+          decodeErrorData: sse_decode_kimatta_error,
+        ),
+        constMeta: kCrateApiRecipeListRecipesConstMeta,
+        argValues: [householdId],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiRecipeListRecipesConstMeta =>
+      const TaskConstMeta(debugName: "list_recipes", argNames: ["householdId"]);
+
+  @override
+  Future<PlannedMealDto?> crateApiPlannedMealsLoadPlannedMeal({
+    required String householdId,
+    required String mealId,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(householdId, serializer);
+          sse_encode_String(mealId, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 22,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_opt_box_autoadd_planned_meal_dto,
+          decodeErrorData: sse_decode_kimatta_error,
+        ),
+        constMeta: kCrateApiPlannedMealsLoadPlannedMealConstMeta,
+        argValues: [householdId, mealId],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiPlannedMealsLoadPlannedMealConstMeta =>
+      const TaskConstMeta(
+        debugName: "load_planned_meal",
+        argNames: ["householdId", "mealId"],
+      );
+
+  @override
+  Future<RecipeDto?> crateApiRecipeLoadRecipe({
+    required String householdId,
+    required String recipeId,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(householdId, serializer);
+          sse_encode_String(recipeId, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 23,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_opt_box_autoadd_recipe_dto,
+          decodeErrorData: sse_decode_kimatta_error,
+        ),
+        constMeta: kCrateApiRecipeLoadRecipeConstMeta,
+        argValues: [householdId, recipeId],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiRecipeLoadRecipeConstMeta => const TaskConstMeta(
+    debugName: "load_recipe",
+    argNames: ["householdId", "recipeId"],
+  );
+
+  @override
+  Future<List<RestrictionDto>> crateApiRestrictionsLoadRestrictions({
+    required String householdId,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(householdId, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 24,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_list_restriction_dto,
+          decodeErrorData: sse_decode_kimatta_error,
+        ),
+        constMeta: kCrateApiRestrictionsLoadRestrictionsConstMeta,
+        argValues: [householdId],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiRestrictionsLoadRestrictionsConstMeta =>
+      const TaskConstMeta(
+        debugName: "load_restrictions",
+        argNames: ["householdId"],
+      );
+
+  @override
+  Future<ShoppingViewDto> crateApiShoppingLoadShoppingView({
+    required String householdId,
+    required String fromDate,
+    required String toDate,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(householdId, serializer);
+          sse_encode_String(fromDate, serializer);
+          sse_encode_String(toDate, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 25,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_shopping_view_dto,
+          decodeErrorData: sse_decode_kimatta_error,
+        ),
+        constMeta: kCrateApiShoppingLoadShoppingViewConstMeta,
+        argValues: [householdId, fromDate, toDate],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiShoppingLoadShoppingViewConstMeta =>
+      const TaskConstMeta(
+        debugName: "load_shopping_view",
+        argNames: ["householdId", "fromDate", "toDate"],
+      );
+
+  @override
+  Future<HealthReport> crateApiHealthOpenDatabase({required String dbPath}) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(dbPath, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 26,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_health_report,
+          decodeErrorData: sse_decode_kimatta_error,
+        ),
+        constMeta: kCrateApiHealthOpenDatabaseConstMeta,
+        argValues: [dbPath],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiHealthOpenDatabaseConstMeta =>
+      const TaskConstMeta(debugName: "open_database", argNames: ["dbPath"]);
+
+  @override
+  Future<PlanningCycleDto> crateApiPlanningPlanningCycleWindow({
+    required String householdId,
+    required String today,
+    required int offsetCycles,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(householdId, serializer);
+          sse_encode_String(today, serializer);
+          sse_encode_i_32(offsetCycles, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 27,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_planning_cycle_dto,
+          decodeErrorData: sse_decode_kimatta_error,
+        ),
+        constMeta: kCrateApiPlanningPlanningCycleWindowConstMeta,
+        argValues: [householdId, today, offsetCycles],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiPlanningPlanningCycleWindowConstMeta =>
+      const TaskConstMeta(
+        debugName: "planning_cycle_window",
+        argNames: ["householdId", "today", "offsetCycles"],
+      );
+
+  @override
+  Future<PlanDecisionOutcomeDto> crateApiDecisionsRecordPlanDecision({
+    required PlanDecisionRequestDto request,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_box_autoadd_plan_decision_request_dto(request, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 28,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_plan_decision_outcome_dto,
+          decodeErrorData: sse_decode_kimatta_error,
+        ),
+        constMeta: kCrateApiDecisionsRecordPlanDecisionConstMeta,
+        argValues: [request],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiDecisionsRecordPlanDecisionConstMeta =>
+      const TaskConstMeta(
+        debugName: "record_plan_decision",
+        argNames: ["request"],
+      );
+
+  @override
+  Future<HouseholdDto> crateApiHouseholdRenameHousehold({
+    required String householdId,
+    String? name,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(householdId, serializer);
+          sse_encode_opt_String(name, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 29,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_household_dto,
+          decodeErrorData: sse_decode_kimatta_error,
+        ),
+        constMeta: kCrateApiHouseholdRenameHouseholdConstMeta,
+        argValues: [householdId, name],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiHouseholdRenameHouseholdConstMeta =>
+      const TaskConstMeta(
+        debugName: "rename_household",
+        argNames: ["householdId", "name"],
+      );
+
+  @override
+  Future<HealthReport> crateApiHealthResetDatabase({
+    required String dbPath,
+    required String stamp,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(dbPath, serializer);
+          sse_encode_String(stamp, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 30,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_health_report,
+          decodeErrorData: sse_decode_kimatta_error,
+        ),
+        constMeta: kCrateApiHealthResetDatabaseConstMeta,
+        argValues: [dbPath, stamp],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiHealthResetDatabaseConstMeta =>
+      const TaskConstMeta(
+        debugName: "reset_database",
+        argNames: ["dbPath", "stamp"],
+      );
+
+  @override
+  Future<void> crateApiShoppingResetShoppingList({
+    required String householdId,
+    required String fromDate,
+    required String toDate,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(householdId, serializer);
+          sse_encode_String(fromDate, serializer);
+          sse_encode_String(toDate, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 31,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_kimatta_error,
+        ),
+        constMeta: kCrateApiShoppingResetShoppingListConstMeta,
+        argValues: [householdId, fromDate, toDate],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiShoppingResetShoppingListConstMeta =>
+      const TaskConstMeta(
+        debugName: "reset_shopping_list",
+        argNames: ["householdId", "fromDate", "toDate"],
+      );
+
+  @override
+  Future<HealthReport> crateApiHealthRestoreDatabase({
+    required String exportPath,
+    required String dbPath,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(exportPath, serializer);
+          sse_encode_String(dbPath, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 32,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_health_report,
+          decodeErrorData: sse_decode_kimatta_error,
+        ),
+        constMeta: kCrateApiHealthRestoreDatabaseConstMeta,
+        argValues: [exportPath, dbPath],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiHealthRestoreDatabaseConstMeta =>
+      const TaskConstMeta(
+        debugName: "restore_database",
+        argNames: ["exportPath", "dbPath"],
+      );
+
+  @override
+  Future<RecipeDto> crateApiRecipeRestoreRecipe({
+    required String householdId,
+    required String recipeId,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(householdId, serializer);
+          sse_encode_String(recipeId, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 33,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_recipe_dto,
+          decodeErrorData: sse_decode_kimatta_error,
+        ),
+        constMeta: kCrateApiRecipeRestoreRecipeConstMeta,
+        argValues: [householdId, recipeId],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiRecipeRestoreRecipeConstMeta =>
+      const TaskConstMeta(
+        debugName: "restore_recipe",
+        argNames: ["householdId", "recipeId"],
+      );
+
+  @override
+  Future<PlannedMealDto> crateApiPlannedMealsSavePlannedMeal({
+    required PlannedMealDto meal,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_box_autoadd_planned_meal_dto(meal, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 34,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_planned_meal_dto,
+          decodeErrorData: sse_decode_kimatta_error,
+        ),
+        constMeta: kCrateApiPlannedMealsSavePlannedMealConstMeta,
+        argValues: [meal],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiPlannedMealsSavePlannedMealConstMeta =>
+      const TaskConstMeta(debugName: "save_planned_meal", argNames: ["meal"]);
+
+  @override
+  Future<PlanningCycleDto> crateApiPlanningSavePlanningCycle({
+    required String householdId,
+    required String anchorDate,
+    required int lengthDays,
+    required List<MealSlotDto> mealSlots,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(householdId, serializer);
+          sse_encode_String(anchorDate, serializer);
+          sse_encode_u_32(lengthDays, serializer);
+          sse_encode_list_meal_slot_dto(mealSlots, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 35,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_planning_cycle_dto,
+          decodeErrorData: sse_decode_kimatta_error,
+        ),
+        constMeta: kCrateApiPlanningSavePlanningCycleConstMeta,
+        argValues: [householdId, anchorDate, lengthDays, mealSlots],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiPlanningSavePlanningCycleConstMeta =>
+      const TaskConstMeta(
+        debugName: "save_planning_cycle",
+        argNames: ["householdId", "anchorDate", "lengthDays", "mealSlots"],
+      );
+
+  @override
+  Future<RecipeDto> crateApiRecipeSaveRecipe({required RecipeDto recipe}) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_box_autoadd_recipe_dto(recipe, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 36,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_recipe_dto,
+          decodeErrorData: sse_decode_kimatta_error,
+        ),
+        constMeta: kCrateApiRecipeSaveRecipeConstMeta,
+        argValues: [recipe],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiRecipeSaveRecipeConstMeta =>
+      const TaskConstMeta(debugName: "save_recipe", argNames: ["recipe"]);
+
+  @override
+  Future<List<RestrictionDto>> crateApiRestrictionsSaveRestrictions({
+    required String householdId,
+    required List<RestrictionDto> restrictions,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(householdId, serializer);
+          sse_encode_list_restriction_dto(restrictions, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 37,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_list_restriction_dto,
+          decodeErrorData: sse_decode_kimatta_error,
+        ),
+        constMeta: kCrateApiRestrictionsSaveRestrictionsConstMeta,
+        argValues: [householdId, restrictions],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiRestrictionsSaveRestrictionsConstMeta =>
+      const TaskConstMeta(
+        debugName: "save_restrictions",
+        argNames: ["householdId", "restrictions"],
+      );
+
+  @override
+  Future<ShoppingManualItemDto> crateApiShoppingSaveShoppingManualItem({
+    required ShoppingManualItemDto item,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_box_autoadd_shopping_manual_item_dto(item, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 38,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_shopping_manual_item_dto,
+          decodeErrorData: sse_decode_kimatta_error,
+        ),
+        constMeta: kCrateApiShoppingSaveShoppingManualItemConstMeta,
+        argValues: [item],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiShoppingSaveShoppingManualItemConstMeta =>
+      const TaskConstMeta(
+        debugName: "save_shopping_manual_item",
+        argNames: ["item"],
+      );
+
+  @override
+  Future<PantryEntryDto> crateApiPantrySetPantryMark({
+    required String householdId,
+    required IngredientRefDto ingredient,
+    required bool marked,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(householdId, serializer);
+          sse_encode_box_autoadd_ingredient_ref_dto(ingredient, serializer);
+          sse_encode_bool(marked, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 39,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_pantry_entry_dto,
+          decodeErrorData: sse_decode_kimatta_error,
+        ),
+        constMeta: kCrateApiPantrySetPantryMarkConstMeta,
+        argValues: [householdId, ingredient, marked],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiPantrySetPantryMarkConstMeta =>
+      const TaskConstMeta(
+        debugName: "set_pantry_mark",
+        argNames: ["householdId", "ingredient", "marked"],
+      );
+
+  @override
+  Future<List<IngredientRefDto>> crateApiPantrySetPantryMarks({
+    required String householdId,
+    required List<IngredientRefDto> ingredients,
+    required bool marked,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(householdId, serializer);
+          sse_encode_list_ingredient_ref_dto(ingredients, serializer);
+          sse_encode_bool(marked, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 40,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_list_ingredient_ref_dto,
+          decodeErrorData: sse_decode_kimatta_error,
+        ),
+        constMeta: kCrateApiPantrySetPantryMarksConstMeta,
+        argValues: [householdId, ingredients, marked],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiPantrySetPantryMarksConstMeta =>
+      const TaskConstMeta(
+        debugName: "set_pantry_marks",
+        argNames: ["householdId", "ingredients", "marked"],
+      );
+
+  @override
+  Future<PlannedMealDto> crateApiPlannedMealsSetPlannedMealLock({
+    required String householdId,
+    required String mealId,
+    required bool locked,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(householdId, serializer);
+          sse_encode_String(mealId, serializer);
+          sse_encode_bool(locked, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 41,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_planned_meal_dto,
+          decodeErrorData: sse_decode_kimatta_error,
+        ),
+        constMeta: kCrateApiPlannedMealsSetPlannedMealLockConstMeta,
+        argValues: [householdId, mealId, locked],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiPlannedMealsSetPlannedMealLockConstMeta =>
+      const TaskConstMeta(
+        debugName: "set_planned_meal_lock",
+        argNames: ["householdId", "mealId", "locked"],
+      );
+
+  @override
+  Future<ShoppingLineStateDto> crateApiShoppingSetShoppingLineState({
+    required String householdId,
+    required String fromDate,
+    required String toDate,
+    required ShoppingLineStateDto state,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(householdId, serializer);
+          sse_encode_String(fromDate, serializer);
+          sse_encode_String(toDate, serializer);
+          sse_encode_box_autoadd_shopping_line_state_dto(state, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 42,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_shopping_line_state_dto,
+          decodeErrorData: sse_decode_kimatta_error,
+        ),
+        constMeta: kCrateApiShoppingSetShoppingLineStateConstMeta,
+        argValues: [householdId, fromDate, toDate, state],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiShoppingSetShoppingLineStateConstMeta =>
+      const TaskConstMeta(
+        debugName: "set_shopping_line_state",
+        argNames: ["householdId", "fromDate", "toDate", "state"],
+      );
+
   @protected
   String dco_decode_String(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw as String;
+  }
+
+  @protected
+  ActionProposalDto dco_decode_action_proposal_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 9)
+      throw Exception('unexpected arr length: expect 9 but see ${arr.length}');
+    return ActionProposalDto(
+      id: dco_decode_String(arr[0]),
+      controllerId: dco_decode_String(arr[1]),
+      actionType: dco_decode_String(arr[2]),
+      expectedBenefitBand: dco_decode_band_dto(arr[3]),
+      confidence: dco_decode_confidence_dto(arr[4]),
+      reversibility: dco_decode_reversibility_dto(arr[5]),
+      requiredAuthority: dco_decode_required_authority_dto(arr[6]),
+      deadline: dco_decode_opt_String(arr[7]),
+      reasonCodes: dco_decode_list_String(arr[8]),
+    );
+  }
+
+  @protected
+  AttentionRequestDto dco_decode_attention_request_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 8)
+      throw Exception('unexpected arr length: expect 8 but see ${arr.length}');
+    return AttentionRequestDto(
+      id: dco_decode_String(arr[0]),
+      controllerId: dco_decode_String(arr[1]),
+      urgency: dco_decode_urgency_dto(arr[2]),
+      deadline: dco_decode_opt_String(arr[3]),
+      decisionBenefitBand: dco_decode_band_dto(arr[4]),
+      estimatedEffortBand: dco_decode_band_dto(arr[5]),
+      options: dco_decode_list_String(arr[6]),
+      reasonCodes: dco_decode_list_String(arr[7]),
+    );
+  }
+
+  @protected
+  BandDto dco_decode_band_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return BandDto.values[raw as int];
+  }
+
+  @protected
+  bool dco_decode_bool(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw as bool;
+  }
+
+  @protected
+  CandidateSourceDto dco_decode_box_autoadd_candidate_source_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_candidate_source_dto(raw);
+  }
+
+  @protected
+  CoverCycleRequestDto dco_decode_box_autoadd_cover_cycle_request_dto(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_cover_cycle_request_dto(raw);
+  }
+
+  @protected
+  CustomIngredientDto dco_decode_box_autoadd_custom_ingredient_dto(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_custom_ingredient_dto(raw);
+  }
+
+  @protected
+  IngredientRefDto dco_decode_box_autoadd_ingredient_ref_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_ingredient_ref_dto(raw);
+  }
+
+  @protected
+  PlanDecisionRequestDto dco_decode_box_autoadd_plan_decision_request_dto(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_plan_decision_request_dto(raw);
+  }
+
+  @protected
+  PlannedMealDto dco_decode_box_autoadd_planned_meal_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_planned_meal_dto(raw);
+  }
+
+  @protected
+  RecipeDto dco_decode_box_autoadd_recipe_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_recipe_dto(raw);
+  }
+
+  @protected
+  RestrictionAssessmentDto dco_decode_box_autoadd_restriction_assessment_dto(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_restriction_assessment_dto(raw);
+  }
+
+  @protected
+  ScaleDto dco_decode_box_autoadd_scale_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_scale_dto(raw);
+  }
+
+  @protected
+  SeparateReasonDto dco_decode_box_autoadd_separate_reason_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_separate_reason_dto(raw);
+  }
+
+  @protected
+  ShoppingLineStateDto dco_decode_box_autoadd_shopping_line_state_dto(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_shopping_line_state_dto(raw);
+  }
+
+  @protected
+  ShoppingManualItemDto dco_decode_box_autoadd_shopping_manual_item_dto(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_shopping_manual_item_dto(raw);
+  }
+
+  @protected
+  int dco_decode_box_autoadd_u_32(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw as int;
+  }
+
+  @protected
+  CandidateSourceDto dco_decode_candidate_source_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return CandidateSourceDto.values[raw as int];
+  }
+
+  @protected
+  ConfidenceDto dco_decode_confidence_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return ConfidenceDto.values[raw as int];
+  }
+
+  @protected
+  ConflictDto dco_decode_conflict_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 4)
+      throw Exception('unexpected arr length: expect 4 but see ${arr.length}');
+    return ConflictDto(
+      restriction: dco_decode_restriction_dto(arr[0]),
+      linePosition: dco_decode_u_32(arr[1]),
+      lineName: dco_decode_String(arr[2]),
+      term: dco_decode_String(arr[3]),
+    );
+  }
+
+  @protected
+  ContributionDto dco_decode_contribution_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 9)
+      throw Exception('unexpected arr length: expect 9 but see ${arr.length}');
+    return ContributionDto(
+      plannedMealId: dco_decode_String(arr[0]),
+      date: dco_decode_String(arr[1]),
+      slot: dco_decode_meal_slot_dto(arr[2]),
+      componentPosition: dco_decode_u_32(arr[3]),
+      recipeId: dco_decode_String(arr[4]),
+      recipeTitle: dco_decode_String(arr[5]),
+      linePosition: dco_decode_u_32(arr[6]),
+      originalText: dco_decode_String(arr[7]),
+      scale: dco_decode_opt_box_autoadd_scale_dto(arr[8]),
+    );
+  }
+
+  @protected
+  CoverCycleOutcomeDto dco_decode_cover_cycle_outcome_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 4)
+      throw Exception('unexpected arr length: expect 4 but see ${arr.length}');
+    return CoverCycleOutcomeDto(
+      result: dco_decode_planning_result_dto(arr[0]),
+      ledgerEntryId: dco_decode_String(arr[1]),
+      applied: dco_decode_bool(arr[2]),
+      changedSlots: dco_decode_u_32(arr[3]),
+    );
+  }
+
+  @protected
+  CoverCycleRequestDto dco_decode_cover_cycle_request_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 7)
+      throw Exception('unexpected arr length: expect 7 but see ${arr.length}');
+    return CoverCycleRequestDto(
+      householdId: dco_decode_String(arr[0]),
+      today: dco_decode_String(arr[1]),
+      offsetCycles: dco_decode_i_32(arr[2]),
+      apply: dco_decode_bool(arr[3]),
+      beamWidth: dco_decode_opt_box_autoadd_u_32(arr[4]),
+      candidatesPerSlot: dco_decode_opt_box_autoadd_u_32(arr[5]),
+      commitmentHorizonDays: dco_decode_opt_box_autoadd_u_32(arr[6]),
+    );
+  }
+
+  @protected
+  CoverageStateDto dco_decode_coverage_state_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return CoverageStateDto.values[raw as int];
+  }
+
+  @protected
+  CustomIngredientDto dco_decode_custom_ingredient_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 4)
+      throw Exception('unexpected arr length: expect 4 but see ${arr.length}');
+    return CustomIngredientDto(
+      id: dco_decode_String(arr[0]),
+      householdId: dco_decode_String(arr[1]),
+      name: dco_decode_String(arr[2]),
+      storeCategory: dco_decode_opt_String(arr[3]),
+    );
+  }
+
+  @protected
+  ExportReport dco_decode_export_report(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 2)
+      throw Exception('unexpected arr length: expect 2 but see ${arr.length}');
+    return ExportReport(
+      path: dco_decode_String(arr[0]),
+      schemaVersion: dco_decode_u_32(arr[1]),
+    );
   }
 
   @protected
@@ -192,22 +1941,766 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  KimattaError dco_decode_kimatta_error(dynamic raw) {
+  HouseholdDto dco_decode_household_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 4)
+      throw Exception('unexpected arr length: expect 4 but see ${arr.length}');
+    return HouseholdDto(
+      id: dco_decode_String(arr[0]),
+      name: dco_decode_opt_String(arr[1]),
+      members: dco_decode_list_member_dto(arr[2]),
+      onboarded: dco_decode_bool(arr[3]),
+    );
+  }
+
+  @protected
+  int dco_decode_i_32(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw as int;
+  }
+
+  @protected
+  PlatformInt64 dco_decode_i_64(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dcoDecodeI64(raw);
+  }
+
+  @protected
+  IngredientLineDto dco_decode_ingredient_line_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 7)
+      throw Exception('unexpected arr length: expect 7 but see ${arr.length}');
+    return IngredientLineDto(
+      originalText: dco_decode_String(arr[0]),
+      name: dco_decode_String(arr[1]),
+      ingredient: dco_decode_opt_box_autoadd_ingredient_ref_dto(arr[2]),
+      quantity: dco_decode_quantity_dto(arr[3]),
+      unit: dco_decode_unit_dto(arr[4]),
+      preparation: dco_decode_opt_String(arr[5]),
+      optional: dco_decode_bool(arr[6]),
+    );
+  }
+
+  @protected
+  IngredientRefDto dco_decode_ingredient_ref_dto(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     switch (raw[0]) {
       case 0:
-        return KimattaError_InvalidPath();
+        return IngredientRefDto_Catalog(id: dco_decode_String(raw[1]));
       case 1:
-        return KimattaError_Storage(message: dco_decode_String(raw[1]));
+        return IngredientRefDto_Custom(id: dco_decode_String(raw[1]));
       default:
         throw Exception("unreachable");
     }
   }
 
   @protected
+  KimattaError dco_decode_kimatta_error(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    switch (raw[0]) {
+      case 0:
+        return KimattaError_InvalidPath();
+      case 1:
+        return KimattaError_NotOpen();
+      case 2:
+        return KimattaError_Storage(message: dco_decode_String(raw[1]));
+      case 3:
+        return KimattaError_Corrupt(message: dco_decode_String(raw[1]));
+      case 4:
+        return KimattaError_Planning(message: dco_decode_String(raw[1]));
+      case 5:
+        return KimattaError_Recipe(message: dco_decode_String(raw[1]));
+      case 6:
+        return KimattaError_Restriction(message: dco_decode_String(raw[1]));
+      case 7:
+        return KimattaError_PlannedMeal(message: dco_decode_String(raw[1]));
+      case 8:
+        return KimattaError_Shopping(message: dco_decode_String(raw[1]));
+      default:
+        throw Exception("unreachable");
+    }
+  }
+
+  @protected
+  List<String> dco_decode_list_String(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>).map(dco_decode_String).toList();
+  }
+
+  @protected
+  List<ActionProposalDto> dco_decode_list_action_proposal_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>).map(dco_decode_action_proposal_dto).toList();
+  }
+
+  @protected
+  List<AttentionRequestDto> dco_decode_list_attention_request_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>)
+        .map(dco_decode_attention_request_dto)
+        .toList();
+  }
+
+  @protected
+  List<ConflictDto> dco_decode_list_conflict_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>).map(dco_decode_conflict_dto).toList();
+  }
+
+  @protected
+  List<ContributionDto> dco_decode_list_contribution_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>).map(dco_decode_contribution_dto).toList();
+  }
+
+  @protected
+  List<CustomIngredientDto> dco_decode_list_custom_ingredient_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>)
+        .map(dco_decode_custom_ingredient_dto)
+        .toList();
+  }
+
+  @protected
+  List<IngredientLineDto> dco_decode_list_ingredient_line_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>).map(dco_decode_ingredient_line_dto).toList();
+  }
+
+  @protected
+  List<IngredientRefDto> dco_decode_list_ingredient_ref_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>).map(dco_decode_ingredient_ref_dto).toList();
+  }
+
+  @protected
+  List<MealComponentDto> dco_decode_list_meal_component_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>).map(dco_decode_meal_component_dto).toList();
+  }
+
+  @protected
+  List<MealSlotDto> dco_decode_list_meal_slot_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>).map(dco_decode_meal_slot_dto).toList();
+  }
+
+  @protected
+  List<MemberDto> dco_decode_list_member_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>).map(dco_decode_member_dto).toList();
+  }
+
+  @protected
+  List<PantryEntryDto> dco_decode_list_pantry_entry_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>).map(dco_decode_pantry_entry_dto).toList();
+  }
+
+  @protected
+  List<PlannedMealDto> dco_decode_list_planned_meal_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>).map(dco_decode_planned_meal_dto).toList();
+  }
+
+  @protected
+  Int64List dco_decode_list_prim_i_64_strict(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dcoDecodeInt64List(raw);
+  }
+
+  @protected
   Uint8List dco_decode_list_prim_u_8_strict(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw as Uint8List;
+  }
+
+  @protected
+  List<ProposedMealDto> dco_decode_list_proposed_meal_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>).map(dco_decode_proposed_meal_dto).toList();
+  }
+
+  @protected
+  List<RecipeSummaryDto> dco_decode_list_recipe_summary_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>).map(dco_decode_recipe_summary_dto).toList();
+  }
+
+  @protected
+  List<RejectionDto> dco_decode_list_rejection_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>).map(dco_decode_rejection_dto).toList();
+  }
+
+  @protected
+  List<RestrictionDto> dco_decode_list_restriction_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>).map(dco_decode_restriction_dto).toList();
+  }
+
+  @protected
+  List<ShoppingGroupDto> dco_decode_list_shopping_group_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>).map(dco_decode_shopping_group_dto).toList();
+  }
+
+  @protected
+  List<ShoppingLineDto> dco_decode_list_shopping_line_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>).map(dco_decode_shopping_line_dto).toList();
+  }
+
+  @protected
+  List<ShoppingLineStateDto> dco_decode_list_shopping_line_state_dto(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>)
+        .map(dco_decode_shopping_line_state_dto)
+        .toList();
+  }
+
+  @protected
+  List<ShoppingManualItemDto> dco_decode_list_shopping_manual_item_dto(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>)
+        .map(dco_decode_shopping_manual_item_dto)
+        .toList();
+  }
+
+  @protected
+  List<SlotCoverageDto> dco_decode_list_slot_coverage_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>).map(dco_decode_slot_coverage_dto).toList();
+  }
+
+  @protected
+  MealComponentDto dco_decode_meal_component_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 4)
+      throw Exception('unexpected arr length: expect 4 but see ${arr.length}');
+    return MealComponentDto(
+      kind: dco_decode_String(arr[0]),
+      recipeId: dco_decode_opt_String(arr[1]),
+      note: dco_decode_opt_String(arr[2]),
+      scale: dco_decode_opt_box_autoadd_scale_dto(arr[3]),
+    );
+  }
+
+  @protected
+  MealSlotDto dco_decode_meal_slot_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return MealSlotDto.values[raw as int];
+  }
+
+  @protected
+  MemberDto dco_decode_member_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 2)
+      throw Exception('unexpected arr length: expect 2 but see ${arr.length}');
+    return MemberDto(
+      id: dco_decode_String(arr[0]),
+      displayName: dco_decode_String(arr[1]),
+    );
+  }
+
+  @protected
+  String? dco_decode_opt_String(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw == null ? null : dco_decode_String(raw);
+  }
+
+  @protected
+  CandidateSourceDto? dco_decode_opt_box_autoadd_candidate_source_dto(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw == null
+        ? null
+        : dco_decode_box_autoadd_candidate_source_dto(raw);
+  }
+
+  @protected
+  IngredientRefDto? dco_decode_opt_box_autoadd_ingredient_ref_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw == null ? null : dco_decode_box_autoadd_ingredient_ref_dto(raw);
+  }
+
+  @protected
+  PlannedMealDto? dco_decode_opt_box_autoadd_planned_meal_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw == null ? null : dco_decode_box_autoadd_planned_meal_dto(raw);
+  }
+
+  @protected
+  RecipeDto? dco_decode_opt_box_autoadd_recipe_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw == null ? null : dco_decode_box_autoadd_recipe_dto(raw);
+  }
+
+  @protected
+  RestrictionAssessmentDto?
+  dco_decode_opt_box_autoadd_restriction_assessment_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw == null
+        ? null
+        : dco_decode_box_autoadd_restriction_assessment_dto(raw);
+  }
+
+  @protected
+  ScaleDto? dco_decode_opt_box_autoadd_scale_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw == null ? null : dco_decode_box_autoadd_scale_dto(raw);
+  }
+
+  @protected
+  SeparateReasonDto? dco_decode_opt_box_autoadd_separate_reason_dto(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw == null ? null : dco_decode_box_autoadd_separate_reason_dto(raw);
+  }
+
+  @protected
+  int? dco_decode_opt_box_autoadd_u_32(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw == null ? null : dco_decode_box_autoadd_u_32(raw);
+  }
+
+  @protected
+  OutcomeStatusDto dco_decode_outcome_status_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return OutcomeStatusDto.values[raw as int];
+  }
+
+  @protected
+  PantryEntryDto dco_decode_pantry_entry_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 4)
+      throw Exception('unexpected arr length: expect 4 but see ${arr.length}');
+    return PantryEntryDto(
+      ingredient: dco_decode_ingredient_ref_dto(arr[0]),
+      name: dco_decode_String(arr[1]),
+      aliases: dco_decode_list_String(arr[2]),
+      marked: dco_decode_bool(arr[3]),
+    );
+  }
+
+  @protected
+  PlanDecisionDto dco_decode_plan_decision_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    switch (raw[0]) {
+      case 0:
+        return PlanDecisionDto_Swap(
+          date: dco_decode_String(raw[1]),
+          slot: dco_decode_meal_slot_dto(raw[2]),
+          components: dco_decode_list_meal_component_dto(raw[3]),
+        );
+      case 1:
+        return PlanDecisionDto_Veto(
+          subject: dco_decode_String(raw[1]),
+          date: dco_decode_String(raw[2]),
+          slot: dco_decode_meal_slot_dto(raw[3]),
+        );
+      case 2:
+        return PlanDecisionDto_RestrictionsReviewed();
+      default:
+        throw Exception("unreachable");
+    }
+  }
+
+  @protected
+  PlanDecisionOutcomeDto dco_decode_plan_decision_outcome_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 3)
+      throw Exception('unexpected arr length: expect 3 but see ${arr.length}');
+    return PlanDecisionOutcomeDto(
+      ledgerEntryId: dco_decode_String(arr[0]),
+      priorStatus: dco_decode_outcome_status_dto(arr[1]),
+      resultingStatus: dco_decode_outcome_status_dto(arr[2]),
+    );
+  }
+
+  @protected
+  PlanDecisionRequestDto dco_decode_plan_decision_request_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 4)
+      throw Exception('unexpected arr length: expect 4 but see ${arr.length}');
+    return PlanDecisionRequestDto(
+      householdId: dco_decode_String(arr[0]),
+      today: dco_decode_String(arr[1]),
+      offsetCycles: dco_decode_i_32(arr[2]),
+      decision: dco_decode_plan_decision_dto(arr[3]),
+    );
+  }
+
+  @protected
+  PlannedMealDto dco_decode_planned_meal_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 6)
+      throw Exception('unexpected arr length: expect 6 but see ${arr.length}');
+    return PlannedMealDto(
+      id: dco_decode_String(arr[0]),
+      householdId: dco_decode_String(arr[1]),
+      date: dco_decode_String(arr[2]),
+      slot: dco_decode_meal_slot_dto(arr[3]),
+      components: dco_decode_list_meal_component_dto(arr[4]),
+      locked: dco_decode_bool(arr[5]),
+    );
+  }
+
+  @protected
+  PlanningCycleDto dco_decode_planning_cycle_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 5)
+      throw Exception('unexpected arr length: expect 5 but see ${arr.length}');
+    return PlanningCycleDto(
+      householdId: dco_decode_String(arr[0]),
+      anchorDate: dco_decode_String(arr[1]),
+      lengthDays: dco_decode_u_32(arr[2]),
+      mealSlots: dco_decode_list_meal_slot_dto(arr[3]),
+      dates: dco_decode_list_String(arr[4]),
+    );
+  }
+
+  @protected
+  PlanningResultDto dco_decode_planning_result_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 15)
+      throw Exception('unexpected arr length: expect 15 but see ${arr.length}');
+    return PlanningResultDto(
+      algorithmVersion: dco_decode_u_32(arr[0]),
+      snapshotHash: dco_decode_String(arr[1]),
+      status: dco_decode_outcome_status_dto(arr[2]),
+      horizonFrom: dco_decode_String(arr[3]),
+      horizonTo: dco_decode_String(arr[4]),
+      slots: dco_decode_list_slot_coverage_dto(arr[5]),
+      proposed: dco_decode_list_proposed_meal_dto(arr[6]),
+      rejections: dco_decode_list_rejection_dto(arr[7]),
+      unresolvedIssues: dco_decode_list_String(arr[8]),
+      assumptions: dco_decode_list_String(arr[9]),
+      reasonCodes: dco_decode_list_String(arr[10]),
+      proposals: dco_decode_list_action_proposal_dto(arr[11]),
+      attention: dco_decode_list_attention_request_dto(arr[12]),
+      search: dco_decode_search_trace_dto(arr[13]),
+      scoreTiers: dco_decode_list_prim_i_64_strict(arr[14]),
+    );
+  }
+
+  @protected
+  ProposedMealDto dco_decode_proposed_meal_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 3)
+      throw Exception('unexpected arr length: expect 3 but see ${arr.length}');
+    return ProposedMealDto(
+      date: dco_decode_String(arr[0]),
+      slot: dco_decode_meal_slot_dto(arr[1]),
+      components: dco_decode_list_meal_component_dto(arr[2]),
+    );
+  }
+
+  @protected
+  QuantityDto dco_decode_quantity_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    switch (raw[0]) {
+      case 0:
+        return QuantityDto_Unknown();
+      case 1:
+        return QuantityDto_Exact(
+          numer: dco_decode_u_32(raw[1]),
+          denom: dco_decode_u_32(raw[2]),
+        );
+      case 2:
+        return QuantityDto_Range(
+          minNumer: dco_decode_u_32(raw[1]),
+          minDenom: dco_decode_u_32(raw[2]),
+          maxNumer: dco_decode_u_32(raw[3]),
+          maxDenom: dco_decode_u_32(raw[4]),
+        );
+      default:
+        throw Exception("unreachable");
+    }
+  }
+
+  @protected
+  RecipeDto dco_decode_recipe_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 10)
+      throw Exception('unexpected arr length: expect 10 but see ${arr.length}');
+    return RecipeDto(
+      id: dco_decode_String(arr[0]),
+      householdId: dco_decode_String(arr[1]),
+      title: dco_decode_String(arr[2]),
+      servings: dco_decode_opt_box_autoadd_u_32(arr[3]),
+      prepMinutes: dco_decode_opt_box_autoadd_u_32(arr[4]),
+      instructions: dco_decode_String(arr[5]),
+      lines: dco_decode_list_ingredient_line_dto(arr[6]),
+      provenance: dco_decode_recipe_provenance_dto(arr[7]),
+      archivedAt: dco_decode_opt_String(arr[8]),
+      assessment: dco_decode_opt_box_autoadd_restriction_assessment_dto(arr[9]),
+    );
+  }
+
+  @protected
+  RecipeProvenanceDto dco_decode_recipe_provenance_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 9)
+      throw Exception('unexpected arr length: expect 9 but see ${arr.length}');
+    return RecipeProvenanceDto(
+      kind: dco_decode_String(arr[0]),
+      sourceUrl: dco_decode_opt_String(arr[1]),
+      sourceName: dco_decode_opt_String(arr[2]),
+      sourceAuthor: dco_decode_opt_String(arr[3]),
+      rightsBasis: dco_decode_opt_String(arr[4]),
+      attribution: dco_decode_opt_String(arr[5]),
+      modifications: dco_decode_opt_String(arr[6]),
+      verifiedOn: dco_decode_opt_String(arr[7]),
+      starterSlug: dco_decode_opt_String(arr[8]),
+    );
+  }
+
+  @protected
+  RecipeSummaryDto dco_decode_recipe_summary_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 3)
+      throw Exception('unexpected arr length: expect 3 but see ${arr.length}');
+    return RecipeSummaryDto(
+      id: dco_decode_String(arr[0]),
+      title: dco_decode_String(arr[1]),
+      assessment: dco_decode_restriction_assessment_dto(arr[2]),
+    );
+  }
+
+  @protected
+  RejectionDto dco_decode_rejection_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 4)
+      throw Exception('unexpected arr length: expect 4 but see ${arr.length}');
+    return RejectionDto(
+      date: dco_decode_String(arr[0]),
+      slot: dco_decode_meal_slot_dto(arr[1]),
+      candidateText: dco_decode_String(arr[2]),
+      code: dco_decode_String(arr[3]),
+    );
+  }
+
+  @protected
+  RequiredAuthorityDto dco_decode_required_authority_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return RequiredAuthorityDto.values[raw as int];
+  }
+
+  @protected
+  RestrictionAssessmentDto dco_decode_restriction_assessment_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 5)
+      throw Exception('unexpected arr length: expect 5 but see ${arr.length}');
+    return RestrictionAssessmentDto(
+      ruleVersion: dco_decode_u_32(arr[0]),
+      restrictionsChecked: dco_decode_u_32(arr[1]),
+      linesChecked: dco_decode_u_32(arr[2]),
+      conflicts: dco_decode_list_conflict_dto(arr[3]),
+      wordingOnly: dco_decode_list_String(arr[4]),
+    );
+  }
+
+  @protected
+  RestrictionDto dco_decode_restriction_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    switch (raw[0]) {
+      case 0:
+        return RestrictionDto_Known(kind: dco_decode_String(raw[1]));
+      case 1:
+        return RestrictionDto_Other(text: dco_decode_String(raw[1]));
+      default:
+        throw Exception("unreachable");
+    }
+  }
+
+  @protected
+  ReversibilityDto dco_decode_reversibility_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return ReversibilityDto.values[raw as int];
+  }
+
+  @protected
+  ScaleDto dco_decode_scale_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 2)
+      throw Exception('unexpected arr length: expect 2 but see ${arr.length}');
+    return ScaleDto(
+      numer: dco_decode_u_32(arr[0]),
+      denom: dco_decode_u_32(arr[1]),
+    );
+  }
+
+  @protected
+  SearchTraceDto dco_decode_search_trace_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 4)
+      throw Exception('unexpected arr length: expect 4 but see ${arr.length}');
+    return SearchTraceDto(
+      beamWidth: dco_decode_u_32(arr[0]),
+      candidatesPerSlot: dco_decode_u_32(arr[1]),
+      slotOrder: dco_decode_String(arr[2]),
+      statesScored: dco_decode_u_32(arr[3]),
+    );
+  }
+
+  @protected
+  SeparateReasonDto dco_decode_separate_reason_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return SeparateReasonDto.values[raw as int];
+  }
+
+  @protected
+  ShoppingGroupDto dco_decode_shopping_group_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 2)
+      throw Exception('unexpected arr length: expect 2 but see ${arr.length}');
+    return ShoppingGroupDto(
+      category: dco_decode_opt_String(arr[0]),
+      lines: dco_decode_list_shopping_line_dto(arr[1]),
+    );
+  }
+
+  @protected
+  ShoppingLineDto dco_decode_shopping_line_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 9)
+      throw Exception('unexpected arr length: expect 9 but see ${arr.length}');
+    return ShoppingLineDto(
+      key: dco_decode_String(arr[0]),
+      name: dco_decode_String(arr[1]),
+      ingredient: dco_decode_opt_box_autoadd_ingredient_ref_dto(arr[2]),
+      quantity: dco_decode_quantity_dto(arr[3]),
+      unit: dco_decode_unit_dto(arr[4]),
+      optional: dco_decode_bool(arr[5]),
+      status: dco_decode_shopping_line_status_dto(arr[6]),
+      separateReason: dco_decode_opt_box_autoadd_separate_reason_dto(arr[7]),
+      contributions: dco_decode_list_contribution_dto(arr[8]),
+    );
+  }
+
+  @protected
+  ShoppingLineStateDto dco_decode_shopping_line_state_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 6)
+      throw Exception('unexpected arr length: expect 6 but see ${arr.length}');
+    return ShoppingLineStateDto(
+      key: dco_decode_String(arr[0]),
+      checked: dco_decode_bool(arr[1]),
+      hidden: dco_decode_bool(arr[2]),
+      restored: dco_decode_bool(arr[3]),
+      changed: dco_decode_bool(arr[4]),
+      checkedAgainst: dco_decode_opt_String(arr[5]),
+    );
+  }
+
+  @protected
+  ShoppingLineStatusDto dco_decode_shopping_line_status_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return ShoppingLineStatusDto.values[raw as int];
+  }
+
+  @protected
+  ShoppingListDto dco_decode_shopping_list_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 6)
+      throw Exception('unexpected arr length: expect 6 but see ${arr.length}');
+    return ShoppingListDto(
+      algorithmVersion: dco_decode_u_32(arr[0]),
+      fromDate: dco_decode_String(arr[1]),
+      toDate: dco_decode_String(arr[2]),
+      groups: dco_decode_list_shopping_group_dto(arr[3]),
+      nonRecipeComponents: dco_decode_u_32(arr[4]),
+      contributionCount: dco_decode_u_32(arr[5]),
+    );
+  }
+
+  @protected
+  ShoppingManualItemDto dco_decode_shopping_manual_item_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 5)
+      throw Exception('unexpected arr length: expect 5 but see ${arr.length}');
+    return ShoppingManualItemDto(
+      id: dco_decode_String(arr[0]),
+      householdId: dco_decode_String(arr[1]),
+      name: dco_decode_String(arr[2]),
+      note: dco_decode_opt_String(arr[3]),
+      checked: dco_decode_bool(arr[4]),
+    );
+  }
+
+  @protected
+  ShoppingViewDto dco_decode_shopping_view_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 4)
+      throw Exception('unexpected arr length: expect 4 but see ${arr.length}');
+    return ShoppingViewDto(
+      list: dco_decode_shopping_list_dto(arr[0]),
+      lineStates: dco_decode_list_shopping_line_state_dto(arr[1]),
+      manualItems: dco_decode_list_shopping_manual_item_dto(arr[2]),
+      orphanedLineStateCount: dco_decode_u_32(arr[3]),
+    );
+  }
+
+  @protected
+  SlotCoverageDto dco_decode_slot_coverage_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 6)
+      throw Exception('unexpected arr length: expect 6 but see ${arr.length}');
+    return SlotCoverageDto(
+      date: dco_decode_String(arr[0]),
+      slot: dco_decode_meal_slot_dto(arr[1]),
+      state: dco_decode_coverage_state_dto(arr[2]),
+      source: dco_decode_opt_box_autoadd_candidate_source_dto(arr[3]),
+      components: dco_decode_list_meal_component_dto(arr[4]),
+      reasonCodes: dco_decode_list_String(arr[5]),
+    );
+  }
+
+  @protected
+  StarterInstallReportDto dco_decode_starter_install_report_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 5)
+      throw Exception('unexpected arr length: expect 5 but see ${arr.length}');
+    return StarterInstallReportDto(
+      installed: dco_decode_u_32(arr[0]),
+      skipped: dco_decode_u_32(arr[1]),
+      catalogInstalled: dco_decode_u_32(arr[2]),
+      available: dco_decode_u_32(arr[3]),
+      pendingCookReview: dco_decode_u_32(arr[4]),
+    );
   }
 
   @protected
@@ -229,10 +2722,324 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  UnitDto dco_decode_unit_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    switch (raw[0]) {
+      case 0:
+        return UnitDto_None();
+      case 1:
+        return UnitDto_Known(unit: dco_decode_String(raw[1]));
+      case 2:
+        return UnitDto_Other(text: dco_decode_String(raw[1]));
+      default:
+        throw Exception("unreachable");
+    }
+  }
+
+  @protected
+  UrgencyDto dco_decode_urgency_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return UrgencyDto.values[raw as int];
+  }
+
+  @protected
   String sse_decode_String(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var inner = sse_decode_list_prim_u_8_strict(deserializer);
     return utf8.decoder.convert(inner);
+  }
+
+  @protected
+  ActionProposalDto sse_decode_action_proposal_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_id = sse_decode_String(deserializer);
+    var var_controllerId = sse_decode_String(deserializer);
+    var var_actionType = sse_decode_String(deserializer);
+    var var_expectedBenefitBand = sse_decode_band_dto(deserializer);
+    var var_confidence = sse_decode_confidence_dto(deserializer);
+    var var_reversibility = sse_decode_reversibility_dto(deserializer);
+    var var_requiredAuthority = sse_decode_required_authority_dto(deserializer);
+    var var_deadline = sse_decode_opt_String(deserializer);
+    var var_reasonCodes = sse_decode_list_String(deserializer);
+    return ActionProposalDto(
+      id: var_id,
+      controllerId: var_controllerId,
+      actionType: var_actionType,
+      expectedBenefitBand: var_expectedBenefitBand,
+      confidence: var_confidence,
+      reversibility: var_reversibility,
+      requiredAuthority: var_requiredAuthority,
+      deadline: var_deadline,
+      reasonCodes: var_reasonCodes,
+    );
+  }
+
+  @protected
+  AttentionRequestDto sse_decode_attention_request_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_id = sse_decode_String(deserializer);
+    var var_controllerId = sse_decode_String(deserializer);
+    var var_urgency = sse_decode_urgency_dto(deserializer);
+    var var_deadline = sse_decode_opt_String(deserializer);
+    var var_decisionBenefitBand = sse_decode_band_dto(deserializer);
+    var var_estimatedEffortBand = sse_decode_band_dto(deserializer);
+    var var_options = sse_decode_list_String(deserializer);
+    var var_reasonCodes = sse_decode_list_String(deserializer);
+    return AttentionRequestDto(
+      id: var_id,
+      controllerId: var_controllerId,
+      urgency: var_urgency,
+      deadline: var_deadline,
+      decisionBenefitBand: var_decisionBenefitBand,
+      estimatedEffortBand: var_estimatedEffortBand,
+      options: var_options,
+      reasonCodes: var_reasonCodes,
+    );
+  }
+
+  @protected
+  BandDto sse_decode_band_dto(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var inner = sse_decode_i_32(deserializer);
+    return BandDto.values[inner];
+  }
+
+  @protected
+  bool sse_decode_bool(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return deserializer.buffer.getUint8() != 0;
+  }
+
+  @protected
+  CandidateSourceDto sse_decode_box_autoadd_candidate_source_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_candidate_source_dto(deserializer));
+  }
+
+  @protected
+  CoverCycleRequestDto sse_decode_box_autoadd_cover_cycle_request_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_cover_cycle_request_dto(deserializer));
+  }
+
+  @protected
+  CustomIngredientDto sse_decode_box_autoadd_custom_ingredient_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_custom_ingredient_dto(deserializer));
+  }
+
+  @protected
+  IngredientRefDto sse_decode_box_autoadd_ingredient_ref_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_ingredient_ref_dto(deserializer));
+  }
+
+  @protected
+  PlanDecisionRequestDto sse_decode_box_autoadd_plan_decision_request_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_plan_decision_request_dto(deserializer));
+  }
+
+  @protected
+  PlannedMealDto sse_decode_box_autoadd_planned_meal_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_planned_meal_dto(deserializer));
+  }
+
+  @protected
+  RecipeDto sse_decode_box_autoadd_recipe_dto(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_recipe_dto(deserializer));
+  }
+
+  @protected
+  RestrictionAssessmentDto sse_decode_box_autoadd_restriction_assessment_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_restriction_assessment_dto(deserializer));
+  }
+
+  @protected
+  ScaleDto sse_decode_box_autoadd_scale_dto(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_scale_dto(deserializer));
+  }
+
+  @protected
+  SeparateReasonDto sse_decode_box_autoadd_separate_reason_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_separate_reason_dto(deserializer));
+  }
+
+  @protected
+  ShoppingLineStateDto sse_decode_box_autoadd_shopping_line_state_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_shopping_line_state_dto(deserializer));
+  }
+
+  @protected
+  ShoppingManualItemDto sse_decode_box_autoadd_shopping_manual_item_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_shopping_manual_item_dto(deserializer));
+  }
+
+  @protected
+  int sse_decode_box_autoadd_u_32(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_u_32(deserializer));
+  }
+
+  @protected
+  CandidateSourceDto sse_decode_candidate_source_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var inner = sse_decode_i_32(deserializer);
+    return CandidateSourceDto.values[inner];
+  }
+
+  @protected
+  ConfidenceDto sse_decode_confidence_dto(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var inner = sse_decode_i_32(deserializer);
+    return ConfidenceDto.values[inner];
+  }
+
+  @protected
+  ConflictDto sse_decode_conflict_dto(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_restriction = sse_decode_restriction_dto(deserializer);
+    var var_linePosition = sse_decode_u_32(deserializer);
+    var var_lineName = sse_decode_String(deserializer);
+    var var_term = sse_decode_String(deserializer);
+    return ConflictDto(
+      restriction: var_restriction,
+      linePosition: var_linePosition,
+      lineName: var_lineName,
+      term: var_term,
+    );
+  }
+
+  @protected
+  ContributionDto sse_decode_contribution_dto(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_plannedMealId = sse_decode_String(deserializer);
+    var var_date = sse_decode_String(deserializer);
+    var var_slot = sse_decode_meal_slot_dto(deserializer);
+    var var_componentPosition = sse_decode_u_32(deserializer);
+    var var_recipeId = sse_decode_String(deserializer);
+    var var_recipeTitle = sse_decode_String(deserializer);
+    var var_linePosition = sse_decode_u_32(deserializer);
+    var var_originalText = sse_decode_String(deserializer);
+    var var_scale = sse_decode_opt_box_autoadd_scale_dto(deserializer);
+    return ContributionDto(
+      plannedMealId: var_plannedMealId,
+      date: var_date,
+      slot: var_slot,
+      componentPosition: var_componentPosition,
+      recipeId: var_recipeId,
+      recipeTitle: var_recipeTitle,
+      linePosition: var_linePosition,
+      originalText: var_originalText,
+      scale: var_scale,
+    );
+  }
+
+  @protected
+  CoverCycleOutcomeDto sse_decode_cover_cycle_outcome_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_result = sse_decode_planning_result_dto(deserializer);
+    var var_ledgerEntryId = sse_decode_String(deserializer);
+    var var_applied = sse_decode_bool(deserializer);
+    var var_changedSlots = sse_decode_u_32(deserializer);
+    return CoverCycleOutcomeDto(
+      result: var_result,
+      ledgerEntryId: var_ledgerEntryId,
+      applied: var_applied,
+      changedSlots: var_changedSlots,
+    );
+  }
+
+  @protected
+  CoverCycleRequestDto sse_decode_cover_cycle_request_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_householdId = sse_decode_String(deserializer);
+    var var_today = sse_decode_String(deserializer);
+    var var_offsetCycles = sse_decode_i_32(deserializer);
+    var var_apply = sse_decode_bool(deserializer);
+    var var_beamWidth = sse_decode_opt_box_autoadd_u_32(deserializer);
+    var var_candidatesPerSlot = sse_decode_opt_box_autoadd_u_32(deserializer);
+    var var_commitmentHorizonDays = sse_decode_opt_box_autoadd_u_32(
+      deserializer,
+    );
+    return CoverCycleRequestDto(
+      householdId: var_householdId,
+      today: var_today,
+      offsetCycles: var_offsetCycles,
+      apply: var_apply,
+      beamWidth: var_beamWidth,
+      candidatesPerSlot: var_candidatesPerSlot,
+      commitmentHorizonDays: var_commitmentHorizonDays,
+    );
+  }
+
+  @protected
+  CoverageStateDto sse_decode_coverage_state_dto(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var inner = sse_decode_i_32(deserializer);
+    return CoverageStateDto.values[inner];
+  }
+
+  @protected
+  CustomIngredientDto sse_decode_custom_ingredient_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_id = sse_decode_String(deserializer);
+    var var_householdId = sse_decode_String(deserializer);
+    var var_name = sse_decode_String(deserializer);
+    var var_storeCategory = sse_decode_opt_String(deserializer);
+    return CustomIngredientDto(
+      id: var_id,
+      householdId: var_householdId,
+      name: var_name,
+      storeCategory: var_storeCategory,
+    );
+  }
+
+  @protected
+  ExportReport sse_decode_export_report(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_path = sse_decode_String(deserializer);
+    var var_schemaVersion = sse_decode_u_32(deserializer);
+    return ExportReport(path: var_path, schemaVersion: var_schemaVersion);
   }
 
   @protected
@@ -244,6 +3051,75 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  HouseholdDto sse_decode_household_dto(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_id = sse_decode_String(deserializer);
+    var var_name = sse_decode_opt_String(deserializer);
+    var var_members = sse_decode_list_member_dto(deserializer);
+    var var_onboarded = sse_decode_bool(deserializer);
+    return HouseholdDto(
+      id: var_id,
+      name: var_name,
+      members: var_members,
+      onboarded: var_onboarded,
+    );
+  }
+
+  @protected
+  int sse_decode_i_32(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return deserializer.buffer.getInt32();
+  }
+
+  @protected
+  PlatformInt64 sse_decode_i_64(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return deserializer.buffer.getPlatformInt64();
+  }
+
+  @protected
+  IngredientLineDto sse_decode_ingredient_line_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_originalText = sse_decode_String(deserializer);
+    var var_name = sse_decode_String(deserializer);
+    var var_ingredient = sse_decode_opt_box_autoadd_ingredient_ref_dto(
+      deserializer,
+    );
+    var var_quantity = sse_decode_quantity_dto(deserializer);
+    var var_unit = sse_decode_unit_dto(deserializer);
+    var var_preparation = sse_decode_opt_String(deserializer);
+    var var_optional = sse_decode_bool(deserializer);
+    return IngredientLineDto(
+      originalText: var_originalText,
+      name: var_name,
+      ingredient: var_ingredient,
+      quantity: var_quantity,
+      unit: var_unit,
+      preparation: var_preparation,
+      optional: var_optional,
+    );
+  }
+
+  @protected
+  IngredientRefDto sse_decode_ingredient_ref_dto(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var tag_ = sse_decode_i_32(deserializer);
+    switch (tag_) {
+      case 0:
+        var var_id = sse_decode_String(deserializer);
+        return IngredientRefDto_Catalog(id: var_id);
+      case 1:
+        var var_id = sse_decode_String(deserializer);
+        return IngredientRefDto_Custom(id: var_id);
+      default:
+        throw UnimplementedError('');
+    }
+  }
+
+  @protected
   KimattaError sse_decode_kimatta_error(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
 
@@ -252,11 +3128,214 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       case 0:
         return KimattaError_InvalidPath();
       case 1:
+        return KimattaError_NotOpen();
+      case 2:
         var var_message = sse_decode_String(deserializer);
         return KimattaError_Storage(message: var_message);
+      case 3:
+        var var_message = sse_decode_String(deserializer);
+        return KimattaError_Corrupt(message: var_message);
+      case 4:
+        var var_message = sse_decode_String(deserializer);
+        return KimattaError_Planning(message: var_message);
+      case 5:
+        var var_message = sse_decode_String(deserializer);
+        return KimattaError_Recipe(message: var_message);
+      case 6:
+        var var_message = sse_decode_String(deserializer);
+        return KimattaError_Restriction(message: var_message);
+      case 7:
+        var var_message = sse_decode_String(deserializer);
+        return KimattaError_PlannedMeal(message: var_message);
+      case 8:
+        var var_message = sse_decode_String(deserializer);
+        return KimattaError_Shopping(message: var_message);
       default:
         throw UnimplementedError('');
     }
+  }
+
+  @protected
+  List<String> sse_decode_list_String(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <String>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_String(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
+  List<ActionProposalDto> sse_decode_list_action_proposal_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <ActionProposalDto>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_action_proposal_dto(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
+  List<AttentionRequestDto> sse_decode_list_attention_request_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <AttentionRequestDto>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_attention_request_dto(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
+  List<ConflictDto> sse_decode_list_conflict_dto(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <ConflictDto>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_conflict_dto(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
+  List<ContributionDto> sse_decode_list_contribution_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <ContributionDto>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_contribution_dto(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
+  List<CustomIngredientDto> sse_decode_list_custom_ingredient_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <CustomIngredientDto>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_custom_ingredient_dto(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
+  List<IngredientLineDto> sse_decode_list_ingredient_line_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <IngredientLineDto>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_ingredient_line_dto(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
+  List<IngredientRefDto> sse_decode_list_ingredient_ref_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <IngredientRefDto>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_ingredient_ref_dto(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
+  List<MealComponentDto> sse_decode_list_meal_component_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <MealComponentDto>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_meal_component_dto(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
+  List<MealSlotDto> sse_decode_list_meal_slot_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <MealSlotDto>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_meal_slot_dto(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
+  List<MemberDto> sse_decode_list_member_dto(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <MemberDto>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_member_dto(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
+  List<PantryEntryDto> sse_decode_list_pantry_entry_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <PantryEntryDto>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_pantry_entry_dto(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
+  List<PlannedMealDto> sse_decode_list_planned_meal_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <PlannedMealDto>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_planned_meal_dto(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
+  Int64List sse_decode_list_prim_i_64_strict(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var len_ = sse_decode_i_32(deserializer);
+    return deserializer.buffer.getInt64List(len_);
   }
 
   @protected
@@ -264,6 +3343,805 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var len_ = sse_decode_i_32(deserializer);
     return deserializer.buffer.getUint8List(len_);
+  }
+
+  @protected
+  List<ProposedMealDto> sse_decode_list_proposed_meal_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <ProposedMealDto>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_proposed_meal_dto(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
+  List<RecipeSummaryDto> sse_decode_list_recipe_summary_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <RecipeSummaryDto>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_recipe_summary_dto(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
+  List<RejectionDto> sse_decode_list_rejection_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <RejectionDto>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_rejection_dto(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
+  List<RestrictionDto> sse_decode_list_restriction_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <RestrictionDto>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_restriction_dto(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
+  List<ShoppingGroupDto> sse_decode_list_shopping_group_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <ShoppingGroupDto>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_shopping_group_dto(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
+  List<ShoppingLineDto> sse_decode_list_shopping_line_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <ShoppingLineDto>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_shopping_line_dto(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
+  List<ShoppingLineStateDto> sse_decode_list_shopping_line_state_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <ShoppingLineStateDto>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_shopping_line_state_dto(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
+  List<ShoppingManualItemDto> sse_decode_list_shopping_manual_item_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <ShoppingManualItemDto>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_shopping_manual_item_dto(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
+  List<SlotCoverageDto> sse_decode_list_slot_coverage_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <SlotCoverageDto>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_slot_coverage_dto(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
+  MealComponentDto sse_decode_meal_component_dto(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_kind = sse_decode_String(deserializer);
+    var var_recipeId = sse_decode_opt_String(deserializer);
+    var var_note = sse_decode_opt_String(deserializer);
+    var var_scale = sse_decode_opt_box_autoadd_scale_dto(deserializer);
+    return MealComponentDto(
+      kind: var_kind,
+      recipeId: var_recipeId,
+      note: var_note,
+      scale: var_scale,
+    );
+  }
+
+  @protected
+  MealSlotDto sse_decode_meal_slot_dto(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var inner = sse_decode_i_32(deserializer);
+    return MealSlotDto.values[inner];
+  }
+
+  @protected
+  MemberDto sse_decode_member_dto(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_id = sse_decode_String(deserializer);
+    var var_displayName = sse_decode_String(deserializer);
+    return MemberDto(id: var_id, displayName: var_displayName);
+  }
+
+  @protected
+  String? sse_decode_opt_String(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    if (sse_decode_bool(deserializer)) {
+      return (sse_decode_String(deserializer));
+    } else {
+      return null;
+    }
+  }
+
+  @protected
+  CandidateSourceDto? sse_decode_opt_box_autoadd_candidate_source_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    if (sse_decode_bool(deserializer)) {
+      return (sse_decode_box_autoadd_candidate_source_dto(deserializer));
+    } else {
+      return null;
+    }
+  }
+
+  @protected
+  IngredientRefDto? sse_decode_opt_box_autoadd_ingredient_ref_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    if (sse_decode_bool(deserializer)) {
+      return (sse_decode_box_autoadd_ingredient_ref_dto(deserializer));
+    } else {
+      return null;
+    }
+  }
+
+  @protected
+  PlannedMealDto? sse_decode_opt_box_autoadd_planned_meal_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    if (sse_decode_bool(deserializer)) {
+      return (sse_decode_box_autoadd_planned_meal_dto(deserializer));
+    } else {
+      return null;
+    }
+  }
+
+  @protected
+  RecipeDto? sse_decode_opt_box_autoadd_recipe_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    if (sse_decode_bool(deserializer)) {
+      return (sse_decode_box_autoadd_recipe_dto(deserializer));
+    } else {
+      return null;
+    }
+  }
+
+  @protected
+  RestrictionAssessmentDto?
+  sse_decode_opt_box_autoadd_restriction_assessment_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    if (sse_decode_bool(deserializer)) {
+      return (sse_decode_box_autoadd_restriction_assessment_dto(deserializer));
+    } else {
+      return null;
+    }
+  }
+
+  @protected
+  ScaleDto? sse_decode_opt_box_autoadd_scale_dto(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    if (sse_decode_bool(deserializer)) {
+      return (sse_decode_box_autoadd_scale_dto(deserializer));
+    } else {
+      return null;
+    }
+  }
+
+  @protected
+  SeparateReasonDto? sse_decode_opt_box_autoadd_separate_reason_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    if (sse_decode_bool(deserializer)) {
+      return (sse_decode_box_autoadd_separate_reason_dto(deserializer));
+    } else {
+      return null;
+    }
+  }
+
+  @protected
+  int? sse_decode_opt_box_autoadd_u_32(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    if (sse_decode_bool(deserializer)) {
+      return (sse_decode_box_autoadd_u_32(deserializer));
+    } else {
+      return null;
+    }
+  }
+
+  @protected
+  OutcomeStatusDto sse_decode_outcome_status_dto(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var inner = sse_decode_i_32(deserializer);
+    return OutcomeStatusDto.values[inner];
+  }
+
+  @protected
+  PantryEntryDto sse_decode_pantry_entry_dto(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_ingredient = sse_decode_ingredient_ref_dto(deserializer);
+    var var_name = sse_decode_String(deserializer);
+    var var_aliases = sse_decode_list_String(deserializer);
+    var var_marked = sse_decode_bool(deserializer);
+    return PantryEntryDto(
+      ingredient: var_ingredient,
+      name: var_name,
+      aliases: var_aliases,
+      marked: var_marked,
+    );
+  }
+
+  @protected
+  PlanDecisionDto sse_decode_plan_decision_dto(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var tag_ = sse_decode_i_32(deserializer);
+    switch (tag_) {
+      case 0:
+        var var_date = sse_decode_String(deserializer);
+        var var_slot = sse_decode_meal_slot_dto(deserializer);
+        var var_components = sse_decode_list_meal_component_dto(deserializer);
+        return PlanDecisionDto_Swap(
+          date: var_date,
+          slot: var_slot,
+          components: var_components,
+        );
+      case 1:
+        var var_subject = sse_decode_String(deserializer);
+        var var_date = sse_decode_String(deserializer);
+        var var_slot = sse_decode_meal_slot_dto(deserializer);
+        return PlanDecisionDto_Veto(
+          subject: var_subject,
+          date: var_date,
+          slot: var_slot,
+        );
+      case 2:
+        return PlanDecisionDto_RestrictionsReviewed();
+      default:
+        throw UnimplementedError('');
+    }
+  }
+
+  @protected
+  PlanDecisionOutcomeDto sse_decode_plan_decision_outcome_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_ledgerEntryId = sse_decode_String(deserializer);
+    var var_priorStatus = sse_decode_outcome_status_dto(deserializer);
+    var var_resultingStatus = sse_decode_outcome_status_dto(deserializer);
+    return PlanDecisionOutcomeDto(
+      ledgerEntryId: var_ledgerEntryId,
+      priorStatus: var_priorStatus,
+      resultingStatus: var_resultingStatus,
+    );
+  }
+
+  @protected
+  PlanDecisionRequestDto sse_decode_plan_decision_request_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_householdId = sse_decode_String(deserializer);
+    var var_today = sse_decode_String(deserializer);
+    var var_offsetCycles = sse_decode_i_32(deserializer);
+    var var_decision = sse_decode_plan_decision_dto(deserializer);
+    return PlanDecisionRequestDto(
+      householdId: var_householdId,
+      today: var_today,
+      offsetCycles: var_offsetCycles,
+      decision: var_decision,
+    );
+  }
+
+  @protected
+  PlannedMealDto sse_decode_planned_meal_dto(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_id = sse_decode_String(deserializer);
+    var var_householdId = sse_decode_String(deserializer);
+    var var_date = sse_decode_String(deserializer);
+    var var_slot = sse_decode_meal_slot_dto(deserializer);
+    var var_components = sse_decode_list_meal_component_dto(deserializer);
+    var var_locked = sse_decode_bool(deserializer);
+    return PlannedMealDto(
+      id: var_id,
+      householdId: var_householdId,
+      date: var_date,
+      slot: var_slot,
+      components: var_components,
+      locked: var_locked,
+    );
+  }
+
+  @protected
+  PlanningCycleDto sse_decode_planning_cycle_dto(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_householdId = sse_decode_String(deserializer);
+    var var_anchorDate = sse_decode_String(deserializer);
+    var var_lengthDays = sse_decode_u_32(deserializer);
+    var var_mealSlots = sse_decode_list_meal_slot_dto(deserializer);
+    var var_dates = sse_decode_list_String(deserializer);
+    return PlanningCycleDto(
+      householdId: var_householdId,
+      anchorDate: var_anchorDate,
+      lengthDays: var_lengthDays,
+      mealSlots: var_mealSlots,
+      dates: var_dates,
+    );
+  }
+
+  @protected
+  PlanningResultDto sse_decode_planning_result_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_algorithmVersion = sse_decode_u_32(deserializer);
+    var var_snapshotHash = sse_decode_String(deserializer);
+    var var_status = sse_decode_outcome_status_dto(deserializer);
+    var var_horizonFrom = sse_decode_String(deserializer);
+    var var_horizonTo = sse_decode_String(deserializer);
+    var var_slots = sse_decode_list_slot_coverage_dto(deserializer);
+    var var_proposed = sse_decode_list_proposed_meal_dto(deserializer);
+    var var_rejections = sse_decode_list_rejection_dto(deserializer);
+    var var_unresolvedIssues = sse_decode_list_String(deserializer);
+    var var_assumptions = sse_decode_list_String(deserializer);
+    var var_reasonCodes = sse_decode_list_String(deserializer);
+    var var_proposals = sse_decode_list_action_proposal_dto(deserializer);
+    var var_attention = sse_decode_list_attention_request_dto(deserializer);
+    var var_search = sse_decode_search_trace_dto(deserializer);
+    var var_scoreTiers = sse_decode_list_prim_i_64_strict(deserializer);
+    return PlanningResultDto(
+      algorithmVersion: var_algorithmVersion,
+      snapshotHash: var_snapshotHash,
+      status: var_status,
+      horizonFrom: var_horizonFrom,
+      horizonTo: var_horizonTo,
+      slots: var_slots,
+      proposed: var_proposed,
+      rejections: var_rejections,
+      unresolvedIssues: var_unresolvedIssues,
+      assumptions: var_assumptions,
+      reasonCodes: var_reasonCodes,
+      proposals: var_proposals,
+      attention: var_attention,
+      search: var_search,
+      scoreTiers: var_scoreTiers,
+    );
+  }
+
+  @protected
+  ProposedMealDto sse_decode_proposed_meal_dto(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_date = sse_decode_String(deserializer);
+    var var_slot = sse_decode_meal_slot_dto(deserializer);
+    var var_components = sse_decode_list_meal_component_dto(deserializer);
+    return ProposedMealDto(
+      date: var_date,
+      slot: var_slot,
+      components: var_components,
+    );
+  }
+
+  @protected
+  QuantityDto sse_decode_quantity_dto(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var tag_ = sse_decode_i_32(deserializer);
+    switch (tag_) {
+      case 0:
+        return QuantityDto_Unknown();
+      case 1:
+        var var_numer = sse_decode_u_32(deserializer);
+        var var_denom = sse_decode_u_32(deserializer);
+        return QuantityDto_Exact(numer: var_numer, denom: var_denom);
+      case 2:
+        var var_minNumer = sse_decode_u_32(deserializer);
+        var var_minDenom = sse_decode_u_32(deserializer);
+        var var_maxNumer = sse_decode_u_32(deserializer);
+        var var_maxDenom = sse_decode_u_32(deserializer);
+        return QuantityDto_Range(
+          minNumer: var_minNumer,
+          minDenom: var_minDenom,
+          maxNumer: var_maxNumer,
+          maxDenom: var_maxDenom,
+        );
+      default:
+        throw UnimplementedError('');
+    }
+  }
+
+  @protected
+  RecipeDto sse_decode_recipe_dto(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_id = sse_decode_String(deserializer);
+    var var_householdId = sse_decode_String(deserializer);
+    var var_title = sse_decode_String(deserializer);
+    var var_servings = sse_decode_opt_box_autoadd_u_32(deserializer);
+    var var_prepMinutes = sse_decode_opt_box_autoadd_u_32(deserializer);
+    var var_instructions = sse_decode_String(deserializer);
+    var var_lines = sse_decode_list_ingredient_line_dto(deserializer);
+    var var_provenance = sse_decode_recipe_provenance_dto(deserializer);
+    var var_archivedAt = sse_decode_opt_String(deserializer);
+    var var_assessment = sse_decode_opt_box_autoadd_restriction_assessment_dto(
+      deserializer,
+    );
+    return RecipeDto(
+      id: var_id,
+      householdId: var_householdId,
+      title: var_title,
+      servings: var_servings,
+      prepMinutes: var_prepMinutes,
+      instructions: var_instructions,
+      lines: var_lines,
+      provenance: var_provenance,
+      archivedAt: var_archivedAt,
+      assessment: var_assessment,
+    );
+  }
+
+  @protected
+  RecipeProvenanceDto sse_decode_recipe_provenance_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_kind = sse_decode_String(deserializer);
+    var var_sourceUrl = sse_decode_opt_String(deserializer);
+    var var_sourceName = sse_decode_opt_String(deserializer);
+    var var_sourceAuthor = sse_decode_opt_String(deserializer);
+    var var_rightsBasis = sse_decode_opt_String(deserializer);
+    var var_attribution = sse_decode_opt_String(deserializer);
+    var var_modifications = sse_decode_opt_String(deserializer);
+    var var_verifiedOn = sse_decode_opt_String(deserializer);
+    var var_starterSlug = sse_decode_opt_String(deserializer);
+    return RecipeProvenanceDto(
+      kind: var_kind,
+      sourceUrl: var_sourceUrl,
+      sourceName: var_sourceName,
+      sourceAuthor: var_sourceAuthor,
+      rightsBasis: var_rightsBasis,
+      attribution: var_attribution,
+      modifications: var_modifications,
+      verifiedOn: var_verifiedOn,
+      starterSlug: var_starterSlug,
+    );
+  }
+
+  @protected
+  RecipeSummaryDto sse_decode_recipe_summary_dto(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_id = sse_decode_String(deserializer);
+    var var_title = sse_decode_String(deserializer);
+    var var_assessment = sse_decode_restriction_assessment_dto(deserializer);
+    return RecipeSummaryDto(
+      id: var_id,
+      title: var_title,
+      assessment: var_assessment,
+    );
+  }
+
+  @protected
+  RejectionDto sse_decode_rejection_dto(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_date = sse_decode_String(deserializer);
+    var var_slot = sse_decode_meal_slot_dto(deserializer);
+    var var_candidateText = sse_decode_String(deserializer);
+    var var_code = sse_decode_String(deserializer);
+    return RejectionDto(
+      date: var_date,
+      slot: var_slot,
+      candidateText: var_candidateText,
+      code: var_code,
+    );
+  }
+
+  @protected
+  RequiredAuthorityDto sse_decode_required_authority_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var inner = sse_decode_i_32(deserializer);
+    return RequiredAuthorityDto.values[inner];
+  }
+
+  @protected
+  RestrictionAssessmentDto sse_decode_restriction_assessment_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_ruleVersion = sse_decode_u_32(deserializer);
+    var var_restrictionsChecked = sse_decode_u_32(deserializer);
+    var var_linesChecked = sse_decode_u_32(deserializer);
+    var var_conflicts = sse_decode_list_conflict_dto(deserializer);
+    var var_wordingOnly = sse_decode_list_String(deserializer);
+    return RestrictionAssessmentDto(
+      ruleVersion: var_ruleVersion,
+      restrictionsChecked: var_restrictionsChecked,
+      linesChecked: var_linesChecked,
+      conflicts: var_conflicts,
+      wordingOnly: var_wordingOnly,
+    );
+  }
+
+  @protected
+  RestrictionDto sse_decode_restriction_dto(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var tag_ = sse_decode_i_32(deserializer);
+    switch (tag_) {
+      case 0:
+        var var_kind = sse_decode_String(deserializer);
+        return RestrictionDto_Known(kind: var_kind);
+      case 1:
+        var var_text = sse_decode_String(deserializer);
+        return RestrictionDto_Other(text: var_text);
+      default:
+        throw UnimplementedError('');
+    }
+  }
+
+  @protected
+  ReversibilityDto sse_decode_reversibility_dto(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var inner = sse_decode_i_32(deserializer);
+    return ReversibilityDto.values[inner];
+  }
+
+  @protected
+  ScaleDto sse_decode_scale_dto(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_numer = sse_decode_u_32(deserializer);
+    var var_denom = sse_decode_u_32(deserializer);
+    return ScaleDto(numer: var_numer, denom: var_denom);
+  }
+
+  @protected
+  SearchTraceDto sse_decode_search_trace_dto(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_beamWidth = sse_decode_u_32(deserializer);
+    var var_candidatesPerSlot = sse_decode_u_32(deserializer);
+    var var_slotOrder = sse_decode_String(deserializer);
+    var var_statesScored = sse_decode_u_32(deserializer);
+    return SearchTraceDto(
+      beamWidth: var_beamWidth,
+      candidatesPerSlot: var_candidatesPerSlot,
+      slotOrder: var_slotOrder,
+      statesScored: var_statesScored,
+    );
+  }
+
+  @protected
+  SeparateReasonDto sse_decode_separate_reason_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var inner = sse_decode_i_32(deserializer);
+    return SeparateReasonDto.values[inner];
+  }
+
+  @protected
+  ShoppingGroupDto sse_decode_shopping_group_dto(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_category = sse_decode_opt_String(deserializer);
+    var var_lines = sse_decode_list_shopping_line_dto(deserializer);
+    return ShoppingGroupDto(category: var_category, lines: var_lines);
+  }
+
+  @protected
+  ShoppingLineDto sse_decode_shopping_line_dto(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_key = sse_decode_String(deserializer);
+    var var_name = sse_decode_String(deserializer);
+    var var_ingredient = sse_decode_opt_box_autoadd_ingredient_ref_dto(
+      deserializer,
+    );
+    var var_quantity = sse_decode_quantity_dto(deserializer);
+    var var_unit = sse_decode_unit_dto(deserializer);
+    var var_optional = sse_decode_bool(deserializer);
+    var var_status = sse_decode_shopping_line_status_dto(deserializer);
+    var var_separateReason = sse_decode_opt_box_autoadd_separate_reason_dto(
+      deserializer,
+    );
+    var var_contributions = sse_decode_list_contribution_dto(deserializer);
+    return ShoppingLineDto(
+      key: var_key,
+      name: var_name,
+      ingredient: var_ingredient,
+      quantity: var_quantity,
+      unit: var_unit,
+      optional: var_optional,
+      status: var_status,
+      separateReason: var_separateReason,
+      contributions: var_contributions,
+    );
+  }
+
+  @protected
+  ShoppingLineStateDto sse_decode_shopping_line_state_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_key = sse_decode_String(deserializer);
+    var var_checked = sse_decode_bool(deserializer);
+    var var_hidden = sse_decode_bool(deserializer);
+    var var_restored = sse_decode_bool(deserializer);
+    var var_changed = sse_decode_bool(deserializer);
+    var var_checkedAgainst = sse_decode_opt_String(deserializer);
+    return ShoppingLineStateDto(
+      key: var_key,
+      checked: var_checked,
+      hidden: var_hidden,
+      restored: var_restored,
+      changed: var_changed,
+      checkedAgainst: var_checkedAgainst,
+    );
+  }
+
+  @protected
+  ShoppingLineStatusDto sse_decode_shopping_line_status_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var inner = sse_decode_i_32(deserializer);
+    return ShoppingLineStatusDto.values[inner];
+  }
+
+  @protected
+  ShoppingListDto sse_decode_shopping_list_dto(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_algorithmVersion = sse_decode_u_32(deserializer);
+    var var_fromDate = sse_decode_String(deserializer);
+    var var_toDate = sse_decode_String(deserializer);
+    var var_groups = sse_decode_list_shopping_group_dto(deserializer);
+    var var_nonRecipeComponents = sse_decode_u_32(deserializer);
+    var var_contributionCount = sse_decode_u_32(deserializer);
+    return ShoppingListDto(
+      algorithmVersion: var_algorithmVersion,
+      fromDate: var_fromDate,
+      toDate: var_toDate,
+      groups: var_groups,
+      nonRecipeComponents: var_nonRecipeComponents,
+      contributionCount: var_contributionCount,
+    );
+  }
+
+  @protected
+  ShoppingManualItemDto sse_decode_shopping_manual_item_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_id = sse_decode_String(deserializer);
+    var var_householdId = sse_decode_String(deserializer);
+    var var_name = sse_decode_String(deserializer);
+    var var_note = sse_decode_opt_String(deserializer);
+    var var_checked = sse_decode_bool(deserializer);
+    return ShoppingManualItemDto(
+      id: var_id,
+      householdId: var_householdId,
+      name: var_name,
+      note: var_note,
+      checked: var_checked,
+    );
+  }
+
+  @protected
+  ShoppingViewDto sse_decode_shopping_view_dto(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_list = sse_decode_shopping_list_dto(deserializer);
+    var var_lineStates = sse_decode_list_shopping_line_state_dto(deserializer);
+    var var_manualItems = sse_decode_list_shopping_manual_item_dto(
+      deserializer,
+    );
+    var var_orphanedLineStateCount = sse_decode_u_32(deserializer);
+    return ShoppingViewDto(
+      list: var_list,
+      lineStates: var_lineStates,
+      manualItems: var_manualItems,
+      orphanedLineStateCount: var_orphanedLineStateCount,
+    );
+  }
+
+  @protected
+  SlotCoverageDto sse_decode_slot_coverage_dto(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_date = sse_decode_String(deserializer);
+    var var_slot = sse_decode_meal_slot_dto(deserializer);
+    var var_state = sse_decode_coverage_state_dto(deserializer);
+    var var_source = sse_decode_opt_box_autoadd_candidate_source_dto(
+      deserializer,
+    );
+    var var_components = sse_decode_list_meal_component_dto(deserializer);
+    var var_reasonCodes = sse_decode_list_String(deserializer);
+    return SlotCoverageDto(
+      date: var_date,
+      slot: var_slot,
+      state: var_state,
+      source: var_source,
+      components: var_components,
+      reasonCodes: var_reasonCodes,
+    );
+  }
+
+  @protected
+  StarterInstallReportDto sse_decode_starter_install_report_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_installed = sse_decode_u_32(deserializer);
+    var var_skipped = sse_decode_u_32(deserializer);
+    var var_catalogInstalled = sse_decode_u_32(deserializer);
+    var var_available = sse_decode_u_32(deserializer);
+    var var_pendingCookReview = sse_decode_u_32(deserializer);
+    return StarterInstallReportDto(
+      installed: var_installed,
+      skipped: var_skipped,
+      catalogInstalled: var_catalogInstalled,
+      available: var_available,
+      pendingCookReview: var_pendingCookReview,
+    );
   }
 
   @protected
@@ -284,21 +4162,290 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  int sse_decode_i_32(SseDeserializer deserializer) {
+  UnitDto sse_decode_unit_dto(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
-    return deserializer.buffer.getInt32();
+
+    var tag_ = sse_decode_i_32(deserializer);
+    switch (tag_) {
+      case 0:
+        return UnitDto_None();
+      case 1:
+        var var_unit = sse_decode_String(deserializer);
+        return UnitDto_Known(unit: var_unit);
+      case 2:
+        var var_text = sse_decode_String(deserializer);
+        return UnitDto_Other(text: var_text);
+      default:
+        throw UnimplementedError('');
+    }
   }
 
   @protected
-  bool sse_decode_bool(SseDeserializer deserializer) {
+  UrgencyDto sse_decode_urgency_dto(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
-    return deserializer.buffer.getUint8() != 0;
+    var inner = sse_decode_i_32(deserializer);
+    return UrgencyDto.values[inner];
   }
 
   @protected
   void sse_encode_String(String self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_list_prim_u_8_strict(utf8.encoder.convert(self), serializer);
+  }
+
+  @protected
+  void sse_encode_action_proposal_dto(
+    ActionProposalDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.id, serializer);
+    sse_encode_String(self.controllerId, serializer);
+    sse_encode_String(self.actionType, serializer);
+    sse_encode_band_dto(self.expectedBenefitBand, serializer);
+    sse_encode_confidence_dto(self.confidence, serializer);
+    sse_encode_reversibility_dto(self.reversibility, serializer);
+    sse_encode_required_authority_dto(self.requiredAuthority, serializer);
+    sse_encode_opt_String(self.deadline, serializer);
+    sse_encode_list_String(self.reasonCodes, serializer);
+  }
+
+  @protected
+  void sse_encode_attention_request_dto(
+    AttentionRequestDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.id, serializer);
+    sse_encode_String(self.controllerId, serializer);
+    sse_encode_urgency_dto(self.urgency, serializer);
+    sse_encode_opt_String(self.deadline, serializer);
+    sse_encode_band_dto(self.decisionBenefitBand, serializer);
+    sse_encode_band_dto(self.estimatedEffortBand, serializer);
+    sse_encode_list_String(self.options, serializer);
+    sse_encode_list_String(self.reasonCodes, serializer);
+  }
+
+  @protected
+  void sse_encode_band_dto(BandDto self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.index, serializer);
+  }
+
+  @protected
+  void sse_encode_bool(bool self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    serializer.buffer.putUint8(self ? 1 : 0);
+  }
+
+  @protected
+  void sse_encode_box_autoadd_candidate_source_dto(
+    CandidateSourceDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_candidate_source_dto(self, serializer);
+  }
+
+  @protected
+  void sse_encode_box_autoadd_cover_cycle_request_dto(
+    CoverCycleRequestDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_cover_cycle_request_dto(self, serializer);
+  }
+
+  @protected
+  void sse_encode_box_autoadd_custom_ingredient_dto(
+    CustomIngredientDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_custom_ingredient_dto(self, serializer);
+  }
+
+  @protected
+  void sse_encode_box_autoadd_ingredient_ref_dto(
+    IngredientRefDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_ingredient_ref_dto(self, serializer);
+  }
+
+  @protected
+  void sse_encode_box_autoadd_plan_decision_request_dto(
+    PlanDecisionRequestDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_plan_decision_request_dto(self, serializer);
+  }
+
+  @protected
+  void sse_encode_box_autoadd_planned_meal_dto(
+    PlannedMealDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_planned_meal_dto(self, serializer);
+  }
+
+  @protected
+  void sse_encode_box_autoadd_recipe_dto(
+    RecipeDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_recipe_dto(self, serializer);
+  }
+
+  @protected
+  void sse_encode_box_autoadd_restriction_assessment_dto(
+    RestrictionAssessmentDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_restriction_assessment_dto(self, serializer);
+  }
+
+  @protected
+  void sse_encode_box_autoadd_scale_dto(
+    ScaleDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_scale_dto(self, serializer);
+  }
+
+  @protected
+  void sse_encode_box_autoadd_separate_reason_dto(
+    SeparateReasonDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_separate_reason_dto(self, serializer);
+  }
+
+  @protected
+  void sse_encode_box_autoadd_shopping_line_state_dto(
+    ShoppingLineStateDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_shopping_line_state_dto(self, serializer);
+  }
+
+  @protected
+  void sse_encode_box_autoadd_shopping_manual_item_dto(
+    ShoppingManualItemDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_shopping_manual_item_dto(self, serializer);
+  }
+
+  @protected
+  void sse_encode_box_autoadd_u_32(int self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_u_32(self, serializer);
+  }
+
+  @protected
+  void sse_encode_candidate_source_dto(
+    CandidateSourceDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.index, serializer);
+  }
+
+  @protected
+  void sse_encode_confidence_dto(ConfidenceDto self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.index, serializer);
+  }
+
+  @protected
+  void sse_encode_conflict_dto(ConflictDto self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_restriction_dto(self.restriction, serializer);
+    sse_encode_u_32(self.linePosition, serializer);
+    sse_encode_String(self.lineName, serializer);
+    sse_encode_String(self.term, serializer);
+  }
+
+  @protected
+  void sse_encode_contribution_dto(
+    ContributionDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.plannedMealId, serializer);
+    sse_encode_String(self.date, serializer);
+    sse_encode_meal_slot_dto(self.slot, serializer);
+    sse_encode_u_32(self.componentPosition, serializer);
+    sse_encode_String(self.recipeId, serializer);
+    sse_encode_String(self.recipeTitle, serializer);
+    sse_encode_u_32(self.linePosition, serializer);
+    sse_encode_String(self.originalText, serializer);
+    sse_encode_opt_box_autoadd_scale_dto(self.scale, serializer);
+  }
+
+  @protected
+  void sse_encode_cover_cycle_outcome_dto(
+    CoverCycleOutcomeDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_planning_result_dto(self.result, serializer);
+    sse_encode_String(self.ledgerEntryId, serializer);
+    sse_encode_bool(self.applied, serializer);
+    sse_encode_u_32(self.changedSlots, serializer);
+  }
+
+  @protected
+  void sse_encode_cover_cycle_request_dto(
+    CoverCycleRequestDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.householdId, serializer);
+    sse_encode_String(self.today, serializer);
+    sse_encode_i_32(self.offsetCycles, serializer);
+    sse_encode_bool(self.apply, serializer);
+    sse_encode_opt_box_autoadd_u_32(self.beamWidth, serializer);
+    sse_encode_opt_box_autoadd_u_32(self.candidatesPerSlot, serializer);
+    sse_encode_opt_box_autoadd_u_32(self.commitmentHorizonDays, serializer);
+  }
+
+  @protected
+  void sse_encode_coverage_state_dto(
+    CoverageStateDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.index, serializer);
+  }
+
+  @protected
+  void sse_encode_custom_ingredient_dto(
+    CustomIngredientDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.id, serializer);
+    sse_encode_String(self.householdId, serializer);
+    sse_encode_String(self.name, serializer);
+    sse_encode_opt_String(self.storeCategory, serializer);
+  }
+
+  @protected
+  void sse_encode_export_report(ExportReport self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.path, serializer);
+    sse_encode_u_32(self.schemaVersion, serializer);
   }
 
   @protected
@@ -309,15 +4456,250 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_household_dto(HouseholdDto self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.id, serializer);
+    sse_encode_opt_String(self.name, serializer);
+    sse_encode_list_member_dto(self.members, serializer);
+    sse_encode_bool(self.onboarded, serializer);
+  }
+
+  @protected
+  void sse_encode_i_32(int self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    serializer.buffer.putInt32(self);
+  }
+
+  @protected
+  void sse_encode_i_64(PlatformInt64 self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    serializer.buffer.putPlatformInt64(self);
+  }
+
+  @protected
+  void sse_encode_ingredient_line_dto(
+    IngredientLineDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.originalText, serializer);
+    sse_encode_String(self.name, serializer);
+    sse_encode_opt_box_autoadd_ingredient_ref_dto(self.ingredient, serializer);
+    sse_encode_quantity_dto(self.quantity, serializer);
+    sse_encode_unit_dto(self.unit, serializer);
+    sse_encode_opt_String(self.preparation, serializer);
+    sse_encode_bool(self.optional, serializer);
+  }
+
+  @protected
+  void sse_encode_ingredient_ref_dto(
+    IngredientRefDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    switch (self) {
+      case IngredientRefDto_Catalog(id: final id):
+        sse_encode_i_32(0, serializer);
+        sse_encode_String(id, serializer);
+      case IngredientRefDto_Custom(id: final id):
+        sse_encode_i_32(1, serializer);
+        sse_encode_String(id, serializer);
+    }
+  }
+
+  @protected
   void sse_encode_kimatta_error(KimattaError self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     switch (self) {
       case KimattaError_InvalidPath():
         sse_encode_i_32(0, serializer);
-      case KimattaError_Storage(message: final message):
+      case KimattaError_NotOpen():
         sse_encode_i_32(1, serializer);
+      case KimattaError_Storage(message: final message):
+        sse_encode_i_32(2, serializer);
+        sse_encode_String(message, serializer);
+      case KimattaError_Corrupt(message: final message):
+        sse_encode_i_32(3, serializer);
+        sse_encode_String(message, serializer);
+      case KimattaError_Planning(message: final message):
+        sse_encode_i_32(4, serializer);
+        sse_encode_String(message, serializer);
+      case KimattaError_Recipe(message: final message):
+        sse_encode_i_32(5, serializer);
+        sse_encode_String(message, serializer);
+      case KimattaError_Restriction(message: final message):
+        sse_encode_i_32(6, serializer);
+        sse_encode_String(message, serializer);
+      case KimattaError_PlannedMeal(message: final message):
+        sse_encode_i_32(7, serializer);
+        sse_encode_String(message, serializer);
+      case KimattaError_Shopping(message: final message):
+        sse_encode_i_32(8, serializer);
         sse_encode_String(message, serializer);
     }
+  }
+
+  @protected
+  void sse_encode_list_String(List<String> self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_String(item, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_list_action_proposal_dto(
+    List<ActionProposalDto> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_action_proposal_dto(item, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_list_attention_request_dto(
+    List<AttentionRequestDto> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_attention_request_dto(item, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_list_conflict_dto(
+    List<ConflictDto> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_conflict_dto(item, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_list_contribution_dto(
+    List<ContributionDto> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_contribution_dto(item, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_list_custom_ingredient_dto(
+    List<CustomIngredientDto> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_custom_ingredient_dto(item, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_list_ingredient_line_dto(
+    List<IngredientLineDto> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_ingredient_line_dto(item, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_list_ingredient_ref_dto(
+    List<IngredientRefDto> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_ingredient_ref_dto(item, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_list_meal_component_dto(
+    List<MealComponentDto> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_meal_component_dto(item, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_list_meal_slot_dto(
+    List<MealSlotDto> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_meal_slot_dto(item, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_list_member_dto(
+    List<MemberDto> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_member_dto(item, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_list_pantry_entry_dto(
+    List<PantryEntryDto> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_pantry_entry_dto(item, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_list_planned_meal_dto(
+    List<PlannedMealDto> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_planned_meal_dto(item, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_list_prim_i_64_strict(
+    Int64List self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    serializer.buffer.putInt64List(self);
   }
 
   @protected
@@ -328,6 +4710,658 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_i_32(self.length, serializer);
     serializer.buffer.putUint8List(self);
+  }
+
+  @protected
+  void sse_encode_list_proposed_meal_dto(
+    List<ProposedMealDto> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_proposed_meal_dto(item, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_list_recipe_summary_dto(
+    List<RecipeSummaryDto> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_recipe_summary_dto(item, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_list_rejection_dto(
+    List<RejectionDto> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_rejection_dto(item, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_list_restriction_dto(
+    List<RestrictionDto> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_restriction_dto(item, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_list_shopping_group_dto(
+    List<ShoppingGroupDto> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_shopping_group_dto(item, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_list_shopping_line_dto(
+    List<ShoppingLineDto> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_shopping_line_dto(item, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_list_shopping_line_state_dto(
+    List<ShoppingLineStateDto> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_shopping_line_state_dto(item, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_list_shopping_manual_item_dto(
+    List<ShoppingManualItemDto> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_shopping_manual_item_dto(item, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_list_slot_coverage_dto(
+    List<SlotCoverageDto> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_slot_coverage_dto(item, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_meal_component_dto(
+    MealComponentDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.kind, serializer);
+    sse_encode_opt_String(self.recipeId, serializer);
+    sse_encode_opt_String(self.note, serializer);
+    sse_encode_opt_box_autoadd_scale_dto(self.scale, serializer);
+  }
+
+  @protected
+  void sse_encode_meal_slot_dto(MealSlotDto self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.index, serializer);
+  }
+
+  @protected
+  void sse_encode_member_dto(MemberDto self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.id, serializer);
+    sse_encode_String(self.displayName, serializer);
+  }
+
+  @protected
+  void sse_encode_opt_String(String? self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    sse_encode_bool(self != null, serializer);
+    if (self != null) {
+      sse_encode_String(self, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_opt_box_autoadd_candidate_source_dto(
+    CandidateSourceDto? self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    sse_encode_bool(self != null, serializer);
+    if (self != null) {
+      sse_encode_box_autoadd_candidate_source_dto(self, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_opt_box_autoadd_ingredient_ref_dto(
+    IngredientRefDto? self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    sse_encode_bool(self != null, serializer);
+    if (self != null) {
+      sse_encode_box_autoadd_ingredient_ref_dto(self, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_opt_box_autoadd_planned_meal_dto(
+    PlannedMealDto? self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    sse_encode_bool(self != null, serializer);
+    if (self != null) {
+      sse_encode_box_autoadd_planned_meal_dto(self, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_opt_box_autoadd_recipe_dto(
+    RecipeDto? self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    sse_encode_bool(self != null, serializer);
+    if (self != null) {
+      sse_encode_box_autoadd_recipe_dto(self, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_opt_box_autoadd_restriction_assessment_dto(
+    RestrictionAssessmentDto? self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    sse_encode_bool(self != null, serializer);
+    if (self != null) {
+      sse_encode_box_autoadd_restriction_assessment_dto(self, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_opt_box_autoadd_scale_dto(
+    ScaleDto? self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    sse_encode_bool(self != null, serializer);
+    if (self != null) {
+      sse_encode_box_autoadd_scale_dto(self, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_opt_box_autoadd_separate_reason_dto(
+    SeparateReasonDto? self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    sse_encode_bool(self != null, serializer);
+    if (self != null) {
+      sse_encode_box_autoadd_separate_reason_dto(self, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_opt_box_autoadd_u_32(int? self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    sse_encode_bool(self != null, serializer);
+    if (self != null) {
+      sse_encode_box_autoadd_u_32(self, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_outcome_status_dto(
+    OutcomeStatusDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.index, serializer);
+  }
+
+  @protected
+  void sse_encode_pantry_entry_dto(
+    PantryEntryDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_ingredient_ref_dto(self.ingredient, serializer);
+    sse_encode_String(self.name, serializer);
+    sse_encode_list_String(self.aliases, serializer);
+    sse_encode_bool(self.marked, serializer);
+  }
+
+  @protected
+  void sse_encode_plan_decision_dto(
+    PlanDecisionDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    switch (self) {
+      case PlanDecisionDto_Swap(
+        date: final date,
+        slot: final slot,
+        components: final components,
+      ):
+        sse_encode_i_32(0, serializer);
+        sse_encode_String(date, serializer);
+        sse_encode_meal_slot_dto(slot, serializer);
+        sse_encode_list_meal_component_dto(components, serializer);
+      case PlanDecisionDto_Veto(
+        subject: final subject,
+        date: final date,
+        slot: final slot,
+      ):
+        sse_encode_i_32(1, serializer);
+        sse_encode_String(subject, serializer);
+        sse_encode_String(date, serializer);
+        sse_encode_meal_slot_dto(slot, serializer);
+      case PlanDecisionDto_RestrictionsReviewed():
+        sse_encode_i_32(2, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_plan_decision_outcome_dto(
+    PlanDecisionOutcomeDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.ledgerEntryId, serializer);
+    sse_encode_outcome_status_dto(self.priorStatus, serializer);
+    sse_encode_outcome_status_dto(self.resultingStatus, serializer);
+  }
+
+  @protected
+  void sse_encode_plan_decision_request_dto(
+    PlanDecisionRequestDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.householdId, serializer);
+    sse_encode_String(self.today, serializer);
+    sse_encode_i_32(self.offsetCycles, serializer);
+    sse_encode_plan_decision_dto(self.decision, serializer);
+  }
+
+  @protected
+  void sse_encode_planned_meal_dto(
+    PlannedMealDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.id, serializer);
+    sse_encode_String(self.householdId, serializer);
+    sse_encode_String(self.date, serializer);
+    sse_encode_meal_slot_dto(self.slot, serializer);
+    sse_encode_list_meal_component_dto(self.components, serializer);
+    sse_encode_bool(self.locked, serializer);
+  }
+
+  @protected
+  void sse_encode_planning_cycle_dto(
+    PlanningCycleDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.householdId, serializer);
+    sse_encode_String(self.anchorDate, serializer);
+    sse_encode_u_32(self.lengthDays, serializer);
+    sse_encode_list_meal_slot_dto(self.mealSlots, serializer);
+    sse_encode_list_String(self.dates, serializer);
+  }
+
+  @protected
+  void sse_encode_planning_result_dto(
+    PlanningResultDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_u_32(self.algorithmVersion, serializer);
+    sse_encode_String(self.snapshotHash, serializer);
+    sse_encode_outcome_status_dto(self.status, serializer);
+    sse_encode_String(self.horizonFrom, serializer);
+    sse_encode_String(self.horizonTo, serializer);
+    sse_encode_list_slot_coverage_dto(self.slots, serializer);
+    sse_encode_list_proposed_meal_dto(self.proposed, serializer);
+    sse_encode_list_rejection_dto(self.rejections, serializer);
+    sse_encode_list_String(self.unresolvedIssues, serializer);
+    sse_encode_list_String(self.assumptions, serializer);
+    sse_encode_list_String(self.reasonCodes, serializer);
+    sse_encode_list_action_proposal_dto(self.proposals, serializer);
+    sse_encode_list_attention_request_dto(self.attention, serializer);
+    sse_encode_search_trace_dto(self.search, serializer);
+    sse_encode_list_prim_i_64_strict(self.scoreTiers, serializer);
+  }
+
+  @protected
+  void sse_encode_proposed_meal_dto(
+    ProposedMealDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.date, serializer);
+    sse_encode_meal_slot_dto(self.slot, serializer);
+    sse_encode_list_meal_component_dto(self.components, serializer);
+  }
+
+  @protected
+  void sse_encode_quantity_dto(QuantityDto self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    switch (self) {
+      case QuantityDto_Unknown():
+        sse_encode_i_32(0, serializer);
+      case QuantityDto_Exact(numer: final numer, denom: final denom):
+        sse_encode_i_32(1, serializer);
+        sse_encode_u_32(numer, serializer);
+        sse_encode_u_32(denom, serializer);
+      case QuantityDto_Range(
+        minNumer: final minNumer,
+        minDenom: final minDenom,
+        maxNumer: final maxNumer,
+        maxDenom: final maxDenom,
+      ):
+        sse_encode_i_32(2, serializer);
+        sse_encode_u_32(minNumer, serializer);
+        sse_encode_u_32(minDenom, serializer);
+        sse_encode_u_32(maxNumer, serializer);
+        sse_encode_u_32(maxDenom, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_recipe_dto(RecipeDto self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.id, serializer);
+    sse_encode_String(self.householdId, serializer);
+    sse_encode_String(self.title, serializer);
+    sse_encode_opt_box_autoadd_u_32(self.servings, serializer);
+    sse_encode_opt_box_autoadd_u_32(self.prepMinutes, serializer);
+    sse_encode_String(self.instructions, serializer);
+    sse_encode_list_ingredient_line_dto(self.lines, serializer);
+    sse_encode_recipe_provenance_dto(self.provenance, serializer);
+    sse_encode_opt_String(self.archivedAt, serializer);
+    sse_encode_opt_box_autoadd_restriction_assessment_dto(
+      self.assessment,
+      serializer,
+    );
+  }
+
+  @protected
+  void sse_encode_recipe_provenance_dto(
+    RecipeProvenanceDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.kind, serializer);
+    sse_encode_opt_String(self.sourceUrl, serializer);
+    sse_encode_opt_String(self.sourceName, serializer);
+    sse_encode_opt_String(self.sourceAuthor, serializer);
+    sse_encode_opt_String(self.rightsBasis, serializer);
+    sse_encode_opt_String(self.attribution, serializer);
+    sse_encode_opt_String(self.modifications, serializer);
+    sse_encode_opt_String(self.verifiedOn, serializer);
+    sse_encode_opt_String(self.starterSlug, serializer);
+  }
+
+  @protected
+  void sse_encode_recipe_summary_dto(
+    RecipeSummaryDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.id, serializer);
+    sse_encode_String(self.title, serializer);
+    sse_encode_restriction_assessment_dto(self.assessment, serializer);
+  }
+
+  @protected
+  void sse_encode_rejection_dto(RejectionDto self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.date, serializer);
+    sse_encode_meal_slot_dto(self.slot, serializer);
+    sse_encode_String(self.candidateText, serializer);
+    sse_encode_String(self.code, serializer);
+  }
+
+  @protected
+  void sse_encode_required_authority_dto(
+    RequiredAuthorityDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.index, serializer);
+  }
+
+  @protected
+  void sse_encode_restriction_assessment_dto(
+    RestrictionAssessmentDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_u_32(self.ruleVersion, serializer);
+    sse_encode_u_32(self.restrictionsChecked, serializer);
+    sse_encode_u_32(self.linesChecked, serializer);
+    sse_encode_list_conflict_dto(self.conflicts, serializer);
+    sse_encode_list_String(self.wordingOnly, serializer);
+  }
+
+  @protected
+  void sse_encode_restriction_dto(
+    RestrictionDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    switch (self) {
+      case RestrictionDto_Known(kind: final kind):
+        sse_encode_i_32(0, serializer);
+        sse_encode_String(kind, serializer);
+      case RestrictionDto_Other(text: final text):
+        sse_encode_i_32(1, serializer);
+        sse_encode_String(text, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_reversibility_dto(
+    ReversibilityDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.index, serializer);
+  }
+
+  @protected
+  void sse_encode_scale_dto(ScaleDto self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_u_32(self.numer, serializer);
+    sse_encode_u_32(self.denom, serializer);
+  }
+
+  @protected
+  void sse_encode_search_trace_dto(
+    SearchTraceDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_u_32(self.beamWidth, serializer);
+    sse_encode_u_32(self.candidatesPerSlot, serializer);
+    sse_encode_String(self.slotOrder, serializer);
+    sse_encode_u_32(self.statesScored, serializer);
+  }
+
+  @protected
+  void sse_encode_separate_reason_dto(
+    SeparateReasonDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.index, serializer);
+  }
+
+  @protected
+  void sse_encode_shopping_group_dto(
+    ShoppingGroupDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_opt_String(self.category, serializer);
+    sse_encode_list_shopping_line_dto(self.lines, serializer);
+  }
+
+  @protected
+  void sse_encode_shopping_line_dto(
+    ShoppingLineDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.key, serializer);
+    sse_encode_String(self.name, serializer);
+    sse_encode_opt_box_autoadd_ingredient_ref_dto(self.ingredient, serializer);
+    sse_encode_quantity_dto(self.quantity, serializer);
+    sse_encode_unit_dto(self.unit, serializer);
+    sse_encode_bool(self.optional, serializer);
+    sse_encode_shopping_line_status_dto(self.status, serializer);
+    sse_encode_opt_box_autoadd_separate_reason_dto(
+      self.separateReason,
+      serializer,
+    );
+    sse_encode_list_contribution_dto(self.contributions, serializer);
+  }
+
+  @protected
+  void sse_encode_shopping_line_state_dto(
+    ShoppingLineStateDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.key, serializer);
+    sse_encode_bool(self.checked, serializer);
+    sse_encode_bool(self.hidden, serializer);
+    sse_encode_bool(self.restored, serializer);
+    sse_encode_bool(self.changed, serializer);
+    sse_encode_opt_String(self.checkedAgainst, serializer);
+  }
+
+  @protected
+  void sse_encode_shopping_line_status_dto(
+    ShoppingLineStatusDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.index, serializer);
+  }
+
+  @protected
+  void sse_encode_shopping_list_dto(
+    ShoppingListDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_u_32(self.algorithmVersion, serializer);
+    sse_encode_String(self.fromDate, serializer);
+    sse_encode_String(self.toDate, serializer);
+    sse_encode_list_shopping_group_dto(self.groups, serializer);
+    sse_encode_u_32(self.nonRecipeComponents, serializer);
+    sse_encode_u_32(self.contributionCount, serializer);
+  }
+
+  @protected
+  void sse_encode_shopping_manual_item_dto(
+    ShoppingManualItemDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.id, serializer);
+    sse_encode_String(self.householdId, serializer);
+    sse_encode_String(self.name, serializer);
+    sse_encode_opt_String(self.note, serializer);
+    sse_encode_bool(self.checked, serializer);
+  }
+
+  @protected
+  void sse_encode_shopping_view_dto(
+    ShoppingViewDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_shopping_list_dto(self.list, serializer);
+    sse_encode_list_shopping_line_state_dto(self.lineStates, serializer);
+    sse_encode_list_shopping_manual_item_dto(self.manualItems, serializer);
+    sse_encode_u_32(self.orphanedLineStateCount, serializer);
+  }
+
+  @protected
+  void sse_encode_slot_coverage_dto(
+    SlotCoverageDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.date, serializer);
+    sse_encode_meal_slot_dto(self.slot, serializer);
+    sse_encode_coverage_state_dto(self.state, serializer);
+    sse_encode_opt_box_autoadd_candidate_source_dto(self.source, serializer);
+    sse_encode_list_meal_component_dto(self.components, serializer);
+    sse_encode_list_String(self.reasonCodes, serializer);
+  }
+
+  @protected
+  void sse_encode_starter_install_report_dto(
+    StarterInstallReportDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_u_32(self.installed, serializer);
+    sse_encode_u_32(self.skipped, serializer);
+    sse_encode_u_32(self.catalogInstalled, serializer);
+    sse_encode_u_32(self.available, serializer);
+    sse_encode_u_32(self.pendingCookReview, serializer);
   }
 
   @protected
@@ -348,14 +5382,23 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
-  void sse_encode_i_32(int self, SseSerializer serializer) {
+  void sse_encode_unit_dto(UnitDto self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
-    serializer.buffer.putInt32(self);
+    switch (self) {
+      case UnitDto_None():
+        sse_encode_i_32(0, serializer);
+      case UnitDto_Known(unit: final unit):
+        sse_encode_i_32(1, serializer);
+        sse_encode_String(unit, serializer);
+      case UnitDto_Other(text: final text):
+        sse_encode_i_32(2, serializer);
+        sse_encode_String(text, serializer);
+    }
   }
 
   @protected
-  void sse_encode_bool(bool self, SseSerializer serializer) {
+  void sse_encode_urgency_dto(UrgencyDto self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
-    serializer.buffer.putUint8(self ? 1 : 0);
+    sse_encode_i_32(self.index, serializer);
   }
 }

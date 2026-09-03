@@ -8,26 +8,35 @@
 # Before /execute-plan, supply the approved plan, docs/ROADMAP.md, and its target
 # card; repeat the gate before implementation. /execute-plan never commits — run
 # the commit line it prints. [OWNER] steps remain outside agent authority.
+# orchestrate: auto-approve
+# Pipeline approval (README "Mandatory planning, execution, and handoff gates", 2026-08-28):
+# review + fix loop + independent verifier PASS + merge to integration is the owner-delegated
+# Verify -> Done approval for cards whose External actions row is None/emulator-only; the
+# integration -> master merge is the owner's ratification. Cards needing explicit external
+# approval still stop at Verify.
 
 ## Discharged preparation (context)
 # DEC-001, PRE-001, MVP-001, DEC-002, PRE-002, and DEC-005 are Done with
 # evidence in docs/ROADMAP.md. MVP-002 reached Done with owner approval on
 # 2026-08-27; DOMAIN-READY is achieved and MVP-003 is Ready for planning.
 # Former steps 1–2 (bulk v3 card re-derivation) were discharged by D-034 on
-# 2026-08-26. The issue ledger references an earlier MVP-003 plan outside the
-# repository. Before use, it must be accessible and revalidated against current
-# sources, the completed MVP-002 closeout, and its open review findings. If it is
-# unavailable or remains stale, create a fresh plan. Either path folds the
-# remaining dated amendment into the card before code changes.
+# 2026-08-26. The MVP-003 plan is held outside the repository and is not resolvable
+# from here; it was revalidated 2026-08-28 against current sources, the completed
+# MVP-002 closeout, and its open review findings. If no such plan is accessible or
+# it is stale, create a fresh one before any re-entry into this card, and fold any
+# dated amendment still unfolded at that point into the card before code changes.
 
 # Former step 0 (MVP-002 owner status decision) was discharged 2026-08-27.
 
 ## Remaining implementation sequence
 
 3.  [ONLY if no accessible current approved MVP-003 plan is supplied] /plan-task Read docs/PRD_v3.md, docs/ROADMAP.md, docs/task/MVP_INVARIANTS.md, docs/task/mvp/MVP-003_ANDROID_APP_SHELL_NAVIGATION.md, then plan its implementation.
+    # Done 2026-08-28 — see the docs/ROADMAP.md evidence log.
 4.  /execute-plan Read <current approved MVP-003 plan path, or plan path from step 3>, docs/ROADMAP.md, and docs/task/mvp/MVP-003_ANDROID_APP_SHELL_NAVIGATION.md; repeat the mandatory execution gate, then execute the approved plan.
+    # Done 2026-08-28 — see the docs/ROADMAP.md evidence log.
 
 5.  /plan-task Read docs/PRD_v3.md, docs/ROADMAP.md, docs/task/MVP_INVARIANTS.md, docs/task/mvp/MVP-004_EMULATOR_AUTH_HOUSEHOLD_PERSISTENCE.md, then plan its implementation.
+    # Planned 2026-08-28; executed to Verify the same day — see the docs/ROADMAP.md evidence log.
 6.  /execute-plan Read <plan path from step 5>, docs/ROADMAP.md, and docs/task/mvp/MVP-004_EMULATOR_AUTH_HOUSEHOLD_PERSISTENCE.md; repeat the mandatory execution gate, then execute the approved plan.
 
 7.  /plan-task Read docs/PRD_v3.md, docs/ROADMAP.md, docs/task/MVP_INVARIANTS.md, docs/task/mvp/MVP-005_PLANNING_CYCLE_MEAL_SCOPE.md, then plan its implementation.
@@ -48,6 +57,7 @@
 17. [OWNER DECISION] Keep or cut MVP-010 (recipe photos) — PRD v3 §16 demotes it
     before cutting controller proof. If CUT: record the cut in docs/ROADMAP.md,
     amend MVP-022's dependency line (card cell + register, D-029), skip to step 20.
+    # Decided 2026-08-29: CUT — recorded in docs/ROADMAP.md; steps 18–19 skipped.
 18. /plan-task Read docs/PRD_v3.md, docs/ROADMAP.md, docs/task/MVP_INVARIANTS.md, docs/task/mvp/MVP-010_RECIPE_PHOTO_SUPPORT.md, then plan its implementation.
 19. /execute-plan Read <plan path from step 18>, docs/ROADMAP.md, and docs/task/mvp/MVP-010_RECIPE_PHOTO_SUPPORT.md; repeat the mandatory execution gate, then execute the approved plan.
 

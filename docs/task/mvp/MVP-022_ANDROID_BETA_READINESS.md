@@ -7,7 +7,7 @@
 | Status | See `docs/ROADMAP.md` task register |
 | Type | Verification/readiness |
 | Workstream | Release |
-| Depends on | DEC-004, MVP-001–MVP-009, MVP-011–MVP-021, MVP-023, MVP-024, MVP-025, and MVP-010 unless explicitly cut; all delivery gates through SHARING-SECURITY-READY |
+| Depends on | DEC-004, MVP-001–MVP-009, MVP-011–MVP-021, MVP-023, MVP-024, MVP-025; all delivery gates through SHARING-SECURITY-READY |
 | Complexity | Complex |
 | Assurance | Elevated |
 | Sequential batching | Final MVP card |

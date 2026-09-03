@@ -3,7 +3,18 @@
 
 // ignore_for_file: unused_import, unused_element, unnecessary_import, duplicate_ignore, invalid_use_of_internal_member, annotate_overrides, non_constant_identifier_names, curly_braces_in_flow_control_structures, prefer_const_literals_to_create_immutables, unused_field
 
+import 'api/decisions.dart';
+import 'api/error.dart';
 import 'api/health.dart';
+import 'api/household.dart';
+import 'api/pantry.dart';
+import 'api/planned_meals.dart';
+import 'api/planner.dart';
+import 'api/planning.dart';
+import 'api/recipe.dart';
+import 'api/restrictions.dart';
+import 'api/shopping.dart';
+import 'api/starter.dart';
 
 import 'dart:async';
 import 'dart:convert';
@@ -25,13 +36,320 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   String dco_decode_String(dynamic raw);
 
   @protected
+  ActionProposalDto dco_decode_action_proposal_dto(dynamic raw);
+
+  @protected
+  AttentionRequestDto dco_decode_attention_request_dto(dynamic raw);
+
+  @protected
+  BandDto dco_decode_band_dto(dynamic raw);
+
+  @protected
+  bool dco_decode_bool(dynamic raw);
+
+  @protected
+  CandidateSourceDto dco_decode_box_autoadd_candidate_source_dto(dynamic raw);
+
+  @protected
+  CoverCycleRequestDto dco_decode_box_autoadd_cover_cycle_request_dto(
+    dynamic raw,
+  );
+
+  @protected
+  CustomIngredientDto dco_decode_box_autoadd_custom_ingredient_dto(dynamic raw);
+
+  @protected
+  IngredientRefDto dco_decode_box_autoadd_ingredient_ref_dto(dynamic raw);
+
+  @protected
+  PlanDecisionRequestDto dco_decode_box_autoadd_plan_decision_request_dto(
+    dynamic raw,
+  );
+
+  @protected
+  PlannedMealDto dco_decode_box_autoadd_planned_meal_dto(dynamic raw);
+
+  @protected
+  RecipeDto dco_decode_box_autoadd_recipe_dto(dynamic raw);
+
+  @protected
+  RestrictionAssessmentDto dco_decode_box_autoadd_restriction_assessment_dto(
+    dynamic raw,
+  );
+
+  @protected
+  ScaleDto dco_decode_box_autoadd_scale_dto(dynamic raw);
+
+  @protected
+  SeparateReasonDto dco_decode_box_autoadd_separate_reason_dto(dynamic raw);
+
+  @protected
+  ShoppingLineStateDto dco_decode_box_autoadd_shopping_line_state_dto(
+    dynamic raw,
+  );
+
+  @protected
+  ShoppingManualItemDto dco_decode_box_autoadd_shopping_manual_item_dto(
+    dynamic raw,
+  );
+
+  @protected
+  int dco_decode_box_autoadd_u_32(dynamic raw);
+
+  @protected
+  CandidateSourceDto dco_decode_candidate_source_dto(dynamic raw);
+
+  @protected
+  ConfidenceDto dco_decode_confidence_dto(dynamic raw);
+
+  @protected
+  ConflictDto dco_decode_conflict_dto(dynamic raw);
+
+  @protected
+  ContributionDto dco_decode_contribution_dto(dynamic raw);
+
+  @protected
+  CoverCycleOutcomeDto dco_decode_cover_cycle_outcome_dto(dynamic raw);
+
+  @protected
+  CoverCycleRequestDto dco_decode_cover_cycle_request_dto(dynamic raw);
+
+  @protected
+  CoverageStateDto dco_decode_coverage_state_dto(dynamic raw);
+
+  @protected
+  CustomIngredientDto dco_decode_custom_ingredient_dto(dynamic raw);
+
+  @protected
+  ExportReport dco_decode_export_report(dynamic raw);
+
+  @protected
   HealthReport dco_decode_health_report(dynamic raw);
+
+  @protected
+  HouseholdDto dco_decode_household_dto(dynamic raw);
+
+  @protected
+  int dco_decode_i_32(dynamic raw);
+
+  @protected
+  PlatformInt64 dco_decode_i_64(dynamic raw);
+
+  @protected
+  IngredientLineDto dco_decode_ingredient_line_dto(dynamic raw);
+
+  @protected
+  IngredientRefDto dco_decode_ingredient_ref_dto(dynamic raw);
 
   @protected
   KimattaError dco_decode_kimatta_error(dynamic raw);
 
   @protected
+  List<String> dco_decode_list_String(dynamic raw);
+
+  @protected
+  List<ActionProposalDto> dco_decode_list_action_proposal_dto(dynamic raw);
+
+  @protected
+  List<AttentionRequestDto> dco_decode_list_attention_request_dto(dynamic raw);
+
+  @protected
+  List<ConflictDto> dco_decode_list_conflict_dto(dynamic raw);
+
+  @protected
+  List<ContributionDto> dco_decode_list_contribution_dto(dynamic raw);
+
+  @protected
+  List<CustomIngredientDto> dco_decode_list_custom_ingredient_dto(dynamic raw);
+
+  @protected
+  List<IngredientLineDto> dco_decode_list_ingredient_line_dto(dynamic raw);
+
+  @protected
+  List<IngredientRefDto> dco_decode_list_ingredient_ref_dto(dynamic raw);
+
+  @protected
+  List<MealComponentDto> dco_decode_list_meal_component_dto(dynamic raw);
+
+  @protected
+  List<MealSlotDto> dco_decode_list_meal_slot_dto(dynamic raw);
+
+  @protected
+  List<MemberDto> dco_decode_list_member_dto(dynamic raw);
+
+  @protected
+  List<PantryEntryDto> dco_decode_list_pantry_entry_dto(dynamic raw);
+
+  @protected
+  List<PlannedMealDto> dco_decode_list_planned_meal_dto(dynamic raw);
+
+  @protected
+  Int64List dco_decode_list_prim_i_64_strict(dynamic raw);
+
+  @protected
   Uint8List dco_decode_list_prim_u_8_strict(dynamic raw);
+
+  @protected
+  List<ProposedMealDto> dco_decode_list_proposed_meal_dto(dynamic raw);
+
+  @protected
+  List<RecipeSummaryDto> dco_decode_list_recipe_summary_dto(dynamic raw);
+
+  @protected
+  List<RejectionDto> dco_decode_list_rejection_dto(dynamic raw);
+
+  @protected
+  List<RestrictionDto> dco_decode_list_restriction_dto(dynamic raw);
+
+  @protected
+  List<ShoppingGroupDto> dco_decode_list_shopping_group_dto(dynamic raw);
+
+  @protected
+  List<ShoppingLineDto> dco_decode_list_shopping_line_dto(dynamic raw);
+
+  @protected
+  List<ShoppingLineStateDto> dco_decode_list_shopping_line_state_dto(
+    dynamic raw,
+  );
+
+  @protected
+  List<ShoppingManualItemDto> dco_decode_list_shopping_manual_item_dto(
+    dynamic raw,
+  );
+
+  @protected
+  List<SlotCoverageDto> dco_decode_list_slot_coverage_dto(dynamic raw);
+
+  @protected
+  MealComponentDto dco_decode_meal_component_dto(dynamic raw);
+
+  @protected
+  MealSlotDto dco_decode_meal_slot_dto(dynamic raw);
+
+  @protected
+  MemberDto dco_decode_member_dto(dynamic raw);
+
+  @protected
+  String? dco_decode_opt_String(dynamic raw);
+
+  @protected
+  CandidateSourceDto? dco_decode_opt_box_autoadd_candidate_source_dto(
+    dynamic raw,
+  );
+
+  @protected
+  IngredientRefDto? dco_decode_opt_box_autoadd_ingredient_ref_dto(dynamic raw);
+
+  @protected
+  PlannedMealDto? dco_decode_opt_box_autoadd_planned_meal_dto(dynamic raw);
+
+  @protected
+  RecipeDto? dco_decode_opt_box_autoadd_recipe_dto(dynamic raw);
+
+  @protected
+  RestrictionAssessmentDto?
+  dco_decode_opt_box_autoadd_restriction_assessment_dto(dynamic raw);
+
+  @protected
+  ScaleDto? dco_decode_opt_box_autoadd_scale_dto(dynamic raw);
+
+  @protected
+  SeparateReasonDto? dco_decode_opt_box_autoadd_separate_reason_dto(
+    dynamic raw,
+  );
+
+  @protected
+  int? dco_decode_opt_box_autoadd_u_32(dynamic raw);
+
+  @protected
+  OutcomeStatusDto dco_decode_outcome_status_dto(dynamic raw);
+
+  @protected
+  PantryEntryDto dco_decode_pantry_entry_dto(dynamic raw);
+
+  @protected
+  PlanDecisionDto dco_decode_plan_decision_dto(dynamic raw);
+
+  @protected
+  PlanDecisionOutcomeDto dco_decode_plan_decision_outcome_dto(dynamic raw);
+
+  @protected
+  PlanDecisionRequestDto dco_decode_plan_decision_request_dto(dynamic raw);
+
+  @protected
+  PlannedMealDto dco_decode_planned_meal_dto(dynamic raw);
+
+  @protected
+  PlanningCycleDto dco_decode_planning_cycle_dto(dynamic raw);
+
+  @protected
+  PlanningResultDto dco_decode_planning_result_dto(dynamic raw);
+
+  @protected
+  ProposedMealDto dco_decode_proposed_meal_dto(dynamic raw);
+
+  @protected
+  QuantityDto dco_decode_quantity_dto(dynamic raw);
+
+  @protected
+  RecipeDto dco_decode_recipe_dto(dynamic raw);
+
+  @protected
+  RecipeProvenanceDto dco_decode_recipe_provenance_dto(dynamic raw);
+
+  @protected
+  RecipeSummaryDto dco_decode_recipe_summary_dto(dynamic raw);
+
+  @protected
+  RejectionDto dco_decode_rejection_dto(dynamic raw);
+
+  @protected
+  RequiredAuthorityDto dco_decode_required_authority_dto(dynamic raw);
+
+  @protected
+  RestrictionAssessmentDto dco_decode_restriction_assessment_dto(dynamic raw);
+
+  @protected
+  RestrictionDto dco_decode_restriction_dto(dynamic raw);
+
+  @protected
+  ReversibilityDto dco_decode_reversibility_dto(dynamic raw);
+
+  @protected
+  ScaleDto dco_decode_scale_dto(dynamic raw);
+
+  @protected
+  SearchTraceDto dco_decode_search_trace_dto(dynamic raw);
+
+  @protected
+  SeparateReasonDto dco_decode_separate_reason_dto(dynamic raw);
+
+  @protected
+  ShoppingGroupDto dco_decode_shopping_group_dto(dynamic raw);
+
+  @protected
+  ShoppingLineDto dco_decode_shopping_line_dto(dynamic raw);
+
+  @protected
+  ShoppingLineStateDto dco_decode_shopping_line_state_dto(dynamic raw);
+
+  @protected
+  ShoppingLineStatusDto dco_decode_shopping_line_status_dto(dynamic raw);
+
+  @protected
+  ShoppingListDto dco_decode_shopping_list_dto(dynamic raw);
+
+  @protected
+  ShoppingManualItemDto dco_decode_shopping_manual_item_dto(dynamic raw);
+
+  @protected
+  ShoppingViewDto dco_decode_shopping_view_dto(dynamic raw);
+
+  @protected
+  SlotCoverageDto dco_decode_slot_coverage_dto(dynamic raw);
+
+  @protected
+  StarterInstallReportDto dco_decode_starter_install_report_dto(dynamic raw);
 
   @protected
   int dco_decode_u_32(dynamic raw);
@@ -43,16 +361,415 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void dco_decode_unit(dynamic raw);
 
   @protected
+  UnitDto dco_decode_unit_dto(dynamic raw);
+
+  @protected
+  UrgencyDto dco_decode_urgency_dto(dynamic raw);
+
+  @protected
   String sse_decode_String(SseDeserializer deserializer);
+
+  @protected
+  ActionProposalDto sse_decode_action_proposal_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  AttentionRequestDto sse_decode_attention_request_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  BandDto sse_decode_band_dto(SseDeserializer deserializer);
+
+  @protected
+  bool sse_decode_bool(SseDeserializer deserializer);
+
+  @protected
+  CandidateSourceDto sse_decode_box_autoadd_candidate_source_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  CoverCycleRequestDto sse_decode_box_autoadd_cover_cycle_request_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  CustomIngredientDto sse_decode_box_autoadd_custom_ingredient_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  IngredientRefDto sse_decode_box_autoadd_ingredient_ref_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  PlanDecisionRequestDto sse_decode_box_autoadd_plan_decision_request_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  PlannedMealDto sse_decode_box_autoadd_planned_meal_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  RecipeDto sse_decode_box_autoadd_recipe_dto(SseDeserializer deserializer);
+
+  @protected
+  RestrictionAssessmentDto sse_decode_box_autoadd_restriction_assessment_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  ScaleDto sse_decode_box_autoadd_scale_dto(SseDeserializer deserializer);
+
+  @protected
+  SeparateReasonDto sse_decode_box_autoadd_separate_reason_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  ShoppingLineStateDto sse_decode_box_autoadd_shopping_line_state_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  ShoppingManualItemDto sse_decode_box_autoadd_shopping_manual_item_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  int sse_decode_box_autoadd_u_32(SseDeserializer deserializer);
+
+  @protected
+  CandidateSourceDto sse_decode_candidate_source_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  ConfidenceDto sse_decode_confidence_dto(SseDeserializer deserializer);
+
+  @protected
+  ConflictDto sse_decode_conflict_dto(SseDeserializer deserializer);
+
+  @protected
+  ContributionDto sse_decode_contribution_dto(SseDeserializer deserializer);
+
+  @protected
+  CoverCycleOutcomeDto sse_decode_cover_cycle_outcome_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  CoverCycleRequestDto sse_decode_cover_cycle_request_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  CoverageStateDto sse_decode_coverage_state_dto(SseDeserializer deserializer);
+
+  @protected
+  CustomIngredientDto sse_decode_custom_ingredient_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  ExportReport sse_decode_export_report(SseDeserializer deserializer);
 
   @protected
   HealthReport sse_decode_health_report(SseDeserializer deserializer);
 
   @protected
+  HouseholdDto sse_decode_household_dto(SseDeserializer deserializer);
+
+  @protected
+  int sse_decode_i_32(SseDeserializer deserializer);
+
+  @protected
+  PlatformInt64 sse_decode_i_64(SseDeserializer deserializer);
+
+  @protected
+  IngredientLineDto sse_decode_ingredient_line_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  IngredientRefDto sse_decode_ingredient_ref_dto(SseDeserializer deserializer);
+
+  @protected
   KimattaError sse_decode_kimatta_error(SseDeserializer deserializer);
 
   @protected
+  List<String> sse_decode_list_String(SseDeserializer deserializer);
+
+  @protected
+  List<ActionProposalDto> sse_decode_list_action_proposal_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  List<AttentionRequestDto> sse_decode_list_attention_request_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  List<ConflictDto> sse_decode_list_conflict_dto(SseDeserializer deserializer);
+
+  @protected
+  List<ContributionDto> sse_decode_list_contribution_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  List<CustomIngredientDto> sse_decode_list_custom_ingredient_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  List<IngredientLineDto> sse_decode_list_ingredient_line_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  List<IngredientRefDto> sse_decode_list_ingredient_ref_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  List<MealComponentDto> sse_decode_list_meal_component_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  List<MealSlotDto> sse_decode_list_meal_slot_dto(SseDeserializer deserializer);
+
+  @protected
+  List<MemberDto> sse_decode_list_member_dto(SseDeserializer deserializer);
+
+  @protected
+  List<PantryEntryDto> sse_decode_list_pantry_entry_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  List<PlannedMealDto> sse_decode_list_planned_meal_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  Int64List sse_decode_list_prim_i_64_strict(SseDeserializer deserializer);
+
+  @protected
   Uint8List sse_decode_list_prim_u_8_strict(SseDeserializer deserializer);
+
+  @protected
+  List<ProposedMealDto> sse_decode_list_proposed_meal_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  List<RecipeSummaryDto> sse_decode_list_recipe_summary_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  List<RejectionDto> sse_decode_list_rejection_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  List<RestrictionDto> sse_decode_list_restriction_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  List<ShoppingGroupDto> sse_decode_list_shopping_group_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  List<ShoppingLineDto> sse_decode_list_shopping_line_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  List<ShoppingLineStateDto> sse_decode_list_shopping_line_state_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  List<ShoppingManualItemDto> sse_decode_list_shopping_manual_item_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  List<SlotCoverageDto> sse_decode_list_slot_coverage_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  MealComponentDto sse_decode_meal_component_dto(SseDeserializer deserializer);
+
+  @protected
+  MealSlotDto sse_decode_meal_slot_dto(SseDeserializer deserializer);
+
+  @protected
+  MemberDto sse_decode_member_dto(SseDeserializer deserializer);
+
+  @protected
+  String? sse_decode_opt_String(SseDeserializer deserializer);
+
+  @protected
+  CandidateSourceDto? sse_decode_opt_box_autoadd_candidate_source_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  IngredientRefDto? sse_decode_opt_box_autoadd_ingredient_ref_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  PlannedMealDto? sse_decode_opt_box_autoadd_planned_meal_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  RecipeDto? sse_decode_opt_box_autoadd_recipe_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  RestrictionAssessmentDto?
+  sse_decode_opt_box_autoadd_restriction_assessment_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  ScaleDto? sse_decode_opt_box_autoadd_scale_dto(SseDeserializer deserializer);
+
+  @protected
+  SeparateReasonDto? sse_decode_opt_box_autoadd_separate_reason_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  int? sse_decode_opt_box_autoadd_u_32(SseDeserializer deserializer);
+
+  @protected
+  OutcomeStatusDto sse_decode_outcome_status_dto(SseDeserializer deserializer);
+
+  @protected
+  PantryEntryDto sse_decode_pantry_entry_dto(SseDeserializer deserializer);
+
+  @protected
+  PlanDecisionDto sse_decode_plan_decision_dto(SseDeserializer deserializer);
+
+  @protected
+  PlanDecisionOutcomeDto sse_decode_plan_decision_outcome_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  PlanDecisionRequestDto sse_decode_plan_decision_request_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  PlannedMealDto sse_decode_planned_meal_dto(SseDeserializer deserializer);
+
+  @protected
+  PlanningCycleDto sse_decode_planning_cycle_dto(SseDeserializer deserializer);
+
+  @protected
+  PlanningResultDto sse_decode_planning_result_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  ProposedMealDto sse_decode_proposed_meal_dto(SseDeserializer deserializer);
+
+  @protected
+  QuantityDto sse_decode_quantity_dto(SseDeserializer deserializer);
+
+  @protected
+  RecipeDto sse_decode_recipe_dto(SseDeserializer deserializer);
+
+  @protected
+  RecipeProvenanceDto sse_decode_recipe_provenance_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  RecipeSummaryDto sse_decode_recipe_summary_dto(SseDeserializer deserializer);
+
+  @protected
+  RejectionDto sse_decode_rejection_dto(SseDeserializer deserializer);
+
+  @protected
+  RequiredAuthorityDto sse_decode_required_authority_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  RestrictionAssessmentDto sse_decode_restriction_assessment_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  RestrictionDto sse_decode_restriction_dto(SseDeserializer deserializer);
+
+  @protected
+  ReversibilityDto sse_decode_reversibility_dto(SseDeserializer deserializer);
+
+  @protected
+  ScaleDto sse_decode_scale_dto(SseDeserializer deserializer);
+
+  @protected
+  SearchTraceDto sse_decode_search_trace_dto(SseDeserializer deserializer);
+
+  @protected
+  SeparateReasonDto sse_decode_separate_reason_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  ShoppingGroupDto sse_decode_shopping_group_dto(SseDeserializer deserializer);
+
+  @protected
+  ShoppingLineDto sse_decode_shopping_line_dto(SseDeserializer deserializer);
+
+  @protected
+  ShoppingLineStateDto sse_decode_shopping_line_state_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  ShoppingLineStatusDto sse_decode_shopping_line_status_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  ShoppingListDto sse_decode_shopping_list_dto(SseDeserializer deserializer);
+
+  @protected
+  ShoppingManualItemDto sse_decode_shopping_manual_item_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  ShoppingViewDto sse_decode_shopping_view_dto(SseDeserializer deserializer);
+
+  @protected
+  SlotCoverageDto sse_decode_slot_coverage_dto(SseDeserializer deserializer);
+
+  @protected
+  StarterInstallReportDto sse_decode_starter_install_report_dto(
+    SseDeserializer deserializer,
+  );
 
   @protected
   int sse_decode_u_32(SseDeserializer deserializer);
@@ -64,23 +781,545 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_decode_unit(SseDeserializer deserializer);
 
   @protected
-  int sse_decode_i_32(SseDeserializer deserializer);
+  UnitDto sse_decode_unit_dto(SseDeserializer deserializer);
 
   @protected
-  bool sse_decode_bool(SseDeserializer deserializer);
+  UrgencyDto sse_decode_urgency_dto(SseDeserializer deserializer);
 
   @protected
   void sse_encode_String(String self, SseSerializer serializer);
 
   @protected
+  void sse_encode_action_proposal_dto(
+    ActionProposalDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_attention_request_dto(
+    AttentionRequestDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_band_dto(BandDto self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_bool(bool self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_box_autoadd_candidate_source_dto(
+    CandidateSourceDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_cover_cycle_request_dto(
+    CoverCycleRequestDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_custom_ingredient_dto(
+    CustomIngredientDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_ingredient_ref_dto(
+    IngredientRefDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_plan_decision_request_dto(
+    PlanDecisionRequestDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_planned_meal_dto(
+    PlannedMealDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_recipe_dto(
+    RecipeDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_restriction_assessment_dto(
+    RestrictionAssessmentDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_scale_dto(
+    ScaleDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_separate_reason_dto(
+    SeparateReasonDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_shopping_line_state_dto(
+    ShoppingLineStateDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_shopping_manual_item_dto(
+    ShoppingManualItemDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_box_autoadd_u_32(int self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_candidate_source_dto(
+    CandidateSourceDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_confidence_dto(ConfidenceDto self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_conflict_dto(ConflictDto self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_contribution_dto(
+    ContributionDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_cover_cycle_outcome_dto(
+    CoverCycleOutcomeDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_cover_cycle_request_dto(
+    CoverCycleRequestDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_coverage_state_dto(
+    CoverageStateDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_custom_ingredient_dto(
+    CustomIngredientDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_export_report(ExportReport self, SseSerializer serializer);
+
+  @protected
   void sse_encode_health_report(HealthReport self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_household_dto(HouseholdDto self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_i_32(int self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_i_64(PlatformInt64 self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_ingredient_line_dto(
+    IngredientLineDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_ingredient_ref_dto(
+    IngredientRefDto self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_kimatta_error(KimattaError self, SseSerializer serializer);
 
   @protected
+  void sse_encode_list_String(List<String> self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_action_proposal_dto(
+    List<ActionProposalDto> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_attention_request_dto(
+    List<AttentionRequestDto> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_conflict_dto(
+    List<ConflictDto> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_contribution_dto(
+    List<ContributionDto> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_custom_ingredient_dto(
+    List<CustomIngredientDto> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_ingredient_line_dto(
+    List<IngredientLineDto> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_ingredient_ref_dto(
+    List<IngredientRefDto> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_meal_component_dto(
+    List<MealComponentDto> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_meal_slot_dto(
+    List<MealSlotDto> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_member_dto(
+    List<MemberDto> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_pantry_entry_dto(
+    List<PantryEntryDto> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_planned_meal_dto(
+    List<PlannedMealDto> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_prim_i_64_strict(
+    Int64List self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_list_prim_u_8_strict(
     Uint8List self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_proposed_meal_dto(
+    List<ProposedMealDto> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_recipe_summary_dto(
+    List<RecipeSummaryDto> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_rejection_dto(
+    List<RejectionDto> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_restriction_dto(
+    List<RestrictionDto> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_shopping_group_dto(
+    List<ShoppingGroupDto> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_shopping_line_dto(
+    List<ShoppingLineDto> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_shopping_line_state_dto(
+    List<ShoppingLineStateDto> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_shopping_manual_item_dto(
+    List<ShoppingManualItemDto> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_slot_coverage_dto(
+    List<SlotCoverageDto> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_meal_component_dto(
+    MealComponentDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_meal_slot_dto(MealSlotDto self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_member_dto(MemberDto self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_opt_String(String? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_opt_box_autoadd_candidate_source_dto(
+    CandidateSourceDto? self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_opt_box_autoadd_ingredient_ref_dto(
+    IngredientRefDto? self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_opt_box_autoadd_planned_meal_dto(
+    PlannedMealDto? self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_opt_box_autoadd_recipe_dto(
+    RecipeDto? self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_opt_box_autoadd_restriction_assessment_dto(
+    RestrictionAssessmentDto? self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_opt_box_autoadd_scale_dto(
+    ScaleDto? self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_opt_box_autoadd_separate_reason_dto(
+    SeparateReasonDto? self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_opt_box_autoadd_u_32(int? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_outcome_status_dto(
+    OutcomeStatusDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_pantry_entry_dto(
+    PantryEntryDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_plan_decision_dto(
+    PlanDecisionDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_plan_decision_outcome_dto(
+    PlanDecisionOutcomeDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_plan_decision_request_dto(
+    PlanDecisionRequestDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_planned_meal_dto(
+    PlannedMealDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_planning_cycle_dto(
+    PlanningCycleDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_planning_result_dto(
+    PlanningResultDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_proposed_meal_dto(
+    ProposedMealDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_quantity_dto(QuantityDto self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_recipe_dto(RecipeDto self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_recipe_provenance_dto(
+    RecipeProvenanceDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_recipe_summary_dto(
+    RecipeSummaryDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_rejection_dto(RejectionDto self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_required_authority_dto(
+    RequiredAuthorityDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_restriction_assessment_dto(
+    RestrictionAssessmentDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_restriction_dto(
+    RestrictionDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_reversibility_dto(
+    ReversibilityDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_scale_dto(ScaleDto self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_search_trace_dto(
+    SearchTraceDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_separate_reason_dto(
+    SeparateReasonDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_shopping_group_dto(
+    ShoppingGroupDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_shopping_line_dto(
+    ShoppingLineDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_shopping_line_state_dto(
+    ShoppingLineStateDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_shopping_line_status_dto(
+    ShoppingLineStatusDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_shopping_list_dto(
+    ShoppingListDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_shopping_manual_item_dto(
+    ShoppingManualItemDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_shopping_view_dto(
+    ShoppingViewDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_slot_coverage_dto(
+    SlotCoverageDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_starter_install_report_dto(
+    StarterInstallReportDto self,
     SseSerializer serializer,
   );
 
@@ -94,10 +1333,10 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_unit(void self, SseSerializer serializer);
 
   @protected
-  void sse_encode_i_32(int self, SseSerializer serializer);
+  void sse_encode_unit_dto(UnitDto self, SseSerializer serializer);
 
   @protected
-  void sse_encode_bool(bool self, SseSerializer serializer);
+  void sse_encode_urgency_dto(UrgencyDto self, SseSerializer serializer);
 }
 
 // Section: wire_class

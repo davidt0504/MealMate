@@ -16,6 +16,8 @@
 
 > **Re-derived for PRD v3 on 2026-08-26 (D-029, D-034).** The dated 2026-08-24 banner is folded into the body below. The rights and licensing constraints are unchanged by v3.
 
+> **Refreshed 2026-08-29 at planning.** `MVP-010` (recipe photos) was **Cut** by owner decision at `docs/task/SEQUENCE.txt` step 17, so this card packages text-only content and no image surface exists to violate; AC-4's image half is discharged by that absence and its licence half stands. Two entries below are this card's **Decision gates** section operating as designed, not amendments to its Load-bearing constraints, which stand as written: (1) CC BY is an uncertain rights case — the constraint admits it only if attribution survives every relevant surface, and that surface is `MVP-020`'s unbuilt work — so it is **excluded**, leaving `original`, `us_federal_public_domain` and `cc0`; (2) the shipped candidate set is **10**, under the gate's "quantity targets may shrink rather than lower quality" and PRD v3 §16, which demotes a "very broad starter pack". Both are recorded in the `docs/ROADMAP.md` handoff row, which the Status cell already points at.
+
 ## Workflow gate
 
 Before planning, read `docs/ROADMAP.md` and apply the mandatory planning gate in `docs/task/README.md` for `MVP-011`. Before implementation, apply the mandatory execution gate and repeat it as the approved plan's first execution step.
