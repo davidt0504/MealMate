@@ -69,7 +69,7 @@ class _WelcomeScreenState extends ConsumerState<WelcomeScreen> {
         padding: const EdgeInsets.all(24),
         children: [
           const Text(
-            'Meal Mate plans for a household. Yours is a household of one until '
+            'Kimatta plans for a household. Yours is a household of one until '
             'you say otherwise.',
           ),
           const SizedBox(height: 16),

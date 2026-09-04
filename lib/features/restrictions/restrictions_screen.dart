@@ -69,6 +69,12 @@ class _RestrictionsScreenState extends ConsumerState<RestrictionsScreen> {
                 if (r case RestrictionDto_Other(:final text)) text,
             ]);
         });
+        // The re-seed above is a no-op to look at — it restates what is already on screen —
+        // and a local SQLite write returns too fast for the disabled-button state to register,
+        // so without this the save is indistinguishable from a dead button. Symmetric with the
+        // error arm below, which is the only feedback this screen used to have.
+        ScaffoldMessenger.of(context)
+            .showSnackBar(const SnackBar(content: Text(restrictionsSavedCopy)));
       }
     } catch (e) {
       if (mounted) {
@@ -147,14 +153,22 @@ class _RestrictionsScreenState extends ConsumerState<RestrictionsScreen> {
           ),
         TextField(
           controller: _entry,
+          // Rebuilds so `Add` can track emptiness. `_add` already clears the field through
+          // setState, so the button re-disables after a successful add without extra wiring.
+          onChanged: (_) => setState(() {}),
           decoration: const InputDecoration(
             labelText: 'Something else',
             helperText: 'Anything the list above does not cover.',
           ),
         ),
         const SizedBox(height: 8),
+        // Disabled while empty rather than silently returning: `_add` correctly ignores a
+        // blank entry, but an enabled button that does nothing reads as broken — which is how
+        // it was reported. Trimmed, so whitespace is empty here exactly as it is in `_add`.
         OutlinedButton(
-          onPressed: _saving ? null : () => _add(kinds),
+          onPressed: _saving || _entry.text.trim().isEmpty
+              ? null
+              : () => _add(kinds),
           child: const Text('Add'),
         ),
         const SizedBox(height: 8),

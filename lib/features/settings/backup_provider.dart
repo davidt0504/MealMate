@@ -60,7 +60,7 @@ class BackupActions {
   /// data off the device (the manifest excludes the database from auto-backup).
   Future<void> shareExport(String path) async {
     await SharePlus.instance.share(
-      ShareParams(files: [XFile(path)], subject: 'Meal Mate export'),
+      ShareParams(files: [XFile(path)], subject: 'Kimatta export'),
     );
   }
 

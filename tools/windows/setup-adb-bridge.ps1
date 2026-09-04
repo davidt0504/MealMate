@@ -84,7 +84,7 @@ if (-not $isAdmin) {
     exit 0
 }
 
-Write-Host 'MealMate - WSL adb bridge host setup' -ForegroundColor White
+Write-Host 'Kimatta - WSL adb bridge host setup' -ForegroundColor White
 Write-Host "Mode: $(if ($VerifyOnly) { 'VERIFY ONLY (no changes)' } else { 'APPLY' })"
 Write-Host "WSL subnet: $WslSubnet"
 Write-Host "SDK root:   $SdkRoot"

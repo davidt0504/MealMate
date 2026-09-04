@@ -47,6 +47,89 @@ scaffold therefore carries a deliberately temporary development identity — And
 production application ID, and must replace this identity before `MVP-018`, `MVP-021`, or
 `MVP-022` binds an identifier to Firebase, App Links, signing, or Play.
 
+## Installing on a phone
+
+The app is local-only — no backend, and the release manifest carries no `INTERNET`
+permission — so a sideloaded build is a complete, usable app with no setup beyond
+installing it. Two phones are two independent households: there is no sync until `MVP-018`.
+
+**Build once.** One universal APK, all three ABIs, so it installs on any Android phone:
+
+```bash
+flutter build apk --release
+```
+
+### Path A — your own phone, over USB debugging
+
+Fastest to iterate on, and the only path that gives you `logcat` and `pm clear`.
+
+1. Enable **Developer options**: Settings → About phone → Software information → tap
+   *Build number* seven times. Then turn on **USB debugging**, and turn **off**
+   *Verify apps over USB* — Play Protect's USB verifier otherwise fails the install with
+   `INSTALL_FAILED_VERIFICATION_FAILURE`, which reads like a corrupt APK.
+2. **Unlock the phone, set its USB mode to File Transfer**, then plug it into the **Windows
+   host** (not WSL) and accept the RSA prompt on the phone's screen.
+3. `bash tools/emulator.sh adb devices` — if the phone is listed, the adb server is already
+   running and you do not need `up` at all.
+4. `bash tools/device.sh install`
+
+**Never run `up` before the phone is listed.** `cmd_up` (`tools/emulator.sh:124-141`) checks
+for a device exactly once, immediately after the adb server comes up. A phone that has not
+registered yet — cable just inserted, driver still loading, or simply not plugged in — leaves
+the emulator-process count at zero and `up` **launches the AVD**. Accept the RSA prompt before
+running `up` too, or it polls for a full 180 s and then reports something about emulator
+processes, which is not what went wrong.
+
+`emulator.sh` prints its own hints **without** the `bash` prefix (`tools/emulator.sh:157`,
+`:209`, `:221`, `:255-256`, and its header). Unless the executable bit has been repaired, add
+`bash ` when pasting one — on a bridge-down failure you will see its unprefixed suggestion
+first and this script's correct one second.
+
+**With the emulator also running,** `device.sh install` is unaffected — it always passes
+`-s` — but `emulator.sh`'s `up`, `status` and `reset` call `adb` without a serial and break
+(`boot_done` at `:65` and `cmd_reset` at `:210-211`). Prefix them:
+
+```bash
+ANDROID_SERIAL=<serial> bash tools/emulator.sh reset
+bash tools/emulator.sh adb -s <serial> shell pm clear dev.mealmate.temp   # or reset one phone directly
+```
+
+### Path B — a phone with no developer options
+
+Nothing has to be enabled on the phone for this. Use it for a second household member.
+
+```bash
+bash tools/device.sh export          # copies the APK under the Windows user profile
+```
+
+Then transfer the file (USB file transfer, Quick Share, or Drive) and tap it. Three
+prerequisites, each of which fails with a message that reads like a corrupt APK:
+
+1. **Auto Blocker** off — Settings → Security and privacy → Auto Blocker.
+2. **Install unknown apps** granted to whichever app is doing the transferring.
+3. **Play Protect's on-device scan** — separate from Path A's USB verifier, and not
+   disableable from Developer options, which this path does not have. One UI shows
+   "Unsafe app blocked" / "App not installed"; the escape is *More details → Install
+   anyway*, or turn app scanning off in Play Store → profile → Play Protect → settings.
+
+### Fallback — wireless debugging
+
+`adb pair` against the Windows adb server. Removes the cable and any USB-driver problem,
+still needs Developer options, and needs both devices on the same non-isolated network.
+
+### Caveats
+
+- The release build is signed with WSL's `~/.android/debug.keystore` (valid to 2056, so
+  expiry is not a concern) — but that key is **per-machine**. Building on a different machine,
+  or losing that file to a WSL reset, produces a different signature, and Android then refuses
+  the update: reinstalling means uninstalling first, which **erases the app's data**
+  (`allowBackup=false`, no cloud backup yet). **Back up `~/.android/debug.keystore`** if
+  anyone but you is running these builds. The release build type is not `debuggable` — this is
+  a real release build that merely carries a debug *signature*.
+- The Settings export is the only sanctioned way data leaves the phone.
+- A phone plugged in *after* the host adb server started may not enumerate until
+  `bash tools/emulator.sh down` and a fresh `up`.
+
 ## Optional repository cleanup hook
 
 Windows download metadata can appear in WSL as literal `*:Zone.Identifier`

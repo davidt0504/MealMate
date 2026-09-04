@@ -97,7 +97,7 @@ class _AppState extends ConsumerState<App> {
       if (!value.onboarded) _router.go(welcomeLocation);
     });
     return MaterialApp.router(
-      title: 'MealMate (dev)',
+      title: 'Kimatta (dev)',
       restorationScopeId: 'app',
       scaffoldMessengerKey: _messengerKey,
       theme: lightTheme,

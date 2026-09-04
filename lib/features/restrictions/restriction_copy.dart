@@ -6,8 +6,15 @@ import 'package:meal_mate/src/rust/api/restrictions.dart';
 /// The honesty line, shown first and never softened (invariant 10, and the card's
 /// "restrictions are preferences/warnings, not medical assurance").
 const restrictionsDisclaimer =
-    'Warnings only. Meal Mate flags what it knows about; it can never tell you '
+    'Warnings only. Kimatta flags what it knows about; it can never tell you '
     'a recipe is safe.';
+
+/// Shown after a successful write. The screen re-seeds its checkboxes from what the bridge
+/// returned, which is byte-identical to what is already on screen, so without this a save is
+/// visually indistinguishable from a dead button — reported from a device on 2026-09-04.
+/// Confirming the write matters more here than on other screens: leaving someone unsure
+/// whether an allergen was recorded is the failure direction this feature exists to avoid.
+const restrictionsSavedCopy = 'Restrictions saved.';
 
 /// The `_ => kind` arm renders the raw token, which is honest; Step 8's bridge cross-check
 /// test is what makes a kind added in Rust without a label here a test failure rather than a

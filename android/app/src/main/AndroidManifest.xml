@@ -4,7 +4,7 @@
          Cloud is optional by construction (PRD v3 §6.5); the sanctioned way to move data
          off the device is the in-app export on the Settings screen. -->
     <application
-        android:label="MealMate (dev)"
+        android:label="Kimatta (dev)"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
         android:allowBackup="false"

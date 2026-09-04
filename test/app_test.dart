@@ -2637,6 +2637,9 @@ void main() {
     await tester.tap(find.widgetWithText(CheckboxListTile, 'Peanuts'));
     await tester.pump();
     await tester.enterText(find.byType(TextField), 'nightshades');
+    // `Add` is disabled while the box is empty, so the typed text needs a frame to reach the
+    // button before it can be tapped — the same frame a real user's keystroke produces.
+    await tester.pump();
     await tester.tap(find.widgetWithText(OutlinedButton, 'Add'));
     await tester.pump();
     await tester.tap(find.widgetWithText(FilledButton, 'Save restrictions'));
@@ -2647,6 +2650,30 @@ void main() {
     ]);
   });
 
+  /// Reported from a real device on 2026-09-04: the owner ticked Tree nuts, tapped Save, and
+  /// nothing appeared to happen — the restriction had in fact been stored, discovered only by
+  /// navigating back. `_save` re-seeds the checkboxes from what the bridge returned, which is
+  /// identical to what is already on screen, and the only snackbar was on the error arm, so a
+  /// successful write was indistinguishable from a dead button. On this screen above all that
+  /// is the wrong failure direction: the user is left unsure whether an allergen was recorded.
+  testWidgets('a successful restriction save is confirmed in a snackbar', (
+    tester,
+  ) async {
+    useTallView(tester);
+    await tester.pumpWidget(
+      harness(
+        initial: '/settings/restrictions',
+        saveRestrictions: (_, r) async => r,
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(CheckboxListTile, 'Tree nuts'));
+    await tester.pump();
+    await tester.tap(find.widgetWithText(FilledButton, 'Save restrictions'));
+    await tester.pumpAndSettle();
+    expect(find.text(restrictionsSavedCopy), findsOneWidget);
+  });
+
   testWidgets('a blank free-text restriction cannot be added', (tester) async {
     useTallView(tester);
     await tester.pumpWidget(harness(initial: '/settings/restrictions'));
@@ -2655,6 +2682,26 @@ void main() {
     await tester.tap(find.widgetWithText(OutlinedButton, 'Add'));
     await tester.pump();
     expect(find.byType(Chip), findsNothing);
+  });
+
+  /// `Add` on an empty box was correct but silent — it returns early, so the button was
+  /// indistinguishable from a broken one. Reported alongside the save-feedback gap on
+  /// 2026-09-04: both buttons "appeared to do nothing". Whitespace counts as empty, matching
+  /// the trim `_add` already applies and the rule Rust enforces.
+  testWidgets('Add stays disabled until something is typed', (tester) async {
+    useTallView(tester);
+    await tester.pumpWidget(harness(initial: '/settings/restrictions'));
+    await tester.pumpAndSettle();
+    OutlinedButton addButton() => tester.widget<OutlinedButton>(
+      find.widgetWithText(OutlinedButton, 'Add'),
+    );
+    expect(addButton().onPressed, isNull, reason: 'empty box');
+    await tester.enterText(find.byType(TextField), 'nightshades');
+    await tester.pump();
+    expect(addButton().onPressed, isNotNull, reason: 'text typed');
+    await tester.enterText(find.byType(TextField), '   ');
+    await tester.pump();
+    expect(addButton().onPressed, isNull, reason: 'whitespace is empty');
   });
 
   /// A deletion must survive the rebuild a save triggers — the `_seedOnce` guard is what
@@ -2911,6 +2958,8 @@ void main() {
       );
       await tester.pumpAndSettle();
       await tester.enterText(find.byType(TextField), 'Peanuts');
+      // A frame so the typed text reaches `Add`, which is disabled while the box is empty.
+      await tester.pump();
       await tester.tap(find.widgetWithText(OutlinedButton, 'Add'));
       await tester.pump();
       expect(find.byType(Chip), findsNothing);
@@ -2925,6 +2974,7 @@ void main() {
       // The same entry against an already-ticked box: absorbed, not duplicated. `_known` is
       // a set, so the user's intent — warn about peanuts — is already satisfied.
       await tester.enterText(find.byType(TextField), 'peanuts');
+      await tester.pump();
       await tester.tap(find.widgetWithText(OutlinedButton, 'Add'));
       await tester.pump();
       expect(find.byType(Chip), findsNothing);

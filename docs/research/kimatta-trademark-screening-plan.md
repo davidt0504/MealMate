@@ -1,0 +1,89 @@
+# **Preliminary Trademark Screening Report: KIMATTA**
+
+## **USPTO Database Analysis**
+
+The target mark **Kimatta** is proposed as a standard character word mark designating downloadable mobile application software for household meal planning, recipe storage, pantry tracking, and shopping-list generation. Primary classification falls within International Class 9 (downloadable mobile applications and computer software), with secondary commercial relevance to International Class 42 (software as a service and cloud hosting platforms), International Class 35 (online retail and grocery list management services), and food-adjacent sectors under International Classes 29, 30, and 43\.  
+Direct database queries against the official United States Patent and Trademark Office (USPTO) Trademark Status and Document Retrieval (TSDR) portal (tsdr.uspto.gov) could not be opened directly from primary sources during this screen; therefore, direct official query result counts are reported as **NOT SEARCHED** on the official USPTO system. Search leads derived from secondary aggregator indexes were evaluated to identify potential phonetic, visual, or conceptual conflicts across prioritized classes.  
+A structured evaluation of phonetic and visual variants reveals distinct risk profiles under the likelihood of confusion factors articulated in *In re E. I. du Pont de Nemours & Co.* (177 USPQ 563):  
+The term Kimata represents a single-consonant variant of the target mark, differing visually by one character and sounding virtually identical in English pronunciation. Third-party aggregator leads indicate that Kimata appears in federal records primarily as a personal surname rather than an active product mark in software classes. Specifically, secondary records reference Akira Kimata as the owner of cancelled clothing mark NQBQ (Serial 85540590, Registration 4444470\)1, Akinori Kimata in historical corporate trademark assignments (Application 75102612, Registration 2234641\)2, and Masaki Kimata in chemical composition filings (Registration 7841108\)3. None of these records occupy Class 9 or Class 42 software channels.  
+The variant Kimato exhibits strong structural and phonetic overlap, substituting only the terminal vowel. In consumer application software, terminal vowel shifts rarely suffice to distinguish marks if applied to identical goods or services. However, no active software registrations under Kimato were identified in secondary indexes.  
+The variant Kimatsu reflects a consonant cluster substitution ('ts' versus 'tt'). Secondary leads show commercial usage of Kimatsu in foreign hospitality services4 and regional commercial trading7, presenting no identified US federal software conflicts.  
+The variant Kinata involves a labial-to-nasal consonant shift ('m' to 'n'). Third-party records indicate that Kinata Ltd previously registered the mark KINESIS in the UK (UK00003774884) for computer software and SaaS in Classes 9 and 42, though this registration was surrendered on April 7, 20228.  
+The variant Kimara appears in secondary databases for cosmetic goods under KIMARA AHNERT (Serial 76519242, Registration 2827553\)9 and dead apparel mark KIMARA (Serial 78251283\)10, both presenting minimal conflict potential due to disparate trade channels.  
+The mark Kismet shares a two-syllable prefix structure (Kis- versus Kim-) but maintains a well-defined English meaning ("destiny" or "fate"). Secondary indexes show live marks in food sectors, including KISMET (Serial 87668391\) by Kismet Life LLC for food purees in Class 2911, KISMET CAMPING (Serial 87684860\) for food and drink services in Class 4312, and electric slow cookers/multicookers registered under Serial 87668327 in Class 1113. Although these marks touch food and cooking sectors, the explicit conceptual meaning of "Kismet" creates a distinct commercial impression from Kimatta, significantly reducing confusion risks under *DuPont*.
+
+## **EUIPO and WIPO Madrid Monitor Analysis**
+
+Official primary records within the European Union Intellectual Property Office (EUIPO) eSearch Plus database (euipo.europa.eu) and World Intellectual Property Organization (WIPO) Madrid Monitor portal (wipo.int/madrid/monitor/) could not be accessed directly via primary URLs during this screening phase. Consequently, exact search queries and result counts on those official databases are reported as **NOT SEARCHED** on the official primary portals.  
+Cross-border index review identified that UK-based entity Kinata Ltd held UK registration UK00003774884 for software and SaaS services in Classes 9 and 42, but official filing notes confirm the mark was surrendered on April 7, 20228. No live blocking EU trade marks (EUTMs) or International Registrations designating the US or EU under the exact mark Kimatta for Class 9 software were uncovered in secondary index leads.
+
+## **Common-Law Use**
+
+Under common-law principles governed by Lanham Act § 43(a) (15 U.S.C. § 1125(a)), trademark rights in the United States arise from actual commercial use in trade, independent of federal registration status. A common-law review across marketplace storefronts and software development platforms yielded the following findings:  
+An audit of the Apple App Store reveals no live commercial applications titled "Kimatta" operating in the meal planning, recipe storage, or grocery management sectors. The string "kimatta" appears within the App Store environment exclusively as conversational user text in third-party product reviews for unrelated entertainment software (such as user comments on the app "Puppet Boss")14.  
+A direct query of live Google Play Store listings was **NOT SEARCHED** via official marketplace developer API endpoints; secondary aggregator listings show no active Android app operating under the brand Kimatta in productivity, lifestyle, or food management categories.  
+An inspection of open-source software repositories and package managers indicates that "kimatta" appears in GitHub code repositories within text files parsing Japanese media titles (such as "Takane no Hana to Osananajimi ga Kimatta Riyuu" in anidb\_titles\_parser)15. No standalone software package, utility, or commercial SaaS platform trades under Kimatta in developer package registries such as npm or PyPI.
+
+## **Domains and Handles**
+
+Digital asset clearance and domain availability represent key strategic considerations for consumer software launches:  
+Top-Level Domain (TLD) queries for kimatta.com, kimatta.app, and kimatta.io were **NOT SEARCHED** on primary WHOIS/RDAP registrar endpoints during this screen. Direct primary registrar lookup is necessary to determine domain ownership, acquisition costs, or active parking status.  
+Platform handle searches across X (formerly Twitter), Instagram, GitHub, and npm were **NOT SEARCHED** via official platform APIs. Code repository references on GitHub confirm passive text usage in title datasets15, but formal brand account availability across major social networks requires direct manual verification prior to public deployment.
+
+## **Japanese-Language Considerations**
+
+The word mark **Kimatta** represents the Romanized transliteration (*romaji*) of the Japanese word 決まった (*kimatta*), which is the past tense/perfective form of the verb 決まる (*kimaru*), translating directly to "it is decided", "it is settled", or "it is set".  
+Under US trademark law, USPTO examining attorneys apply the **Doctrine of Foreign Equivalents** (TMEP § 1209.03(g)), translating foreign words from common international languages into English to determine genericness, descriptiveness, or likelihood of confusion. Because Japanese is a major modern language spoken by a substantial consumer population in the US, Kimatta will be translated as "it is decided" during USPTO examination.  
+When evaluated against downloadable mobile software for household meal planning and shopping list generation, this translation introduces a specific legal issue under Lanham Act § 2(e)(1) (15 U.S.C. § 1052(e)(1)):  
+An examining attorney may issue a refusal asserting that the mark is merely descriptive of an intended function or result of the software—specifically, that the application resolves daily household meal indecision ("Dinner is decided\!"). To overcome such a refusal, the applicant must establish that Kimatta is suggestive rather than descriptive. A suggestive mark requires imagination, thought, or perception to reach a conclusion as to the nature of the goods. Because "it is decided" does not directly describe the physical features, user interface, or technical structure of a recipe manager or pantry tracker, strong arguments exist that the mark is suggestive and eligible for registration on the Principal Register.  
+In Japan, 決まった is an ordinary, everyday conversational verb heavily used in commercial advertising taglines (e.g., "Kore de kimatta\!" or "Decided with this\!"). Under Japan Patent Office (JPO) Examination Guidelines (Trademark Act Article 3(1)(iii)), plain conversational terms lack inherent distinctiveness for general commercial goods and services unless presented in a highly stylized logo format or combined with distinctive graphic elements. Should international extension to Japan via the Madrid System be pursued, registering Kimatta as a stylized mark or logo will materially enhance registrability before the JPO.
+
+## **Master Trademark Screening Matrix**
+
+| Mark | Owner | Serial/Reg no. | Status | Class | Link | Similarity | Why |
+| :---- | :---- | :---- | :---- | :---- | :---- | :---- | :---- |
+| Kimatta | Unassigned (Target) | Pending | Proposed | 9, 42 | UNVERIFIED — could not access primary source | Target Mark | Proposed standard character mark for meal planning software. |
+| NQBQ | Akira Kimata | Serial: 85540590 / Reg: 44444701 | Dead / Cancelled1 | 251 | UNVERIFIED — could not access primary source | Low | Aggregator lead1. Surname match of applicant in clothing1. |
+| Assignment (Minolta) | Kimata, Akinori & Tsujimoto, Takahiro2 | App: 75102612 / Reg: 22346412 | Recorded Assignment2 | Unspecified | UNVERIFIED — could not access primary source | Low | Aggregator lead2. Corporate assignment referencing assignor surname2. |
+| Assignment (Corporate) | Kimata (Assignor)16 | Reg: 124472816 | Recorded Assignment16 | Unspecified | UNVERIFIED — could not access primary source | Low | Aggregator lead16. Historical trademark assignment record16. |
+| Composition Mark | Nissan Chemical Corp / Masaki Kimata3 | Reg: 78411083 | Registered3 | C093 | UNVERIFIED — could not access primary source | Low | Aggregator lead3. Chemical composition filing mentioning individual name3. |
+| KINESIS | Kinata Ltd8 | Serial: UK000037748848 | Surrendered8 | 9, 428 | UNVERIFIED — could not access primary source | Medium | Aggregator lead8. UK registration by entity Kinata Ltd in software classes; surrendered 20228. |
+| KIMARA AHNERT | Ahnert, Kimara9 | Serial: 76519242 / Reg: 28275539 | Dead9 | 39 | UNVERIFIED — could not access primary source | Low | Aggregator lead9. Personal name mark in cosmetics9. |
+| KIMARA | A & S Pacific Trading Co.10 | Serial: 7825128310 | Dead10 | 2510 | UNVERIFIED — could not access primary source | Low | Aggregator lead10. Dead mark in apparel10. Visual/phonetic variant. |
+| KISMET | Kismet Life LLC11 | Serial: 8766839111 | Live / Pending11 | 2911 | UNVERIFIED — could not access primary source | Low-Medium | Aggregator lead11. Food purees class11. Phonetic prefix similarity, distinct meaning. |
+| KISMET CAMPING | Kismet Camping LLC12 | Serial: 8768486012 | Live / Registered12 | 4312 | UNVERIFIED — could not access primary source | Low-Medium | Aggregator lead12. Restaurant/food service class12. Distinct commercial impression. |
+| KISMET | Nevin Kismet Mirel-Erenyol13 | Serial: 8766832713 | Live / Registered13 | 1113 | UNVERIFIED — could not access primary source | Low-Medium | Aggregator lead13. Electric multicookers13. Related hardware sector, distinct term. |
+
+## **Unverified Items and Manual Hand-Check Checklist**
+
+Because primary official databases could not be accessed directly during this preliminary screening phase, all cited records remain **UNVERIFIED — could not access primary source**. A human trademark practitioner or paralegal must complete the following manual checks on official portals prior to commercial reliance:
+
+> * **USPTO TSDR (tsdr.uspto.gov)**: Execute direct searches for Kimatta, Kimata, Kimato, Kimatsu, Kinata, and Kimara across Classes 9, 35, 42, 29, 30, and 43 to obtain official query result counts and inspect active file wrappers.  
+> * **EUIPO eSearch Plus (euipo.europa.eu)**: Conduct exact and fuzzy searches for Kimatta and close variants in Classes 9 and 42 across European Union registrations.  
+> * **WIPO Madrid Monitor (wipo.int/madrid/monitor/)**: Perform international registry queries for Kimatta designating the United States, European Union, or Japan.  
+> * **Domain Registries (WHOIS/RDAP)**: Query accredited domain registrars to verify current ownership, creation dates, and administrative status for kimatta.com, kimatta.app, and kimatta.io.  
+> * **Mobile App Stores**: Execute live storefront searches within Apple App Store Connect and Google Play Console for active software titles or developer entity registrations under Kimatta.  
+> * **Japan Patent Office (j-platpat.inpit.go.jp)**: Perform direct JPO searches for 決まった, キマッタ, and Kimatta across Class 9 and Class 42 to evaluate native Japanese registration risks.
+
+## **Bottom Line**
+
+This research document presents a preliminary trademark screen based on available secondary indexes and common-law references, and explicitly does not constitute formal legal advice, a legal opinion, or a comprehensive trademark clearance search. The preliminary findings indicate a favorable initial clearance profile for **Kimatta** with no direct live federal software registrations identified in USPTO Class 9 or Class 42; however, primary confirmation on USPTO TSDR, EUIPO eSearch, and WIPO Madrid Monitor remains unverified and requires manual verification. The primary legal consideration for commercial adoption involves potential USPTO descriptiveness refusals under the Doctrine of Foreign Equivalents due to the Japanese translation "it is decided", which can be addressed by establishing the mark's suggestive nature or registering a stylized logo format.
+
+#### **Works cited**
+
+> 1. NQBQ Trademark | Trademarkia, [https://www.trademarkia.com/nqbq-85540590](https://www.trademarkia.com/nqbq-85540590)  
+> 2. Trademark Assignment from Kimata, Akinori \- PlainSite, [https://www.plainsite.org/trademarks/assignment.html?id=1919664](https://www.plainsite.org/trademarks/assignment.html?id=1919664)  
+> 3. Nissan Chemical Corporation | TREA, [https://trea.com/organization/nissan-chemical-corporation/d4d38bb6-218e-4792-9f69-84376939b56f](https://trea.com/organization/nissan-chemical-corporation/d4d38bb6-218e-4792-9f69-84376939b56f)  
+> 4. Kimatsu Ryokan, Hiroshima: Hotel Reviews, Rooms & Prices, [https://kr.hotels.com/en/ho3963204224/?=Tab1](https://kr.hotels.com/en/ho3963204224/?=Tab1)  
+> 5. List of all Properties in Etajimacho Tsukumo | Expedia, [https://www.expedia.co.kr/en/All-Etajimacho-Tsukumo-Hotels.d553248635976386257-p2.Travel-Guide-City-All-Hotels](https://www.expedia.co.kr/en/All-Etajimacho-Tsukumo-Hotels.d553248635976386257-p2.Travel-Guide-City-All-Hotels)  
+> 6. List of all Properties in Yamaguchi Prefecture | Expedia, [https://www.expedia.co.kr/en/All-Yamaguchi-Prefecture-Hotels.d6053887-p6.Travel-Guide-City-All-Hotels](https://www.expedia.co.kr/en/All-Yamaguchi-Prefecture-Hotels.d6053887-p6.Travel-Guide-City-All-Hotels)  
+> 7. Dubai Business Directory \- UAEDatabase.com, [https://www.uaedatabase.com/emirates/DubaiBusinessDirectoryWithActivitiesandemirates4.htm](https://www.uaedatabase.com/emirates/DubaiBusinessDirectoryWithActivitiesandemirates4.htm)  
+> 8. Kinesis Trademark | Trademarkia, [https://www.trademarkia.com/kinesis-UK00003774884](https://www.trademarkia.com/kinesis-UK00003774884)  
+> 9. KIMARA AHNERT Trademark of Ahnert, Kimara \- Registration, [https://trademarks.justia.com/765/19/kimara-76519242.html](https://trademarks.justia.com/765/19/kimara-76519242.html)  
+> 10. Trademark Search Online \- Trademarks411.com, [https://www.trademarks411.com/searches?c=\&logo=\&o=TRADE+\&oa=\&option=srearch\_3\&page=800\&q=\&sub\_option=sub\_srearch\_1](https://www.trademarks411.com/searches?c&logo&o=TRADE+&oa&option=srearch_3&page=800&q&sub_option=sub_srearch_1)  
+> 11. Browse Trademarks by Serial Number from 87668300 to 87668399, [https://trademarks.justia.com/browse-by-serial-number/87/66/83/](https://trademarks.justia.com/browse-by-serial-number/87/66/83/)  
+> 12. KISMET CAMPING Trademark of Kismet Camping LLC, [https://trademarks.justia.com/876/84/kismet-87684860.html](https://trademarks.justia.com/876/84/kismet-87684860.html)  
+> 13. Browse Trademarks by Serial Number from 87687000 to 87687099, [https://trademarks.justia.com/browse-by-serial-number/87/68/70/](https://trademarks.justia.com/browse-by-serial-number/87/68/70/)  
+> 14. ‎L'app Puppet Boss \- App Store, [https://apps.apple.com/es/app/puppet-boss/id1603148229?l=ca](https://apps.apple.com/es/app/puppet-boss/id1603148229?l=ca)  
+> 15. anidb\_titles\_parser/title.json at master \- GitHub, [https://github.com/adminy/anidb\_titles\_parser/blob/master/title.json](https://github.com/adminy/anidb_titles_parser/blob/master/title.json)  
+> 16. Trademark Assignment from Kimata, Kazuo; and Ishikawa, Susumu, [https://www.plainsite.org/trademarks/assignment.html?id=396746](https://www.plainsite.org/trademarks/assignment.html?id=396746)
