@@ -120,8 +120,41 @@
     # -> PRODUCTION-BETA-READY gate; production activation is a separately
     #    authorized owner action.
 
+## Launch and monetization (post-MVP, required for public launch)
+52. /deep-options Read docs/PRD_v3.md, docs/ROADMAP.md, docs/task/MVP_INVARIANTS.md, docs/HOUSEHOLD_CONTROL_PRINCIPLES.md, and docs/task/decision/DEC-006_MONETIZATION_MODEL_DECISION.md, then resolve its eight decisions and record the resolution in the card.
+52a. /grill-me Read docs/ROADMAP.md, docs/task/decision/DEC-006_MONETIZATION_MODEL_DECISION.md, and the resolution from step 52, then challenge owner pricing and packaging choices.
+52b. [OWNER — status decision] Explicitly approve or decline DEC-006's result and Done transition. If approved, update its ROADMAP result, evidence, required-decision state, delivery-gate progress, and Next implementation task together.
+
+53. /deep-options Read docs/PRD_v3.md, docs/ROADMAP.md, docs/task/MVP_INVARIANTS.md, docs/HOUSEHOLD_CONTROL_PRINCIPLES.md, and docs/task/decision/DEC-007_LEGAL_COMPLIANCE_POSTURE_DECISION.md, then resolve its eight decisions and record the resolution in the card.
+53a. /grill-me Read docs/ROADMAP.md, docs/task/decision/DEC-007_LEGAL_COMPLIANCE_POSTURE_DECISION.md, and the resolution from step 53, then challenge owner legal cost and jurisdiction choices.
+53b. [OWNER — status decision] Explicitly approve or decline DEC-007's result and Done transition. If approved, update its ROADMAP result, evidence, required-decision state, delivery-gate progress, and Next implementation task together.
+
+54. /deep-options Read docs/PRD_v3.md, docs/ROADMAP.md, docs/task/MVP_INVARIANTS.md, docs/HOUSEHOLD_CONTROL_PRINCIPLES.md, and docs/task/decision/DEC-008_PRODUCTION_ACTIVATION_DECISION.md, then resolve its seven decisions and record the resolution in the card.
+54a. /grill-me Read docs/ROADMAP.md, docs/task/decision/DEC-008_PRODUCTION_ACTIVATION_DECISION.md, and the resolution from step 54, then challenge owner risk, cost and key-custody choices.
+54b. [OWNER — status decision] Explicitly approve or decline DEC-008's result and Done transition. If approved, update its ROADMAP result, evidence, required-decision state, delivery-gate progress, and Next implementation task together.
+
+55. /plan-task Read docs/PRD_v3.md, docs/ROADMAP.md, docs/task/MVP_INVARIANTS.md, docs/task/mvp/MVP-026_ACCOUNT_DELETION_AND_EXPORT.md, then plan its implementation.
+56. [OWNER] Run /execute-plan yourself for MVP-026: read <plan path from step 55>, docs/ROADMAP.md, and docs/task/mvp/MVP-026_ACCOUNT_DELETION_AND_EXPORT.md; repeat the mandatory execution gate, then execute the approved plan. Owner-gated because the card's External actions row covers dev-project deletion and MVP-020 projection revocation.
+
+57. /plan-task Read docs/PRD_v3.md, docs/ROADMAP.md, docs/task/MVP_INVARIANTS.md, docs/task/mvp/MVP-027_HOUSEHOLD_ENTITLEMENT_MODEL.md, then plan its implementation.
+58. [OWNER] Run /execute-plan yourself for MVP-027: read <plan path from step 57>, docs/ROADMAP.md, and docs/task/mvp/MVP-027_HOUSEHOLD_ENTITLEMENT_MODEL.md; repeat the mandatory execution gate, then execute the approved plan. Owner-gated because the card creates entitlement documents and rules in the MVP-018 dev project.
+
+59. /plan-task Read docs/PRD_v3.md, docs/ROADMAP.md, docs/task/MVP_INVARIANTS.md, docs/task/mvp/MVP-028_PAYWALL_SURFACE_AND_GATING.md, then plan its implementation.
+60. /execute-plan Read <plan path from step 59>, docs/ROADMAP.md, and docs/task/mvp/MVP-028_PAYWALL_SURFACE_AND_GATING.md; repeat the mandatory execution gate, then execute the approved plan.
+
+61. /plan-task Read docs/PRD_v3.md, docs/ROADMAP.md, docs/task/MVP_INVARIANTS.md, docs/task/mvp/MVP-029_PLAY_BILLING_PURCHASE_FLOW.md, then plan its implementation.
+62. [OWNER] Run /execute-plan yourself for MVP-029: read <plan path from step 61>, docs/ROADMAP.md, and docs/task/mvp/MVP-029_PLAY_BILLING_PURCHASE_FLOW.md; repeat the mandatory execution gate, then execute the approved plan. Owner-gated because the card needs Play Console configuration and a merchant account.
+
+63. /plan-task Read docs/PRD_v3.md, docs/ROADMAP.md, docs/task/MVP_INVARIANTS.md, docs/task/mvp/MVP-030_LEGAL_DOCUMENTS_PUBLISHED.md, then plan its implementation.
+64. [OWNER] Run /execute-plan yourself for MVP-030: read <plan path from step 63>, docs/ROADMAP.md, and docs/task/mvp/MVP-030_LEGAL_DOCUMENTS_PUBLISHED.md; repeat the mandatory execution gate, then execute the approved plan. Owner-gated because the card publishes documents to a host.
+
+65. /plan-task Read docs/PRD_v3.md, docs/ROADMAP.md, docs/task/MVP_INVARIANTS.md, docs/task/mvp/MVP-031_PRODUCTION_ACTIVATION_AND_SUBMISSION.md, then plan its implementation.
+66. [OWNER] Run /execute-plan yourself for MVP-031: read <plan path from step 65>, docs/ROADMAP.md, and docs/task/mvp/MVP-031_PRODUCTION_ACTIVATION_AND_SUBMISSION.md; repeat the mandatory execution gate, then execute the approved plan. Owner-gated because the card touches production provisioning, signing and store submission.
+
+    # -> MONETIZATION-READY after step 62; PUBLIC-LAUNCH-READY after step 66.
+    #    The launch itself is a separately authorized owner action.
 ## Post-launch / optional (not on the MVP path)
-52. /plan-task Read docs/PRD_v3.md, docs/ROADMAP.md, docs/task/MVP_INVARIANTS.md, and docs/task/readiness/PRE-003_IOS_TOOLCHAIN_READINESS.md, then plan its implementation.   # needs a macOS host or CI
-53. /execute-plan Read <plan path from step 52>, docs/ROADMAP.md, and docs/task/readiness/PRE-003_IOS_TOOLCHAIN_READINESS.md; repeat the mandatory execution gate, then execute the approved plan.
-54. /plan-task Read docs/PRD_v3.md, docs/ROADMAP.md, docs/task/MVP_INVARIANTS.md, and docs/task/optional/OPT-001_STRUCTURED_URL_RECIPE_IMPORT.md, then plan its implementation.   # optional, any time after step 14
-55. /execute-plan Read <plan path from step 54>, docs/ROADMAP.md, and docs/task/optional/OPT-001_STRUCTURED_URL_RECIPE_IMPORT.md; repeat the mandatory execution gate, then execute the approved plan.
+67. /plan-task Read docs/PRD_v3.md, docs/ROADMAP.md, docs/task/MVP_INVARIANTS.md, and docs/task/readiness/PRE-003_IOS_TOOLCHAIN_READINESS.md, then plan its implementation.   # needs a macOS host or CI
+68. /execute-plan Read <plan path from step 67>, docs/ROADMAP.md, and docs/task/readiness/PRE-003_IOS_TOOLCHAIN_READINESS.md; repeat the mandatory execution gate, then execute the approved plan.
+69. /plan-task Read docs/PRD_v3.md, docs/ROADMAP.md, docs/task/MVP_INVARIANTS.md, and docs/task/optional/OPT-001_STRUCTURED_URL_RECIPE_IMPORT.md, then plan its implementation.   # optional, any time after step 14
+70. /execute-plan Read <plan path from step 69>, docs/ROADMAP.md, and docs/task/optional/OPT-001_STRUCTURED_URL_RECIPE_IMPORT.md; repeat the mandatory execution gate, then execute the approved plan.

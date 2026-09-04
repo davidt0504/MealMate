@@ -37,6 +37,9 @@ Produce evidence that Meal Mate is safe and reliable enough for an Android beta 
 - Complete threat model, sharing-security gate, abuse/report ownership, cost budgets/alerts plan, and monitoring/runbook.
 - Prepare current Google Play health/privacy/data-safety declarations, deletion/export posture, privacy policy, and support surfaces.
 - Separate evidence/readiness from production activation, release signing, DNS, and store submission.
+- **DMCA designated-agent registration.** `docs/ROADMAP.md` D-037 records this as an `MVP-022` criterion rather than a footnote; the assignment existed in the roadmap but not in this card until D-040 reconciled them. `DEC-007` decides whether to register and who is named.
+- **App Check production enforcement.** D-037 adopted App Check debug-only and deferred enforcement to this card, because an app not published on Google Play cannot receive the `PLAY_RECOGNIZED` label and enforcing in dev would reject the sideloaded build's own writes. Console metrics on real traffic are the evidence.
+- **Google policy re-check is split, and only the non-subscription half is here.** `PRD_v2.md:753` requires re-checking current Google authentication, UGC/sharing, subscription and health-related rules before the Android **public** release. This card covers the authentication, UGC/sharing and health halves as part of its Play declarations. The **subscription** half is deferred to `MVP-031` — this card is beta readiness and runs before any billing card exists, so there would be nothing to check here.
 - iOS is not an MVP criterion.
 
 ## Scope
