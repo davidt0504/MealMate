@@ -96,6 +96,17 @@
 40a. /grill-me Read docs/ROADMAP.md, docs/task/decision/DEC-003_CLOUD_SHARING_RELEASE_DECISION.md, and the resolution from step 40, then challenge unresolved owner risk/cost choices.
 40b. [OWNER — status decision] Explicitly approve or decline DEC-003's result and Done transition. If approved, update its ROADMAP result, evidence, required-decision state, delivery-gate progress, and Next implementation task together. Steps 42–49 remain blocked until DEC-003 and DEC-004 are Done.
 
+## First-run release blocker (D-041, 2026-09-05) — runs while DEC-004 blocks step 42
+40c. /plan-task Read docs/PRD_v3.md, docs/ROADMAP.md, docs/task/MVP_INVARIANTS.md, docs/task/mvp/MVP-032_STARTER_CONTENT_II_FEDERAL_SOURCES.md, then plan its implementation. Phase 0 (federal-source web search → docs/research/starter-candidates.md) precedes every content edit.
+40d. /execute-plan Read <plan path from step 40c>, docs/ROADMAP.md, and docs/task/mvp/MVP-032_STARTER_CONTENT_II_FEDERAL_SOURCES.md; repeat the mandatory execution gate, then execute Phase 0 only and stop at the owner selection.
+40e. [OWNER] Mark each row of docs/research/starter-candidates.md select/reject, date the review, optionally append own recipes; then resume step 40d's plan for Phase 1.
+40f. /plan-task Read docs/PRD_v3.md, docs/ROADMAP.md, docs/task/MVP_INVARIANTS.md, .impeccable.md, docs/task/mvp/MVP-033_FIRST_RUN_COVERED_WEEK.md, then plan its implementation.
+40g. /execute-plan Read <plan path from step 40f>, docs/ROADMAP.md, and docs/task/mvp/MVP-033_FIRST_RUN_COVERED_WEEK.md; repeat the mandatory execution gate, then execute the approved plan.
+40h. /plan-task Read docs/PRD_v3.md, docs/ROADMAP.md, docs/task/MVP_INVARIANTS.md, .impeccable.md, docs/task/mvp/MVP-034_VISUAL_IDENTITY_APPEARANCE_LAB.md, then plan its implementation.
+40i. /execute-plan Read <plan path from step 40h>, docs/ROADMAP.md, and docs/task/mvp/MVP-034_VISUAL_IDENTITY_APPEARANCE_LAB.md; repeat the mandatory execution gate, then execute Phase A only and stop at the owner pick.
+40j. [OWNER] Live with the lab on both phones; record the palette, type pairing and light/dark defaults in the handoff; then resume step 40i's plan for Phase B.
+    # -> MVP-018 becomes Next implementation task again after MVP-034 is Done.
+
 41. [OWNER] Close DEC-004: run the Kimatta USPTO trademark search (interactive
     tmsearch.uspto.gov session or paid search), resolve decisions 1-4 in the card
     (add Rust crate names to the rename scope), flip the ROADMAP row to Done with
@@ -158,3 +169,4 @@
 68. /execute-plan Read <plan path from step 67>, docs/ROADMAP.md, and docs/task/readiness/PRE-003_IOS_TOOLCHAIN_READINESS.md; repeat the mandatory execution gate, then execute the approved plan.
 69. /plan-task Read docs/PRD_v3.md, docs/ROADMAP.md, docs/task/MVP_INVARIANTS.md, and docs/task/optional/OPT-001_STRUCTURED_URL_RECIPE_IMPORT.md, then plan its implementation.   # optional, any time after step 14
 70. /execute-plan Read <plan path from step 69>, docs/ROADMAP.md, and docs/task/optional/OPT-001_STRUCTURED_URL_RECIPE_IMPORT.md; repeat the mandatory execution gate, then execute the approved plan.
+71. /deep-options Read docs/PRD_v3.md, docs/ROADMAP.md, docs/task/MVP_INVARIANTS.md, and docs/task/optional/OPT-002_MESSY_RECIPE_IMPORT.md, then resolve its three decision gates; then /plan-task on the card.   # optional, post-launch, after DEC-006 and MVP-018
