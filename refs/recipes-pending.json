@@ -1,0 +1,499 @@
+{
+  "note": "Five of the owner's transcribed recipes that rust/crates/food-domain/content/starter_recipes.json deliberately does not carry. Three are sides and two are breakfast or baking dishes; the planner covers dinner only (MealScope::dinner_only is still the default) and a side is not a meal, so shipping them today would make banana bread a candidate for Tuesday dinner. OPT-004 imports them -- see its Phase 3. Transcribed from refs/images/ on 2026-09-06.",
+  "shape": "Each entry is in the same shape as a starter_recipes.json recipe, plus a non-schema \"kind\" field (side | breakfast) recording why it is held back and a \"catalog_additions\" list of ingredient ids the content file does not yet define. To import: drop \"kind\" and \"catalog_additions\", append the catalog entries, add whatever slot-suitability field OPT-004 introduces, and run the content suite to fill expected_conflicts from the real matcher. prep_minutes follows the same rule as the shipped file: time you must be available (see policy.prep_minutes there).",
+  "catalog_additions": [
+    {
+      "id": "ing-apple",
+      "canonical_name": "apple",
+      "aliases": [],
+      "store_category": "produce"
+    },
+    {
+      "id": "ing-baking-soda",
+      "canonical_name": "baking soda",
+      "aliases": [],
+      "store_category": "pantry"
+    },
+    {
+      "id": "ing-banana",
+      "canonical_name": "banana",
+      "aliases": [],
+      "store_category": "produce"
+    },
+    {
+      "id": "ing-butternut-squash",
+      "canonical_name": "butternut squash",
+      "aliases": [],
+      "store_category": "produce"
+    },
+    {
+      "id": "ing-cinnamon-rolls",
+      "canonical_name": "refrigerated cinnamon rolls",
+      "aliases": ["cinnamon rolls"],
+      "store_category": "bakery"
+    },
+    {
+      "id": "ing-cremini",
+      "canonical_name": "cremini mushrooms",
+      "aliases": ["baby bella mushrooms"],
+      "store_category": "produce"
+    },
+    {
+      "id": "ing-sugar",
+      "canonical_name": "sugar",
+      "aliases": ["granulated sugar"],
+      "store_category": "pantry"
+    },
+    {
+      "id": "ing-vanilla",
+      "canonical_name": "vanilla extract",
+      "aliases": ["vanilla"],
+      "store_category": "pantry"
+    }
+  ],
+  "recipes": [
+    {
+      "kind": "breakfast",
+      "slug": "apple-cinnamon-roll-casserole",
+      "title": "Apple Cinnamon Roll Casserole",
+      "servings": 8,
+      "prep_minutes": 45,
+      "instructions": "Heat the oven to 175C. Peel and dice the apple. Cut each cinnamon roll into 4 pieces and spread them evenly in a greased 9x13 baking dish. Sprinkle the apple evenly over the top. Bake 30 minutes, or until golden brown. Cool 5 minutes, then drizzle with the icing that came with the rolls.",
+      "provenance": {
+        "kind": "starter",
+        "source_url": null,
+        "source_name": null,
+        "source_author": "David",
+        "rights": {
+          "basis": "original",
+          "attribution": null,
+          "modifications": null,
+          "verified_on": "2026-09-06"
+        }
+      },
+      "cook_review": {
+        "cooked_on": "2026-09-06",
+        "by": "David",
+        "corrections": "Cooked repeatedly by the household before this date. 2026-09-06 is the date the owner attested that, not the date of a particular cooking."
+      },
+      "expected_conflicts": [],
+      "lines": [
+        {
+          "original_text": "2 cans cinnamon rolls",
+          "name": "cinnamon rolls",
+          "catalog_id": "ing-cinnamon-rolls",
+          "quantity": {"kind": "exact", "numer": 2, "denom": 1},
+          "unit": "piece",
+          "preparation": "cut into quarters",
+          "optional": false
+        },
+        {
+          "original_text": "1 large apple",
+          "name": "apple",
+          "catalog_id": "ing-apple",
+          "quantity": {"kind": "exact", "numer": 1, "denom": 1},
+          "unit": "piece",
+          "preparation": "peeled and diced",
+          "optional": false
+        }
+      ]
+    },
+    {
+      "kind": "breakfast",
+      "slug": "banana-bread",
+      "title": "Banana Bread",
+      "servings": 8,
+      "prep_minutes": 75,
+      "instructions": "Heat the oven to 175C. Mix the bananas, sugar, butter, egg and vanilla together. Gently stir in the baking soda, salt and flour. Pour the batter into a greased loaf pan and bake 50 to 60 minutes.",
+      "provenance": {
+        "kind": "starter",
+        "source_url": null,
+        "source_name": null,
+        "source_author": "David",
+        "rights": {
+          "basis": "original",
+          "attribution": null,
+          "modifications": "the card notes cinnamon or chocolate chips may be added for flavour; neither is a line here",
+          "verified_on": "2026-09-06"
+        }
+      },
+      "cook_review": {
+        "cooked_on": "2026-09-06",
+        "by": "David",
+        "corrections": "Cooked repeatedly by the household before this date. 2026-09-06 is the date the owner attested that, not the date of a particular cooking."
+      },
+      "expected_conflicts": [],
+      "lines": [
+        {
+          "original_text": "3 mashed bananas",
+          "name": "banana",
+          "catalog_id": "ing-banana",
+          "quantity": {"kind": "exact", "numer": 3, "denom": 1},
+          "unit": "piece",
+          "preparation": "mashed",
+          "optional": false
+        },
+        {
+          "original_text": "1/3 c. melted butter",
+          "name": "butter",
+          "catalog_id": "ing-butter",
+          "quantity": {"kind": "exact", "numer": 16, "denom": 3},
+          "unit": "tbsp",
+          "preparation": "melted",
+          "optional": false
+        },
+        {
+          "original_text": "3/4 c. sugar",
+          "name": "sugar",
+          "catalog_id": "ing-sugar",
+          "quantity": {"kind": "exact", "numer": 3, "denom": 4},
+          "unit": "cup",
+          "preparation": null,
+          "optional": false
+        },
+        {
+          "original_text": "1 egg",
+          "name": "eggs",
+          "catalog_id": "ing-eggs",
+          "quantity": {"kind": "exact", "numer": 1, "denom": 1},
+          "unit": "piece",
+          "preparation": null,
+          "optional": false
+        },
+        {
+          "original_text": "1 tsp. vanilla",
+          "name": "vanilla extract",
+          "catalog_id": "ing-vanilla",
+          "quantity": {"kind": "exact", "numer": 1, "denom": 1},
+          "unit": "tsp",
+          "preparation": null,
+          "optional": false
+        },
+        {
+          "original_text": "1 tsp. baking soda",
+          "name": "baking soda",
+          "catalog_id": "ing-baking-soda",
+          "quantity": {"kind": "exact", "numer": 1, "denom": 1},
+          "unit": "tsp",
+          "preparation": null,
+          "optional": false
+        },
+        {
+          "original_text": "dash of salt",
+          "name": "salt",
+          "catalog_id": "ing-salt",
+          "quantity": {"kind": "unknown"},
+          "unit": null,
+          "preparation": null,
+          "optional": false
+        },
+        {
+          "original_text": "1 1/2 c. flour",
+          "name": "all-purpose flour",
+          "catalog_id": "ing-flour",
+          "quantity": {"kind": "exact", "numer": 3, "denom": 2},
+          "unit": "cup",
+          "preparation": null,
+          "optional": false
+        }
+      ]
+    },
+    {
+      "kind": "side",
+      "slug": "honey-glazed-carrots",
+      "title": "Honey Glazed Carrots",
+      "servings": 4,
+      "prep_minutes": 20,
+      "instructions": "Melt the butter in a large skillet over medium heat. Add the carrots, honey and seasoning and stir to combine. Cook until the carrots reach the tenderness you want, stirring occasionally.",
+      "provenance": {
+        "kind": "starter",
+        "source_url": null,
+        "source_name": null,
+        "source_author": "David",
+        "rights": {
+          "basis": "original",
+          "attribution": null,
+          "modifications": null,
+          "verified_on": "2026-09-06"
+        }
+      },
+      "cook_review": {
+        "cooked_on": "2026-09-06",
+        "by": "David",
+        "corrections": "Cooked repeatedly by the household before this date. 2026-09-06 is the date the owner attested that, not the date of a particular cooking."
+      },
+      "expected_conflicts": [],
+      "lines": [
+        {
+          "original_text": "2 tbsp butter",
+          "name": "butter",
+          "catalog_id": "ing-butter",
+          "quantity": {"kind": "exact", "numer": 2, "denom": 1},
+          "unit": "tbsp",
+          "preparation": null,
+          "optional": false
+        },
+        {
+          "original_text": "1 (16 oz.) bag baby carrots",
+          "name": "carrot",
+          "catalog_id": "ing-carrot",
+          "quantity": {"kind": "exact", "numer": 3, "denom": 1},
+          "unit": "cup",
+          "preparation": null,
+          "optional": false
+        },
+        {
+          "original_text": "2 tbsp honey",
+          "name": "honey",
+          "catalog_id": "ing-honey",
+          "quantity": {"kind": "exact", "numer": 2, "denom": 1},
+          "unit": "tbsp",
+          "preparation": null,
+          "optional": false
+        },
+        {
+          "original_text": "2 tsp. dill",
+          "name": "dill",
+          "catalog_id": "ing-dill",
+          "quantity": {"kind": "exact", "numer": 2, "denom": 1},
+          "unit": "tsp",
+          "preparation": null,
+          "optional": false
+        },
+        {
+          "original_text": "2 tsp. thyme",
+          "name": "thyme",
+          "catalog_id": "ing-thyme",
+          "quantity": {"kind": "exact", "numer": 2, "denom": 1},
+          "unit": "tsp",
+          "preparation": null,
+          "optional": false
+        }
+      ]
+    },
+    {
+      "kind": "side",
+      "slug": "roasted-green-beans",
+      "title": "Roasted Green Beans",
+      "servings": 4,
+      "prep_minutes": 30,
+      "instructions": "Heat the oven to 220C. Wash the green beans, trimming the stems if needed, and spread them on a greased cookie sheet. Melt the coconut oil and pour it over the beans. Season with salt, pepper and garlic to taste and toss until the beans are evenly coated. Roast 15 to 20 minutes. Take them out and sprinkle with parmesan before serving.",
+      "provenance": {
+        "kind": "starter",
+        "source_url": null,
+        "source_name": null,
+        "source_author": "David",
+        "rights": {
+          "basis": "original",
+          "attribution": null,
+          "modifications": null,
+          "verified_on": "2026-09-06"
+        }
+      },
+      "cook_review": {
+        "cooked_on": "2026-09-06",
+        "by": "David",
+        "corrections": "Cooked repeatedly by the household before this date. 2026-09-06 is the date the owner attested that, not the date of a particular cooking."
+      },
+      "expected_conflicts": [],
+      "lines": [
+        {
+          "original_text": "1 lb. fresh green beans",
+          "name": "green beans",
+          "catalog_id": "ing-green-beans",
+          "quantity": {"kind": "exact", "numer": 7, "denom": 2},
+          "unit": "cup",
+          "preparation": "washed, stems trimmed",
+          "optional": false
+        },
+        {
+          "original_text": "1-2 tbsp. coconut oil",
+          "name": "coconut oil",
+          "catalog_id": "ing-coconut-oil",
+          "quantity": {
+            "kind": "range",
+            "min_numer": 1,
+            "min_denom": 1,
+            "max_numer": 2,
+            "max_denom": 1
+          },
+          "unit": "tbsp",
+          "preparation": "melted",
+          "optional": false
+        },
+        {
+          "original_text": "salt",
+          "name": "salt",
+          "catalog_id": "ing-salt",
+          "quantity": {"kind": "unknown"},
+          "unit": null,
+          "preparation": null,
+          "optional": false
+        },
+        {
+          "original_text": "pepper",
+          "name": "black pepper",
+          "catalog_id": "ing-black-pepper",
+          "quantity": {"kind": "unknown"},
+          "unit": null,
+          "preparation": null,
+          "optional": false
+        },
+        {
+          "original_text": "garlic",
+          "name": "garlic",
+          "catalog_id": "ing-garlic",
+          "quantity": {"kind": "unknown"},
+          "unit": null,
+          "preparation": null,
+          "optional": false
+        },
+        {
+          "original_text": "parmesan cheese",
+          "name": "parmesan cheese",
+          "catalog_id": "ing-parmesan",
+          "quantity": {"kind": "unknown"},
+          "unit": null,
+          "preparation": null,
+          "optional": false
+        }
+      ]
+    },
+    {
+      "kind": "side",
+      "slug": "roasted-vegetables",
+      "title": "Roasted Vegetables",
+      "servings": 6,
+      "prep_minutes": 30,
+      "instructions": "Heat the oven to 220C. Put the vegetables on a greased baking sheet. Add the olive oil, balsamic vinegar, garlic, thyme, salt and pepper and toss to combine and coat them. Spread them evenly in a single layer and bake 12 to 15 minutes, or until tender.",
+      "provenance": {
+        "kind": "starter",
+        "source_url": null,
+        "source_name": null,
+        "source_author": "David",
+        "rights": {
+          "basis": "original",
+          "attribution": null,
+          "modifications": "the card notes coconut oil works in place of the olive oil and that the vegetable types and amounts can be adjusted to taste",
+          "verified_on": "2026-09-06"
+        }
+      },
+      "cook_review": {
+        "cooked_on": "2026-09-06",
+        "by": "David",
+        "corrections": "Cooked repeatedly by the household before this date. 2026-09-06 is the date the owner attested that, not the date of a particular cooking."
+      },
+      "expected_conflicts": [],
+      "lines": [
+        {
+          "original_text": "2 cups broccoli florets",
+          "name": "broccoli",
+          "catalog_id": "ing-broccoli",
+          "quantity": {"kind": "exact", "numer": 2, "denom": 1},
+          "unit": "cup",
+          "preparation": null,
+          "optional": false
+        },
+        {
+          "original_text": "2 cups cremini mushrooms",
+          "name": "cremini mushrooms",
+          "catalog_id": "ing-cremini",
+          "quantity": {"kind": "exact", "numer": 2, "denom": 1},
+          "unit": "cup",
+          "preparation": null,
+          "optional": false
+        },
+        {
+          "original_text": "2 cups butternut squash, chopped",
+          "name": "butternut squash",
+          "catalog_id": "ing-butternut-squash",
+          "quantity": {"kind": "exact", "numer": 2, "denom": 1},
+          "unit": "cup",
+          "preparation": "chopped",
+          "optional": false
+        },
+        {
+          "original_text": "1 zucchini, sliced & quartered",
+          "name": "zucchini",
+          "catalog_id": "ing-zucchini",
+          "quantity": {"kind": "exact", "numer": 1, "denom": 1},
+          "unit": "piece",
+          "preparation": "sliced and quartered",
+          "optional": false
+        },
+        {
+          "original_text": "1 yellow squash, sliced & quartered",
+          "name": "summer squash",
+          "catalog_id": "ing-summer-squash",
+          "quantity": {"kind": "exact", "numer": 1, "denom": 1},
+          "unit": "cup",
+          "preparation": "sliced and quartered",
+          "optional": false
+        },
+        {
+          "original_text": "1 red bell pepper, chopped",
+          "name": "red bell pepper",
+          "catalog_id": "ing-red-bell-pepper",
+          "quantity": {"kind": "exact", "numer": 1, "denom": 1},
+          "unit": "piece",
+          "preparation": "chopped",
+          "optional": false
+        },
+        {
+          "original_text": "1 red onion, chopped",
+          "name": "red onion",
+          "catalog_id": "ing-red-onion",
+          "quantity": {"kind": "exact", "numer": 1, "denom": 1},
+          "unit": "cup",
+          "preparation": "chopped",
+          "optional": false
+        },
+        {
+          "original_text": "4 cloves garlic",
+          "name": "garlic",
+          "catalog_id": "ing-garlic",
+          "quantity": {"kind": "exact", "numer": 4, "denom": 1},
+          "unit": "piece",
+          "preparation": null,
+          "optional": false
+        },
+        {
+          "original_text": "salt & pepper to taste",
+          "name": "salt",
+          "catalog_id": "ing-salt",
+          "quantity": {"kind": "unknown"},
+          "unit": null,
+          "preparation": null,
+          "optional": false
+        },
+        {
+          "original_text": "1 1/2 tsp thyme",
+          "name": "thyme",
+          "catalog_id": "ing-thyme",
+          "quantity": {"kind": "exact", "numer": 3, "denom": 2},
+          "unit": "tsp",
+          "preparation": null,
+          "optional": false
+        },
+        {
+          "original_text": "2 tbsp olive oil",
+          "name": "olive oil",
+          "catalog_id": "ing-olive-oil",
+          "quantity": {"kind": "exact", "numer": 2, "denom": 1},
+          "unit": "tbsp",
+          "preparation": null,
+          "optional": false
+        },
+        {
+          "original_text": "2 tbsp balsamic vinegar",
+          "name": "balsamic vinegar",
+          "catalog_id": "ing-balsamic-vinegar",
+          "quantity": {"kind": "exact", "numer": 2, "denom": 1},
+          "unit": "tbsp",
+          "preparation": null,
+          "optional": false
+        }
+      ]
+    }
+  ]
+}

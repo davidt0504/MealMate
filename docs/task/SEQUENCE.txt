@@ -170,3 +170,5 @@
 69. /plan-task Read docs/PRD_v3.md, docs/ROADMAP.md, docs/task/MVP_INVARIANTS.md, and docs/task/optional/OPT-001_STRUCTURED_URL_RECIPE_IMPORT.md, then plan its implementation.   # optional, any time after step 14
 70. /execute-plan Read <plan path from step 69>, docs/ROADMAP.md, and docs/task/optional/OPT-001_STRUCTURED_URL_RECIPE_IMPORT.md; repeat the mandatory execution gate, then execute the approved plan.
 71. /deep-options Read docs/PRD_v3.md, docs/ROADMAP.md, docs/task/MVP_INVARIANTS.md, and docs/task/optional/OPT-002_MESSY_RECIPE_IMPORT.md, then resolve its three decision gates; then /plan-task on the card.   # optional, post-launch, after DEC-006 and MVP-018
+72. /plan-task Read docs/PRD_v3.md, docs/ROADMAP.md, docs/task/MVP_INVARIANTS.md, and docs/task/optional/OPT-003_STAPLES.md, then plan its implementation.   # optional, post-launch, after MVP-034; design owner-resolved 2026-09-05, no decision gates
+73. /execute-plan Read <plan path from step 72>, docs/ROADMAP.md, and docs/task/optional/OPT-003_STAPLES.md; repeat the mandatory execution gate, then execute the approved plan.

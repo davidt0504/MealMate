@@ -63,7 +63,8 @@ pub struct CookReview {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StarterRecipe {
     pub slug: String,
-    /// `None` = pending review. Nothing with `None` is shipped.
+    /// `None` = no human has cooked it. An `original` entry with `None` is not shipped; a
+    /// federal entry ships on its rights arm instead — see `is_shippable`.
     pub cook_review: Option<CookReview>,
     pub expected_conflicts: Vec<RestrictionKind>,
     pub title: String,
@@ -73,6 +74,22 @@ pub struct StarterRecipe {
     pub lines: Vec<IngredientLine>,
     /// Carries the rights record and the starter slug.
     pub provenance: RecipeProvenance,
+}
+
+impl StarterRecipe {
+    /// D-041's two-armed shipping rule, superseding MVP-011 AC-3's single arm. An entry ships
+    /// when a human has cooked it, **or** when it is a US federal government publication
+    /// carrying the source URL that makes that claim checkable: the federal kitchen that
+    /// published it supplies the standing the cook review otherwise supplies. An `original`
+    /// entry has no publisher behind it, so it still needs the cook.
+    pub fn is_shippable(&self) -> bool {
+        let federal = self
+            .provenance
+            .rights()
+            .is_some_and(|r| r.basis() == RightsBasis::UsFederalPublicDomain)
+            && self.provenance.source_url().is_some();
+        self.cook_review.is_some() || federal
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -86,19 +103,25 @@ pub fn all_starter_content() -> Result<StarterContent, StarterError> {
     parse_starter_content(CONTENT)
 }
 
-/// Only entries carrying a recorded cook review — the shipped view, what the installer sees.
-/// The catalog is not filtered: an ingredient name is a fact, carrying no rights question and
-/// no cook question.
+/// Only entries a recorded cook review or a federal publisher stands behind — the shipped
+/// view, what the installer sees.
 pub fn shipped_starter_content() -> Result<StarterContent, StarterError> {
-    let all = all_starter_content()?;
-    Ok(StarterContent {
+    Ok(shipped_view(all_starter_content()?))
+}
+
+/// The shipping filter itself, separated so it can be exercised against a fixture: the
+/// embedded content can never contain a federal entry missing its URL, which is one of the two
+/// refusals AC-3 asks this filter to make. The catalog is not filtered — an ingredient name is
+/// a fact, carrying no rights question and no cook question.
+fn shipped_view(all: StarterContent) -> StarterContent {
+    StarterContent {
         catalog: all.catalog,
         recipes: all
             .recipes
             .into_iter()
-            .filter(|r| r.cook_review.is_some())
+            .filter(StarterRecipe::is_shippable)
             .collect(),
-    })
+    }
 }
 
 // --- wire layer ----------------------------------------------------------------------------
@@ -422,6 +445,71 @@ mod tests {
         )
     }
 
+    /// `fixture` with the federal basis allowed, for the rights arm of the shipping rule.
+    /// Anchored on `"cc0"` alone — the allow-list's exact spacing is not this helper's
+    /// business, and `"cc0"` occurs once in `fixture`'s output (`excluded` is `["cc_by"]`).
+    fn federal_fixture(recipe_body: &str) -> String {
+        fixture(recipe_body).replace(r#""cc0""#, r#""us_federal_public_domain", "cc0""#)
+    }
+
+    /// The federal arm's shape: basis swapped and a source URL supplied. The basis anchor is
+    /// the whole key/value pair because `body` also contains `"original_text"`, which a bare
+    /// `original` replace would corrupt.
+    fn federal_body() -> String {
+        body("")
+            .replace(
+                r#""basis": "original""#,
+                r#""basis": "us_federal_public_domain""#,
+            )
+            .replace(
+                r#""source_url": null"#,
+                r#""source_url": "https://www.nhlbi.nih.gov/r""#,
+            )
+    }
+
+    fn shipped_slugs(json: &str) -> Vec<String> {
+        shipped_view(parse_starter_content(json).unwrap())
+            .recipes
+            .into_iter()
+            .map(|r| r.slug)
+            .collect()
+    }
+
+    // --- MVP-032 AC-3: one test per arm of D-041's two-armed shipping rule ----------------
+
+    #[test]
+    fn a_recorded_cook_review_ships_an_entry() {
+        let reviewed = body("").replace(
+            "\"cook_review\": null",
+            r#""cook_review": { "cooked_on": "2026-09-01", "by": "David",
+                                "corrections": null }"#,
+        );
+        assert_eq!(shipped_slugs(&fixture(&reviewed)), vec!["s".to_owned()]);
+    }
+
+    #[test]
+    fn a_federal_entry_with_a_source_url_ships() {
+        assert_eq!(
+            shipped_slugs(&federal_fixture(&federal_body())),
+            vec!["s".to_owned()]
+        );
+    }
+
+    #[test]
+    fn an_original_entry_without_a_review_does_not_ship() {
+        assert!(shipped_slugs(&fixture(&body(""))).is_empty());
+    }
+
+    #[test]
+    fn a_federal_entry_without_a_source_url_does_not_ship() {
+        // The rights arm needs both halves: the basis alone is a claim with nothing behind it.
+        let no_url = federal_body().replace(
+            r#""source_url": "https://www.nhlbi.nih.gov/r""#,
+            r#""source_url": null"#,
+        );
+        assert!(shipped_slugs(&federal_fixture(&no_url)).is_empty());
+    }
+
     #[test]
     fn starter_content_parses() {
         // Risk 8: the real embedded string, so a malformed content file fails `cargo test`
@@ -610,15 +698,110 @@ mod tests {
             shipped.catalog, all.catalog,
             "the catalog is never filtered"
         );
+        // Expected-to-pass: this restates D-041's rule from its clauses, in both directions.
+        // Asserting `shipped == all.filter(is_shippable)` would merely restate the
+        // implementation and could not fail for any content file.
+        let shipped_slugs: Vec<&str> = shipped.recipes.iter().map(|r| r.slug.as_str()).collect();
         for recipe in &shipped.recipes {
-            assert!(recipe.cook_review.is_some(), "{}", recipe.slug);
+            // Included: the cook arm stays closed for `original` — the only way to ship
+            // without a recorded review is the federal basis with a URL behind it.
+            let rights = recipe.provenance.rights().expect("every entry has rights");
+            assert!(
+                recipe.cook_review.is_some()
+                    || (rights.basis() == RightsBasis::UsFederalPublicDomain
+                        && recipe.provenance.source_url().is_some()),
+                "{} shipped by neither arm",
+                recipe.slug
+            );
         }
-        let reviewed = all
-            .recipes
-            .iter()
-            .filter(|r| r.cook_review.is_some())
-            .count();
-        assert_eq!(shipped.recipes.len(), reviewed);
+        for recipe in &all.recipes {
+            if shipped_slugs.contains(&recipe.slug.as_str()) {
+                continue;
+            }
+            // Excluded: and nothing shippable was dropped on the way out.
+            let federal = recipe
+                .provenance
+                .rights()
+                .is_some_and(|r| r.basis() == RightsBasis::UsFederalPublicDomain)
+                && recipe.provenance.source_url().is_some();
+            assert!(
+                recipe.cook_review.is_none() && !federal,
+                "{} was excluded but is shippable",
+                recipe.slug
+            );
+        }
+    }
+
+    #[test]
+    fn the_shipped_roster_meets_the_release_bar() {
+        // AC-4's actual evidence. Without it a later content edit could drop the roster below
+        // ten and re-open MVP-032's own release blocker with a green suite.
+        //
+        // The bar is the card's ten. The roster ships 26 by owner decision 2026-09-05 for a
+        // reason this test deliberately does not pin: `RECENTLY_EATEN` spans a 14-day history
+        // against 7 dinner slots, so at 14 or fewer dishes every candidate carries the same
+        // penalty by week 2 and the variety term stops discriminating. Dropping toward ten
+        // is legal here and still a real regression in plan quality.
+        use RestrictionKind::{Gluten, Vegan, Vegetarian};
+        let shipped = shipped_starter_content().unwrap().recipes;
+        assert!(shipped.len() >= 10, "{} shipped", shipped.len());
+        let covers = |absent: RestrictionKind| {
+            shipped
+                .iter()
+                .any(|r| !r.expected_conflicts.contains(&absent))
+        };
+        assert!(covers(Vegan), "no vegan dish ships");
+        // Documentation, not independent evidence: `components` makes Vegan's set a superset
+        // of Vegetarian's, so `covers(Vegan)` already implies this. Kept so AC-4's four arms
+        // are all visible in one place.
+        assert!(covers(Vegetarian), "no vegetarian dish ships");
+        assert!(covers(Gluten), "no gluten-free dish ships");
+        // Omnivore is the `Vegetarian` conflict, not the `Vegan` one: only meat, fish and
+        // shellfish produce it, whereas a meatless dairy dish carries a Vegan conflict and
+        // would satisfy a `Vegan`-keyed check while containing no meat.
+        assert!(
+            shipped
+                .iter()
+                .any(|r| r.expected_conflicts.contains(&Vegetarian)),
+            "no omnivore dish ships"
+        );
+    }
+
+    #[test]
+    fn every_federal_entry_names_its_agency_and_url() {
+        // AC-2's automated half: the rights arm ships on a checkable claim, so both halves of
+        // that claim must actually be present on every entry that uses it.
+        let content = all_starter_content().unwrap();
+        let mut federal = 0;
+        for recipe in &content.recipes {
+            let rights = recipe.provenance.rights().expect("every entry has rights");
+            if rights.basis() != RightsBasis::UsFederalPublicDomain {
+                continue;
+            }
+            federal += 1;
+            assert!(
+                recipe
+                    .provenance
+                    .source_url()
+                    .is_some_and(|u| !u.is_empty()),
+                "{}: federal basis without a source URL",
+                recipe.slug
+            );
+            assert!(
+                recipe
+                    .provenance
+                    .source_name()
+                    .is_some_and(|n| !n.is_empty()),
+                "{}: federal basis without a source name",
+                recipe.slug
+            );
+            assert!(
+                rights.attribution().is_some_and(|a| !a.is_empty()),
+                "{}: federal basis without the captured attribution line",
+                recipe.slug
+            );
+        }
+        assert!(federal > 0, "no federal entry to check");
     }
 
     #[test]

@@ -1808,9 +1808,9 @@ pub fn install_starter_content(
     catalog: &[Ingredient],
     recipes: &[Recipe],
 ) -> Result<StarterInstallReport, StorageError> {
-    // First, and outside the short-circuit: with an empty shipped set every launch after the
-    // first takes the short-circuit path, so a household check living in the write branch
-    // would never run in production.
+    // First, and outside the short-circuit: once every catalog id and slug is present, every
+    // later launch takes the short-circuit path, so a household check living in the write
+    // branch would stop running in production the moment the install settles.
     require_household(conn, household)?;
     let held_ids: HashSet<String> = conn
         .prepare("SELECT id FROM ingredient")?

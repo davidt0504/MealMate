@@ -11,7 +11,7 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 // These functions are ignored because they are not marked as `pub`: `split_authored`, `starter_error`, `to_recipes`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `clone`, `eq`, `fmt`
 
-/// Seeds the global ingredient catalog and any cook-reviewed starter recipe this household
+/// Seeds the global ingredient catalog and any shippable starter recipe this household
 /// does not already hold. Idempotent and cheap to re-run: once every catalog id and slug is
 /// present it writes no rows, so it is safe to call on every app start.
 Future<StarterInstallReportDto> installStarterContent({
@@ -21,17 +21,18 @@ Future<StarterInstallReportDto> installStarterContent({
 );
 
 /// What one install call did. `available` and `pending_cook_review` exist so `installed: 0`
-/// reads as *empty by design* — nothing has a recorded cook review yet — rather than as a
-/// swallowed failure.
+/// reads as *empty by design* — nothing here ships by either arm of D-041's rule — rather than
+/// as a swallowed failure.
 class StarterInstallReportDto {
   final int installed;
   final int skipped;
   final int catalogInstalled;
 
-  /// Shipped-set size: entries carrying a recorded cook review.
+  /// Shipped-set size: entries a recorded cook review or a federal publisher stands behind.
   final int available;
 
-  /// Authored but not yet cooked. These never install (MVP-011 AC-3).
+  /// Authored but shipped by neither arm of D-041's rule — an `original` entry no one has
+  /// cooked. These never install.
   final int pendingCookReview;
 
   const StarterInstallReportDto({

@@ -9,7 +9,9 @@ import 'error.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
 // These functions are ignored because they are not marked as `pub`: `commit_swap`, `ignore_not_found`, `move_if_exists`, `preserved_aside_error`, `recover_original`
+// These types are ignored because they are neither used by any `pub` functions nor (for structs and enums) marked `#[frb(unignore)]`: `Aside`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `fmt`
+// These functions are ignored (category: IgnoreBecauseOwnerTyShouldIgnore): `default`
 
 String coreVersion() => RustLib.instance.api.crateApiHealthCoreVersion();
 
@@ -30,6 +32,11 @@ Future<ExportReport> exportDatabase({required String destPath}) =>
 /// first and staged beside the live file — prepare / stage / verify / commit (MVP-017
 /// AC-4). The overwritten database is kept as `<db_path>.pre-restore` (one generation),
 /// never destroyed; a failure mid-swap puts the original back and reopens it.
+///
+/// The whole restore, not merely the commit, runs under the connection-slot mutex:
+/// `staging` is a fixed path beside the live database, so two restores in flight together
+/// would copy over each other's staged file and commit one that was never verified. FRB
+/// dispatches bridge calls on a worker pool, so the UI cannot be that guarantee.
 Future<HealthReport> restoreDatabase({
   required String exportPath,
   required String dbPath,

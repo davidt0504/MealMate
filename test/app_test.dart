@@ -44,24 +44,25 @@ import 'package:meal_mate/src/rust/api/shopping.dart';
 
 const okReport = HealthReport(dbPath: '/x/kimatta.db', schemaVersion: 5);
 
-/// The report an install returns today: the catalog seeds, and nothing installs because
-/// nothing has a recorded cook review (MVP-011 AC-3).
+/// A *first* install as it now returns: the 131-entry catalog seeds and the 24 federal entries
+/// install, because D-041's rights arm ships them without a cook review. The ten `original`
+/// entries stay pending — they ship by neither arm until someone cooks them.
 const okStarterReport = StarterInstallReportDto(
-  installed: 0,
+  installed: 24,
   skipped: 0,
-  catalogInstalled: 37,
-  available: 0,
+  catalogInstalled: 131,
+  available: 24,
   pendingCookReview: 10,
 );
 
 /// A steady-state install: it short-circuited and wrote nothing, so nothing downstream needs
-/// re-reading. `okStarterReport` models a *first* install (`catalogInstalled: 37`), which is
-/// why every harness launch re-reads the pantry unless a test opts out with this.
+/// re-reading. `okStarterReport` models a *first* install, which is why every harness launch
+/// re-reads the pantry and the recipe library unless a test opts out with this.
 const noCatalogStarterReport = StarterInstallReportDto(
   installed: 0,
-  skipped: 0,
+  skipped: 24,
   catalogInstalled: 0,
-  available: 0,
+  available: 24,
   pendingCookReview: 10,
 );
 
@@ -5351,8 +5352,8 @@ void main() {
   );
 
   /// The starter install grows the catalog after `pantryProvider` has already read it, and
-  /// `okStarterReport` models a first install (`catalogInstalled: 37`). Without the launch
-  /// invalidate the screen shows `pantryEmptyCopy` until the app is killed.
+  /// `okStarterReport` models a first install. Without the launch invalidate the screen shows
+  /// `pantryEmptyCopy` until the app is killed.
   testWidgets('a starter install that grew the catalog re-reads the pantry', (
     tester,
   ) async {
@@ -5370,6 +5371,54 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(SwitchListTile), findsNWidgets(2));
   });
+
+  /// MVP-032 step 14: the recipe half of the same hazard. The install now writes recipes —
+  /// `okStarterReport` models 26 — and `RecipeLibraryNotifier.build` depends only on the
+  /// household and its restrictions, so nothing else re-reads it. Without the launch invalidate
+  /// a Recipes tab opened before the unawaited install lands keeps its empty first read, which
+  /// is exactly the fresh-install case AC-5 asks to see filled.
+  testWidgets('a starter install that wrote recipes re-reads the library', (
+    tester,
+  ) async {
+    useTallView(tester);
+    var reads = 0;
+    await tester.pumpWidget(
+      harness(
+        initial: '/recipes',
+        recipes: () {
+          reads++;
+          return reads == 1
+              ? const <RecipeSummaryDto>[]
+              : const [okSummary];
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(reads, greaterThan(1), reason: 'the library was re-read after the install');
+    expect(find.text(okSummary.title), findsOneWidget);
+  });
+
+  /// The other half of that gate: a steady-state launch installs nothing, so re-reading would
+  /// be pure cost.
+  testWidgets(
+    'a starter install that wrote no recipes does not re-read the library',
+    (tester) async {
+      useTallView(tester);
+      var reads = 0;
+      await tester.pumpWidget(
+        harness(
+          initial: '/recipes',
+          starterInstall: (_) async => noCatalogStarterReport,
+          recipes: () {
+            reads++;
+            return const [okSummary];
+          },
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(reads, 1);
+    },
+  );
 
   /// The other half of the gate: a steady-state launch short-circuits and writes nothing, so
   /// re-reading would be pure cost. `initial: '/pantry'` is load-bearing — on the harness

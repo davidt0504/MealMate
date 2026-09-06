@@ -1,26 +1,29 @@
 //! Starter-content installation (MVP-011): one coarse service-level command, invariant 21.
 
-use kimatta_storage::{all_starter_content, HouseholdId, Recipe, RecipeId, StarterContent};
+use kimatta_storage::{
+    all_starter_content, HouseholdId, Recipe, RecipeId, StarterContent, StarterRecipe,
+};
 use uuid::Uuid;
 
 use super::error::KimattaError;
 use crate::db;
 
 /// What one install call did. `available` and `pending_cook_review` exist so `installed: 0`
-/// reads as *empty by design* — nothing has a recorded cook review yet — rather than as a
-/// swallowed failure.
+/// reads as *empty by design* — nothing here ships by either arm of D-041's rule — rather than
+/// as a swallowed failure.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct StarterInstallReportDto {
     pub installed: u32,
     pub skipped: u32,
     pub catalog_installed: u32,
-    /// Shipped-set size: entries carrying a recorded cook review.
+    /// Shipped-set size: entries a recorded cook review or a federal publisher stands behind.
     pub available: u32,
-    /// Authored but not yet cooked. These never install (MVP-011 AC-3).
+    /// Authored but shipped by neither arm of D-041's rule — an `original` entry no one has
+    /// cooked. These never install.
     pub pending_cook_review: u32,
 }
 
-/// Seeds the global ingredient catalog and any cook-reviewed starter recipe this household
+/// Seeds the global ingredient catalog and any shippable starter recipe this household
 /// does not already hold. Idempotent and cheap to re-run: once every catalog id and slug is
 /// present it writes no rows, so it is safe to call on every app start.
 pub fn install_starter_content(
@@ -48,12 +51,13 @@ pub fn install_starter_content(
 
 /// One parse, two views: the embedded manifest is deserialised once per install and split here,
 /// rather than read a second time to count what the first parse already carries. Returns the
-/// shipped view — entries with a recorded cook review — and the count of those without one.
+/// shipped view — entries shipping by either arm of D-041's rule — and the count of those
+/// shipping by neither.
 fn split_authored(authored: StarterContent) -> (StarterContent, usize) {
     let (shipped, pending): (Vec<_>, Vec<_>) = authored
         .recipes
         .into_iter()
-        .partition(|r| r.cook_review.is_some());
+        .partition(StarterRecipe::is_shippable);
     (
         StarterContent {
             catalog: authored.catalog,
@@ -118,8 +122,8 @@ mod tests {
 
     #[test]
     fn install_reports_installed_skipped_catalog_available_and_pending() {
-        // The shipped set is empty today by design: nothing has a recorded cook review. The
-        // catalog still seeds, and the report says which of the two is the case.
+        // The shipped set is whatever D-041's two-armed rule admits. The catalog seeds either
+        // way, and the report says which of the two an `installed: 0` was.
         let mut conn = seeded();
         let shipped = shipped_starter_content().unwrap();
         let authored = all_starter_content().unwrap();
@@ -184,14 +188,14 @@ mod tests {
     fn the_one_parse_split_matches_the_two_view_functions() {
         // Pins the single-parse refactor: `split_authored` must give exactly what the two public
         // view functions give, so `available` and `pending_cook_review` cannot drift. The `all`
-        // predicate catches an inverted partition — today the shipped half is empty because
-        // nothing is cook-reviewed yet, so the equality assertions alone would not.
+        // predicate catches an inverted partition, which the equality assertions alone would
+        // not distinguish from a correct one on a roster where every entry ships.
         let authored = all_starter_content().unwrap();
         let total = authored.recipes.len();
         assert!(total > 0);
         let expected = shipped_starter_content().unwrap();
         let (shipped, pending) = split_authored(authored);
-        assert!(shipped.recipes.iter().all(|r| r.cook_review.is_some()));
+        assert!(shipped.recipes.iter().all(StarterRecipe::is_shippable));
         assert_eq!(shipped.recipes, expected.recipes);
         assert_eq!(shipped.catalog, expected.catalog);
         assert_eq!(shipped.recipes.len() + pending, total);

@@ -1,5 +1,6 @@
 use std::path::Path;
 
+use flutter_rust_bridge::frb;
 use kimatta_storage::StorageError;
 
 use crate::api::error::KimattaError;
@@ -64,6 +65,13 @@ const SIDECARS: [&str; 3] = ["-journal", "-wal", "-shm"];
 /// earlier generation's backup rather than the original (putting it back would install
 /// stale data as the live database and consume the one generation kept), and a sidecar
 /// moved but not put back would be reunited with the wrong generation (R0).
+///
+/// `frb(ignore)`: internal to the restore path — it appears in no `pub fn` signature, so it
+/// has no business on the bridge. Without this, codegen emits bindings that name it and the
+/// crate stops compiling, because the struct is private. Found by MVP-032, which had to
+/// re-run codegen for a DTO doc change; the generated files had been stale since this struct
+/// was added.
+#[frb(ignore)]
 #[derive(Default)]
 struct Aside {
     database: bool,

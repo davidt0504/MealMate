@@ -418,12 +418,12 @@ mod tests {
 
     use kimatta_storage::planner::FoodPolicies;
     use kimatta_storage::{
-        insert_household, list_ledger_entries, open, parse_civil_date, save_member_preferences,
-        save_planning_cycle, save_policy, save_recipe, save_restrictions, Connection,
-        EvidenceSource, Household, HouseholdMember, HouseholdRestrictions, IngredientLine,
-        MealScope, MealSlot, MemberId, MemberPreference, MemberPreferences, PlanningCycle, Policy,
-        PolicyId, ProvenanceKind, Quantity, Recipe, RecipeId, RecipeProvenance, Restriction,
-        RestrictionKind, Sentiment, Unit,
+        archive_recipe, insert_household, list_ledger_entries, open, parse_civil_date,
+        save_member_preferences, save_planning_cycle, save_policy, save_recipe, save_restrictions,
+        shipped_starter_content, Connection, EvidenceSource, Household, HouseholdMember,
+        HouseholdRestrictions, IngredientLine, MealScope, MealSlot, MemberId, MemberPreference,
+        MemberPreferences, PlanningCycle, Policy, PolicyId, ProvenanceKind, Quantity, Recipe,
+        RecipeId, RecipeProvenance, Restriction, RestrictionKind, Sentiment, Unit,
     };
 
     use super::*;
@@ -517,10 +517,53 @@ mod tests {
         }
     }
 
+    /// Takes the shipped starter roster out of a household's candidate pool, so the tests
+    /// below judge the planner on the two recipes `seed` writes and nothing else.
+    ///
+    /// Before MVP-032 this was free: `shipped_starter_content()` returned nothing, so
+    /// `load_planning_snapshot` seeded an empty `snapshot.starter` and these assertions held by
+    /// accident. Now the roster is real, and a starter that wins a slot makes `recipe_id` null —
+    /// which is not a defect these tests exist to catch. Installing each entry and archiving it
+    /// is how a household says "not this one" in production, so the exclusion runs through the
+    /// same path a user would take. Derived from `shipped_starter_content()` rather than a list
+    /// of slugs, so a later content edit cannot silently re-break it.
+    fn without_starters(conn: &mut Connection, id: &str) {
+        for entry in shipped_starter_content().unwrap().recipes {
+            let r = Recipe::new(
+                RecipeId::new(format!("dismissed-{id}-{}", entry.slug)).unwrap(),
+                hid(id),
+                entry.title.clone(),
+                None,
+                None,
+                "",
+                vec![],
+                RecipeProvenance::with_rights(
+                    ProvenanceKind::Starter,
+                    None,
+                    None,
+                    None,
+                    None,
+                    Some(entry.slug.clone()),
+                )
+                .unwrap(),
+            )
+            .unwrap();
+            save_recipe(conn, &r).unwrap();
+            archive_recipe(
+                conn,
+                &hid(id),
+                r.id(),
+                parse_civil_date("2026-08-29").unwrap(),
+            )
+            .unwrap();
+        }
+    }
+
     fn open_seeded(ids: &[&str]) -> Connection {
         let mut conn = open(":memory:").unwrap();
         for id in ids {
             seed(&mut conn, id);
+            without_starters(&mut conn, id);
         }
         conn
     }

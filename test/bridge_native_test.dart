@@ -190,8 +190,9 @@ void main() {
     await openDatabase(dbPath: await tempDb());
     final h = await bootstrapHousehold();
     final first = await installStarterContent(householdId: h.id);
-    // Empty by design, and the report says so rather than leaving `installed: 0`
-    // indistinguishable from a swallowed failure (MVP-011 AC-3).
+    // The report distinguishes an install that wrote nothing from a swallowed failure. Since
+    // MVP-032 a first install writes the federal entries, so `installed == available` is the
+    // shipped count rather than 0 == 0, and `pendingCookReview` is the `original` remainder.
     expect(first.catalogInstalled, greaterThan(0));
     expect(first.installed, first.available);
     expect(first.pendingCookReview, greaterThan(0));

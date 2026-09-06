@@ -377,12 +377,12 @@ mod tests {
     use food_domain::planner::{CoverageState, FoodPolicies};
     use household_core::{EvidenceSource, Household, HouseholdMember, MemberId, Policy, PolicyId};
     use kimatta_storage::{
-        insert_household, list_ledger_entries, list_planned_meals, list_policies, open,
-        parse_civil_date, save_member_preferences, save_planned_meal, save_planning_cycle,
-        save_policy, save_recipe, save_restrictions, set_planned_meal_lock, HouseholdRestrictions,
-        MealComponent, MealScope, MealSlot, MemberPreference, MemberPreferences, PlannedMeal,
-        PlanningCycle, ProvenanceKind, Recipe, RecipeId, RecipeProvenance, Restriction,
-        RestrictionKind, Sentiment, WriteSource,
+        archive_recipe, insert_household, list_ledger_entries, list_planned_meals, list_policies,
+        open, parse_civil_date, save_member_preferences, save_planned_meal, save_planning_cycle,
+        save_policy, save_recipe, save_restrictions, set_planned_meal_lock,
+        shipped_starter_content, HouseholdRestrictions, MealComponent, MealScope, MealSlot,
+        MemberPreference, MemberPreferences, PlannedMeal, PlanningCycle, ProvenanceKind, Recipe,
+        RecipeId, RecipeProvenance, Restriction, RestrictionKind, Sentiment, WriteSource,
     };
 
     use super::*;
@@ -454,6 +454,41 @@ mod tests {
             )
             .unwrap();
             save_recipe(conn, &r).unwrap();
+        }
+    }
+
+    /// Puts the household in the state of one that has seen the shipped starter roster and
+    /// dismissed it. Since MVP-032 that roster is non-empty, so a starter would otherwise cover
+    /// every slot the tests below need left uncovered — and those tests pin *planner behaviour*,
+    /// not starter content. `load_planning_snapshot` counts an archived starter as held, so this
+    /// empties `snapshot.starter`, and an archived recipe is not a candidate either.
+    ///
+    /// Derived from `shipped_starter_content()` rather than a hardcoded veto list, so a later
+    /// content edit cannot re-break these tests — which is the whole point of doing it this way
+    /// rather than extending the `"rice"`/`"soup"` vetoes to name each starter.
+    fn without_starters(conn: &mut Connection, id: &str) {
+        for entry in shipped_starter_content().unwrap().recipes {
+            let r = Recipe::new(
+                RecipeId::new(format!("dismissed-{}", entry.slug)).unwrap(),
+                hid(id),
+                entry.title.clone(),
+                None,
+                None,
+                "",
+                vec![],
+                RecipeProvenance::with_rights(
+                    ProvenanceKind::Starter,
+                    None,
+                    None,
+                    None,
+                    None,
+                    Some(entry.slug.clone()),
+                )
+                .unwrap(),
+            )
+            .unwrap();
+            save_recipe(conn, &r).unwrap();
+            archive_recipe(conn, &hid(id), r.id(), today()).unwrap();
         }
     }
 
@@ -647,6 +682,7 @@ mod tests {
     fn apply_under_needs_attention_records_and_does_not_write() {
         let mut conn = open(":memory:").unwrap();
         seed(&mut conn, "h");
+        without_starters(&mut conn, "h");
         for (i, subject) in ["rice", "soup"].iter().enumerate() {
             save_policy(
                 &mut conn,
@@ -729,6 +765,7 @@ mod tests {
     fn an_applied_placeholder_plan_does_not_break_the_ledger_chain() {
         let mut conn = open(":memory:").unwrap();
         seed(&mut conn, "h");
+        without_starters(&mut conn, "h");
         // Three entries, so `PREFERENCES_SPARSE` stays quiet, and every seeded recipe hit.
         save_member_preferences(
             &mut conn,
@@ -768,6 +805,7 @@ mod tests {
     fn a_declined_apply_is_distinguishable_from_a_preview() {
         let mut conn = open(":memory:").unwrap();
         seed(&mut conn, "h");
+        without_starters(&mut conn, "h");
         for (i, subject) in ["rice", "soup"].iter().enumerate() {
             save_policy(
                 &mut conn,

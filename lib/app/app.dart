@@ -8,6 +8,7 @@ import 'package:meal_mate/features/household/household_provider.dart';
 import 'package:meal_mate/features/household/household_screen.dart'
     show describeFailure;
 import 'package:meal_mate/features/pantry/pantry_provider.dart';
+import 'package:meal_mate/features/recipes/recipes_provider.dart';
 import 'package:meal_mate/features/recipes/starter_provider.dart';
 
 class App extends ConsumerStatefulWidget {
@@ -127,6 +128,14 @@ class _AppState extends ConsumerState<App> {
       // `refresh()` precisely because it must not instantiate a provider nothing has read.
       if (mounted && report.catalogInstalled > 0) {
         ref.invalidate(pantryProvider);
+      }
+      // Same hazard, the recipe half. Until MVP-032 `installed` was always 0, so a Recipes tab
+      // opened before this unawaited future landed could not be stale. Now it can:
+      // `RecipeLibraryNotifier.build` depends only on the household and its restrictions, so
+      // nothing else re-reads it, and a first launch would otherwise cache an empty library —
+      // which is exactly what MVP-032 AC-5 asks to see filled.
+      if (mounted && report.installed > 0) {
+        ref.invalidate(recipeLibraryProvider);
       }
     } catch (error) {
       _messengerKey.currentState?.showSnackBar(

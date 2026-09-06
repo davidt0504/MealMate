@@ -967,7 +967,8 @@ mod tests {
         assert_eq!(s.restrictions.restrictions().len(), 1);
         assert_eq!(s.length_days, 3);
         assert_eq!(s.anchor, today());
-        // Exactly the shipped (cook-reviewed) set, which is empty until MVP-011 AC-3 lands.
+        // Exactly the shipped set under D-041's two-armed rule: a recorded cook review, or
+        // a federal publication with a source URL.
         assert_eq!(
             s.starter.len(),
             shipped_starter_content().unwrap().recipes.len()
