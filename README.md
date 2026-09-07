@@ -4,7 +4,7 @@ A household meal-planning app: recipes, meal plans, a pantry-aware shopping list
 the loop between them. Android is the MVP and initial-launch platform; iOS is the first
 post-launch priority.
 
-> **Android APK:** [Download the latest release (v1.0.0)](https://github.com/davidt0504/MealMate/releases/download/v1.0.0/app-release.apk)
+> **Android APK:** [Download the latest release (v1.0.1)](https://github.com/davidt0504/MealMate/releases/download/v1.0.1/app-release.apk)
 
 ## Architecture direction (PRD v3)
 
@@ -57,7 +57,7 @@ installing it. Two phones are two independent households: there is no sync until
 
 ## Downloading an APK from GitHub
 
-Every pushed version tag such as `v1.0.0` triggers the **Publish Android APK** GitHub
+Every pushed version tag such as `v1.0.1` triggers the **Publish Android APK** GitHub
 Actions workflow. It builds the universal release APK and attaches it to that tag's GitHub
 Release, where it can be downloaded directly from the repository's **Releases** page.
 
@@ -66,8 +66,8 @@ must be higher than every previously published Android build), commit the releas
 source, then run:
 
 ```bash
-git tag v1.0.0
-git push origin v1.0.0
+git tag v1.0.1
+git push origin v1.0.1
 ```
 
 When the workflow succeeds, download `app-release.apk` from the newly created release.
