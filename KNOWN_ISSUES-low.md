@@ -1192,3 +1192,44 @@ Full review: /home/davidlinux/.local/state/claude-orch/5f7efeea1579/0276579f2864
   **Status:** OPEN
 
 ---
+## master -- 2026-09-06
+
+Source: /home/davidlinux/.claude/reviews/impl-handoff-mvp032-owner-recipes-2026-09-06T1644-18f1.md
+Full review: /home/davidlinux/.claude/reviews/redteam-mvp032-owner-recipes-2026-09-06T1653-4415.md
+
+### LOW
+
+- **Four orphan catalog ids left by the two dropped federal recipes still seed every device** (`rust/crates/food-domain/content/starter_recipes.json:322`, `:624`, `:632`, `:745`) -- `ing-turkey`, `ing-marjoram`, `ing-tarragon` and `ing-red-beans` are referenced by no authored entry; they trace to Homemade Turkey Soup and New Orleans Red Beans, dropped at the 2026-09-06 roster review. The catalog is never filtered, so all four install and sit as unusable rows on the eager Pantry list. `every_catalog_reference_resolves` only checks the forward direction. Fix: delete the four entries and add the reverse assertion beside it, so the next content drop cannot leave the same residue.
+  Full review: /home/davidlinux/.claude/reviews/redteam-mvp032-owner-recipes-2026-09-06T1653-4415.md
+  **Status:** RESOLVED 2026-09-06 -- the four entries are deleted (catalog 164 -> 160) and the
+  reverse assertion `every_catalog_id_is_referenced_by_some_entry` is in `starter.rs` beside
+  `every_catalog_reference_resolves`. It runs over `all_starter_content()` on purpose: against the
+  shipped subset it would fail on the eight ids the ten unshipped Kimatta entries legitimately
+  hold, which are noted under the `MVP-011` AC-3 entry in `KNOWN_ISSUES.md` instead.
+
+- **`okStarterReport`'s values and its docstring describe three different rosters** (`test/app_test.dart:47`) -- the fixture says `installed: 24, catalogInstalled: 131`, its docstring claims "the 131-entry catalog seeds and the 24 federal entries install", and the new library-invalidation test at `:5376` says it "models 26"; the shipped roster is 49 recipes and 164 catalog entries. Only `pendingCookReview: 10` is current. The widget logic reads the fields as `> 0`, so nothing fails and the drift repeats at `MVP-033`. Fix: set 49/164/49/10 and correct both docstrings, or drop the counts from the prose.
+  Full review: /home/davidlinux/.claude/reviews/redteam-mvp032-owner-recipes-2026-09-06T1653-4415.md
+  **Status:** RESOLVED 2026-09-06 -- fixture set to 49 / 160 / 49 / 10 and both docstrings rewritten
+  to say what the numbers are, including the `models 26` claim at `test/app_test.dart:5378`.
+
+---
+## master -- 2026-09-07
+
+Source: /home/davidlinux/.claude/reviews/impl-handoff-mvp-032-generalized-2026-09-07T0940-9011.md
+Full review: /home/davidlinux/.claude/reviews/redteam-mvp-032-generalized-2026-09-07T0957-70a3.md
+
+### LOW
+
+- **`without_starters` exists twice and the two copies have already diverged once** (`rust/crates/kimatta-application/src/lib.rs:474`, `rust/src/api/planner.rs:530`) -- near-identical ~30-line test helpers in different crates; the application copy minted `dismissed-<slug>` without the household segment, panicking `archive_recipe` on a second household. Fixed 2026-09-06, but only one copy has the regression test (`two_households_can_each_dismiss_the_starter_roster`) and the next change must be made twice. Fix: if it recurs, a `#[cfg(test)]` helper on `food-domain`, which both already depend on.
+  Full review: /home/davidlinux/.claude/reviews/redteam-mvp-032-generalized-2026-09-07T0957-70a3.md
+  **Status:** OPEN
+
+- **`cooked_on` and `corrections` carry values their own field docs contradict on all 25 owner entries** (`rust/crates/food-domain/content/starter_recipes.json:6309`, `rust/crates/food-domain/src/starter.rs:53`) -- every owner entry records `cooked_on: 2026-09-06`, a date on which nothing was cooked, and puts the attestation caveat in `corrections`, documented as the log of "actionable corrections resolved". A real correction would have to be appended to a caveat sentence, and a later freshness check keyed on `cooked_on` reads a false date. Not user-visible: `cook_review` crosses no bridge surface. Fix: one line in `policy.cook_review` recording the convention, or an `attested_on` field if `cook_review` ever gains a consumer.
+  Full review: /home/davidlinux/.claude/reviews/redteam-mvp-032-generalized-2026-09-07T0957-70a3.md
+  **Status:** OPEN
+
+- **`starter-candidates.md` contradicts itself on who made the five authorship rejections** (`docs/research/starter-candidates.md:30`, `:269`) -- line 30 says the five were "rejected here, not passed to the owner"; lines 269-277 say the owner marked the rows and "the rejections above stand"; `docs/ROADMAP.md:208` summarises AC-1 as "owner marks dated 2026-09-05 (26 `select`, 5 `reject`)". AC-1's whole content is the audit trail, so a document stating both positions weakens it. Fix: reword line 30's parenthetical to say the research pass rejected under the card's authorship rule and the owner ratified at the stop.
+  Full review: /home/davidlinux/.claude/reviews/redteam-mvp-032-generalized-2026-09-07T0957-70a3.md
+  **Status:** OPEN
+
+---

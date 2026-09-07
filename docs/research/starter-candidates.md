@@ -9,6 +9,11 @@
 - **Plan:** `~/.claude/plans/curious-purring-blum.md` (revision 5)
 - **Rows:** 31 candidates read in full. 26 classified `trace-only`, 5 classified `no`
   (rejected by this research pass — see decision item 1).
+- **Roster:** the counts above classify *federal authorship*, not selection. On selection: 26
+  marked `select` on 2026-09-05; **2 dropped on 2026-09-06** at the owner's roster review (rows 18
+  and 31, above); **24 federal entries ship**, alongside the 25 owner household entries, for a
+  shipped roster of 49. Recorded 2026-09-06 — the shipped file had carried 24 while these two rows
+  still read `select`.
 
 **Layout note.** Every rubric column the card requires is present. The scannable columns
 and the `owner decision` column are in **§1**; the long-text columns for the same row —
@@ -49,7 +54,7 @@ absent, *omnivore* when `vegetarian` is present.
 | 15 | Marinated Chicken (Adobong Manok) | `…/marinated-chicken-adobong-manok` | **no** | 4 | 10 | 90 | 10 | yes | soy, vegetarian, vegan | *rejected — see item 1* |
 | 16 | Minestrone Soup | `…/minestrone-soup` | trace-only | 16 | 15 | 60 | 15 | yes | gluten | select |
 | 17 | Mushroom Penne | `…/mushroom-penne` | trace-only | 4 | 15 | 15 | 11 | mostly (red wine) | dairy, gluten, vegetarian, vegan | select |
-| 18 | New Orleans Red Beans | `…/new-orleans-red-beans` | trace-only | 8 | 10 | 140 | 11 | yes | *(none — vegan, gluten-free)* | select |
+| 18 | New Orleans Red Beans | `…/new-orleans-red-beans` | trace-only | 8 | 10 | 140 | 11 | yes | *(none — vegan, gluten-free)* | `select` 2026-09-05, **`drop` 2026-09-06** — cut at the owner's roster review when the twenty-five household entries landed; see the **Roster** line in the header |
 | 19 | Pinto Beans | `…/pinto-beans` | **no** | 16 | 20 | 45 | 9 | yes | *(none — vegan, gluten-free)* | *rejected — see item 1* |
 | 20 | Pita Pizzas | `…/pita-pizzas` | trace-only | 4 | 10 | 8 | 6 | yes | dairy, gluten, vegetarian, vegan | select |
 | 21 | Red Beans and Rice | `…/red-beans-and-rice` | trace-only | 4 | 5 | 25 | 9 | yes | *(none — vegan, gluten-free)* | select |
@@ -62,7 +67,7 @@ absent, *omnivore* when `vegetarian` is present.
 | 28 | Zucchini Medley | `…/zucchini-medley` | **no** | 4 | 15 | 10 | 6 | yes | dairy, vegan | *rejected — see item 1* |
 | 29 | Alaska Salmon Salad | `…/alaska-salmon-salad` | **no** | 6 | 10 | 30 | 6 | yes | dairy, fish, vegetarian, vegan | *rejected — see item 1* |
 | 30 | Baked Fish | `…/baked-fish` | trace-only | 6 | 10 | 25 | 11 | yes | dairy, gluten, fish, vegetarian, vegan | select |
-| 31 | Homemade Turkey Soup | `…/homemade-turkey-soup` | trace-only | 16 | 15 | 180 | 12 | no (turkey carcass) | gluten, vegetarian, vegan | select |
+| 31 | Homemade Turkey Soup | `…/homemade-turkey-soup` | trace-only | 16 | 15 | 180 | 12 | no (turkey carcass) | gluten, vegetarian, vegan | `select` 2026-09-05, **`drop` 2026-09-06** — cut at the owner's roster review when the twenty-five household entries landed; see the **Roster** line in the header |
 
 ---
 
