@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -10,6 +12,8 @@ import 'package:meal_mate/features/household/household_screen.dart'
 import 'package:meal_mate/features/pantry/pantry_provider.dart';
 import 'package:meal_mate/features/recipes/recipes_provider.dart';
 import 'package:meal_mate/features/recipes/starter_provider.dart';
+import 'package:meal_mate/features/settings/backup_provider.dart';
+import 'package:meal_mate/src/rust/api/household.dart';
 
 class App extends ConsumerStatefulWidget {
   const App({super.key, this.initialLocation = homeLocation});
@@ -23,12 +27,12 @@ class App extends ConsumerStatefulWidget {
 }
 
 class _AppState extends ConsumerState<App> {
-  bool _gated = false;
+  static const _startupTimeout = Duration(seconds: 10);
 
-  /// Sibling of `_gated`, and needed for the same reason: `HouseholdNotifier.rename` and
-  /// `.completeOnboarding` both publish `AsyncData`, so the listener fires several times per
-  /// launch. Without this, every Save-name in Settings would re-run the install.
-  bool _installStarted = false;
+  bool _startupHandled = false;
+  late bool _startupSettled;
+
+  Future<void>? _firstRunCompletion;
 
   /// `_AppState`'s own context sits *above* `MaterialApp.router`, so
   /// `ScaffoldMessenger.of(context)` there throws `No ScaffoldMessenger widget found` — every
@@ -38,7 +42,16 @@ class _AppState extends ConsumerState<App> {
 
   late final GoRouter _router = buildRouter(
     initialLocation: widget.initialLocation,
+    completeFirstRun: _completeFirstRun,
   );
+
+  @override
+  void initState() {
+    super.initState();
+    // Only the ordinary launch can flash the empty Plan grid before the first-run decision.
+    // Explicit/restored routes keep their own loading and error surfaces reachable.
+    _startupSettled = widget.initialLocation != homeLocation;
+  }
 
   @override
   void didUpdateWidget(App oldWidget) {
@@ -71,31 +84,42 @@ class _AppState extends ConsumerState<App> {
     // the provider so the database opens once — stands either way.
     // `ref.listen` subscribes without rebuilding.
     //
-    // The same subscription now also carries the first-run gate. The router is
-    // still built immediately at `initialLocation`, so Settings' own loading arms
-    // stay reachable; a genuine first launch shows Plan for the frames before the
-    // DTO arrives and then goes to Welcome. An error deliberately does not route
-    // here — `complete_onboarding` would fail too, and Settings is where the
-    // failure is explained.
-    // The starter install runs here rather than at onboarding, and the distinction is
-    // load-bearing: `welcomeLocation` is reachable only while `onboarded == false`, so an
-    // install wired to Welcome is a one-shot that no already-onboarded device — the owner's
-    // emulator, every dev and beta build — could ever reach again. Those devices would never
-    // get the ingredient catalog, and a cook review recorded later could never install
-    // anywhere. (`WelcomeScreen._finish` is also the single handler behind *both* Welcome
-    // buttons, so "the Get started handler" is not even a well-defined site.)
-    //
-    // It is latched separately from `_gated` so neither gate can swallow the other.
-    ref.listen(householdProvider, (_, next) {
-      final value = next.valueOrNull;
-      if (value == null) return;
-      if (!_installStarted) {
-        _installStarted = true;
-        _installStarterContent(value.id);
+    // The same subscription carries the first-run gate. Until the household resolves, the
+    // router stays mounted but offstage behind a neutral startup surface. A new household waits
+    // for starter content before Cover can read it; an existing household is revealed at once
+    // and receives the same once-per-database-generation install in the background. A household
+    // error reveals Plan's in-shell error arm, where it can be explained without trapping
+    // navigation.
+    ref.listen(databaseGenerationProvider, (_, _) {
+      _startupHandled = false;
+      _firstRunCompletion = null;
+      if (mounted && _startupSettled) {
+        setState(() => _startupSettled = false);
       }
-      if (_gated) return;
-      _gated = true;
-      if (!value.onboarded) _router.go(welcomeLocation);
+    });
+    ref.listen(householdProvider, (_, next) {
+      switch (next) {
+        case AsyncError():
+          // Reveal the route's own explanation without consuming the success transition. A
+          // later health/database retry must still install and route a recovered first run.
+          if (!_startupHandled) _settleStartup();
+        case AsyncData(:final value):
+          if (_startupHandled) return;
+          _startupHandled = true;
+          // After an ordinary-launch error, cover the empty Plan again while the recovered new
+          // household waits for starters. Explicit initial routes retain their own surfaces.
+          if (!value.onboarded &&
+              widget.initialLocation == homeLocation &&
+              _startupSettled &&
+              mounted) {
+            setState(() => _startupSettled = false);
+          }
+          unawaited(_handleStartup(value));
+        case AsyncLoading():
+          // Invalidation can carry the previous database's value through loading. It is stale
+          // by definition and must not consume this generation's startup transition.
+          return;
+      }
     });
     return MaterialApp.router(
       title: 'Kimatta (dev)',
@@ -104,14 +128,94 @@ class _AppState extends ConsumerState<App> {
       theme: lightTheme,
       darkTheme: darkTheme,
       routerConfig: _router,
+      builder: (context, child) => Stack(
+        children: [
+          Positioned.fill(
+            child: Offstage(
+              offstage: !_startupSettled,
+              child: child ?? const SizedBox.shrink(),
+            ),
+          ),
+          if (!_startupSettled)
+            Positioned.fill(
+              child: ColoredBox(
+                color: Theme.of(context).scaffoldBackgroundColor,
+                child: const ExcludeSemantics(
+                  child: Center(child: CircularProgressIndicator()),
+                ),
+              ),
+            ),
+        ],
+      ),
     );
   }
 
-  /// Non-blocking and never gates navigation — the shape MVP-006 pinned with "a failed
-  /// completion still lets the user in". Step 6's read-only short-circuit makes the
-  /// steady-state call one `SELECT` for the household and two more for the ids and slugs,
-  /// writing no rows, so this is cheap to run on every launch.
-  Future<void> _installStarterContent(String householdId) async {
+  Future<void> _handleStartup(HouseholdDto household) async {
+    final install = _installStarterContent(household.id);
+    if (household.onboarded) {
+      _settleStartup();
+      final failure = await install;
+      if (failure != null) _reportFailure(failure, subject: 'Starter recipes');
+      return;
+    }
+
+    final failure = await install.timeout(
+      _startupTimeout,
+      onTimeout: () => _StartupTimeout(
+        'installation took longer than ${_startupTimeout.inSeconds} seconds',
+      ),
+    );
+    if (!mounted) return;
+    _router.go('/plan/cover');
+    _settleStartup(failure: failure, subject: 'Starter recipes');
+  }
+
+  void _settleStartup({Object? failure, String? subject}) {
+    if (!mounted) return;
+    if (!_startupSettled) setState(() => _startupSettled = true);
+    if (failure != null && subject != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _reportFailure(failure, subject: subject);
+      });
+    }
+  }
+
+  /// One shared future per database generation closes the race between Accept and leaving through
+  /// the shell while the bridge write is in flight. A stuck local write must not turn Cover into
+  /// a trap.
+  Future<void> _completeFirstRun() =>
+      _firstRunCompletion ??= _completeFirstRunOnce();
+
+  Future<void> _completeFirstRunOnce() async {
+    final household = ref.read(householdProvider).valueOrNull;
+    if (household == null || household.onboarded) return;
+    try {
+      await ref
+          .read(householdProvider.notifier)
+          .completeOnboarding(household.id)
+          .timeout(
+            _startupTimeout,
+            onTimeout: () {
+              throw _StartupTimeout(
+                'saving setup took longer than ${_startupTimeout.inSeconds} seconds',
+              );
+            },
+          );
+    } catch (error) {
+      _reportFailure(error, subject: 'Setup');
+    }
+  }
+
+  void _reportFailure(Object error, {required String subject}) {
+    if (!mounted) return;
+    _messengerKey.currentState?.showSnackBar(
+      SnackBar(content: Text(describeFailure(error, subject: subject))),
+    );
+  }
+
+  /// Awaited, with a bound, only for a new household; later launches keep the non-blocking shape
+  /// MVP-006 pinned. The steady-state short-circuit is cheap and writes no rows.
+  Future<Object?> _installStarterContent(String householdId) async {
     try {
       final report = await ref.read(starterInstallProvider)(householdId);
       // `catalogInstalled` is the size of the catalog the install *wrote*, not a count of new
@@ -137,12 +241,18 @@ class _AppState extends ConsumerState<App> {
       if (mounted && report.installed > 0) {
         ref.invalidate(recipeLibraryProvider);
       }
+      return null;
     } catch (error) {
-      _messengerKey.currentState?.showSnackBar(
-        SnackBar(
-          content: Text(describeFailure(error, subject: 'Starter recipes')),
-        ),
-      );
+      return error;
     }
   }
+}
+
+class _StartupTimeout implements Exception {
+  const _StartupTimeout(this.message);
+
+  final String message;
+
+  @override
+  String toString() => message;
 }

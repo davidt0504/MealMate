@@ -297,7 +297,7 @@ const okCycle = PlanningCycleDto(
 );
 
 /// `onboarded: true` throughout, so every pre-existing test keeps exercising the
-/// already-welcomed path and the first-run gate stays the concern of the tests that
+/// completed-first-run path and the startup gate stays the concern of the tests that
 /// deliberately opt out of it.
 const okHousehold = HouseholdDto(
   id: 'h-1',
@@ -1096,6 +1096,7 @@ Widget harness({
     // accessibility and text-scale tests all visit Pantry, and an un-overridden provider
     // would reach the real bridge.
     pantryProvider.overrideWith(() => _FakePantryNotifier(pantry, setMark)),
+    plannerTodayProvider.overrideWithValue('2026-08-29'),
   ],
   child: App(initialLocation: initial),
 );
@@ -2328,7 +2329,7 @@ void main() {
     expect(find.text('Casa'), findsWidgets);
   });
 
-  // --- MVP-006 -------------------------------------------------------------
+  // --- MVP-033 -------------------------------------------------------------
 
   const newHousehold = HouseholdDto(
     id: 'h-1',
@@ -2337,13 +2338,42 @@ void main() {
     onboarded: false,
   );
 
-  // AC-1: a first launch is met by Welcome, outside the shell so no nav bar shows.
-  testWidgets('a first launch lands on Welcome', (tester) async {
+  testWidgets('a first launch waits for starters, then lands on Cover', (
+    tester,
+  ) async {
     usePixel5(tester);
-    await tester.pumpWidget(harness(household: () => newHousehold));
-    await tester.pumpAndSettle();
-    expect(title('Welcome'), findsOneWidget);
+    final install = Completer<StarterInstallReportDto>();
+    CoverCycleRequestDto? requested;
+    await tester.pumpWidget(
+      harness(
+        household: () => newHousehold,
+        starterInstall: (_) => install.future,
+        cover: (request) {
+          requested = request;
+          return coverOutcome();
+        },
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+    expect(title('Plan'), findsNothing);
+    expect(title(coverTitle), findsNothing);
     expect(find.byType(NavigationBar), findsNothing);
+    expect(find.byType(TextField), findsNothing);
+    expect(find.byType(ChoiceChip), findsNothing);
+    expect(find.byType(FilterChip), findsNothing);
+    expect(find.byType(ActionChip), findsNothing);
+
+    install.complete(okStarterReport);
+    await tester.pumpAndSettle();
+    expect(title(coverTitle), findsOneWidget);
+    expect(find.byType(NavigationBar), findsOneWidget);
+    expect(find.text(firstRunCopy), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('cover:2026-08-29:dinner')),
+      findsOneWidget,
+    );
+    expect(requested?.today, '2026-08-29');
   });
 
   // Expected-to-pass: the regression pin for every pre-existing test, all of which use an
@@ -2355,10 +2385,46 @@ void main() {
     expect(title('Plan'), findsOneWidget);
   });
 
-  // AC-1: skip reaches the usable dinner-first app, and marks onboarding done once.
-  testWidgets('Get started marks onboarding done and reaches Plan', (
+  testWidgets('an onboarded household does not await starter installation', (
     tester,
   ) async {
+    usePixel5(tester);
+    final install = Completer<StarterInstallReportDto>();
+    await tester.pumpWidget(harness(starterInstall: (_) => install.future));
+    await tester.pump();
+    await tester.pump();
+    expect(title('Plan'), findsOneWidget);
+  });
+
+  testWidgets('accept ends first run and reaches a non-empty shopping list', (
+    tester,
+  ) async {
+    usePixel5(tester);
+    final completed = <String>[];
+    await tester.pumpWidget(
+      harness(
+        household: () => newHousehold,
+        completeOnboarding: (id) async {
+          completed.add(id);
+          return okHousehold;
+        },
+        cover: (request) => coverOutcome(applied: request.apply),
+        shopping: (_, _) => shoppingView(),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text(firstRunCopy), findsOneWidget);
+    await tester.tap(find.text('Accept'));
+    await tester.pumpAndSettle();
+    expect(completed, ['h-1']);
+    expect(find.text(firstRunCopy), findsNothing);
+    await tester.tap(find.text(shoppingReadyCopy));
+    await tester.pumpAndSettle();
+    expect(title('Shopping'), findsOneWidget);
+    expect(find.text('flour'), findsOneWidget);
+  });
+
+  testWidgets('leaving Cover ends first run', (tester) async {
     usePixel5(tester);
     final completed = <String>[];
     await tester.pumpWidget(
@@ -2371,43 +2437,43 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(FilledButton, 'Get started'));
+    await tester.tap(tab('Settings'));
     await tester.pumpAndSettle();
     expect(completed, ['h-1']);
-    expect(title('Plan'), findsOneWidget);
+    expect(title('Settings'), findsOneWidget);
   });
 
-  testWidgets('Set up first reaches Settings', (tester) async {
+  testWidgets('accept and navigation share one completion write', (
+    tester,
+  ) async {
     usePixel5(tester);
+    final completion = Completer<HouseholdDto>();
+    var calls = 0;
     await tester.pumpWidget(
       harness(
         household: () => newHousehold,
-        completeOnboarding: (_) async => okHousehold,
+        completeOnboarding: (_) {
+          calls++;
+          return completion.future;
+        },
+        cover: (request) => coverOutcome(applied: request.apply),
       ),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(TextButton, 'Set up first'));
+    await tester.tap(find.text('Accept'));
+    await tester.pump();
+    expect(calls, 1);
+    await tester.tap(tab('Settings'));
+    await tester.pump();
+    expect(calls, 1);
+    completion.complete(okHousehold);
     await tester.pumpAndSettle();
     expect(title('Settings'), findsOneWidget);
   });
 
-  // AC-3: no account creation and no intake — nothing to type, nothing to sign into.
-  testWidgets('Welcome asks for no account', (tester) async {
-    usePixel5(tester);
-    await tester.pumpWidget(harness(household: () => newHousehold));
-    await tester.pumpAndSettle();
-    expect(find.byType(TextField), findsNothing);
-    for (final word in ['sign in', 'account', 'password', 'email']) {
-      expect(
-        find.textContaining(RegExp(word, caseSensitive: false)),
-        findsNothing,
-        reason: 'Welcome must not mention "$word"',
-      );
-    }
-  });
-
-  // AC-1 again, in the failure direction: a database failure must not trap the user.
-  testWidgets('a failed completion still lets the user in', (tester) async {
+  testWidgets('a failed completion reports and still leaves Cover', (
+    tester,
+  ) async {
     usePixel5(tester);
     await tester.pumpWidget(
       harness(
@@ -2417,23 +2483,259 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(FilledButton, 'Get started'));
+    await tester.tap(tab('Settings'));
     await tester.pumpAndSettle();
     expect(find.text('Setup unavailable: disk full'), findsOneWidget);
-    expect(title('Plan'), findsOneWidget);
+    expect(title('Settings'), findsOneWidget);
   });
 
-  testWidgets('Welcome meets the accessibility guidelines', (tester) async {
+  testWidgets('a timed-out completion does not trap Cover navigation', (
+    tester,
+  ) async {
     usePixel5(tester);
-    for (final brightness in Brightness.values) {
-      tester.platformDispatcher.platformBrightnessTestValue = brightness;
-      await tester.pumpWidget(harness(household: () => newHousehold));
-      await tester.pumpAndSettle();
-      await expectLater(tester, meetsGuideline(androidTapTargetGuideline));
-      await expectLater(tester, meetsGuideline(labeledTapTargetGuideline));
-      await expectLater(tester, meetsGuideline(textContrastGuideline));
-    }
+    final completion = Completer<HouseholdDto>();
+    await tester.pumpWidget(
+      harness(
+        household: () => newHousehold,
+        completeOnboarding: (_) => completion.future,
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(tab('Settings'));
+    await tester.pump();
+    expect(title(coverTitle), findsOneWidget);
+    await tester.pump(const Duration(seconds: 10));
+    await tester.pumpAndSettle();
+    expect(title('Settings'), findsOneWidget);
+    expect(
+      find.text('Setup unavailable: saving setup took longer than 10 seconds'),
+      findsOneWidget,
+    );
   });
+
+  testWidgets('a failed first-run install reports after reaching Cover', (
+    tester,
+  ) async {
+    usePixel5(tester);
+    await tester.pumpWidget(
+      harness(
+        household: () => newHousehold,
+        starterInstall: (_) async =>
+            throw const KimattaError.storage(message: 'disk full'),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(title(coverTitle), findsOneWidget);
+    expect(find.text('Starter recipes unavailable: disk full'), findsOneWidget);
+  });
+
+  testWidgets('a timed-out first-run install still reaches Cover', (
+    tester,
+  ) async {
+    usePixel5(tester);
+    final install = Completer<StarterInstallReportDto>();
+    await tester.pumpWidget(
+      harness(
+        household: () => newHousehold,
+        starterInstall: (_) => install.future,
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 10));
+    await tester.pumpAndSettle();
+    expect(title(coverTitle), findsOneWidget);
+    expect(
+      find.textContaining('installation took longer than 10 seconds'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('a first-run Cover failure stays inside the shell', (
+    tester,
+  ) async {
+    usePixel5(tester);
+    await tester.pumpWidget(
+      harness(
+        household: () => newHousehold,
+        cover: (_) => throw const KimattaError.notOpen(),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(title(coverTitle), findsOneWidget);
+    expect(find.byType(NavigationBar), findsOneWidget);
+    expect(
+      find.text(
+        describeFailure(const KimattaError.notOpen(), subject: coverTitle),
+      ),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('a household startup failure reveals an in-shell explanation', (
+    tester,
+  ) async {
+    usePixel5(tester);
+    await tester.pumpWidget(
+      harness(
+        household: () => throw const KimattaError.storage(message: 'disk full'),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(title('Plan'), findsOneWidget);
+    expect(find.byType(NavigationBar), findsOneWidget);
+    expect(find.text('Plan unavailable: disk full'), findsOneWidget);
+  });
+
+  testWidgets('a recovered startup error still enters the first-run Cover', (
+    tester,
+  ) async {
+    usePixel5(tester);
+    var healthReads = 0;
+    var installs = 0;
+    final install = Completer<StarterInstallReportDto>();
+    await tester.pumpWidget(
+      harness(
+        health: () {
+          healthReads++;
+          if (healthReads == 1) {
+            throw const KimattaError.storage(message: 'disk full');
+          }
+          return okReport;
+        },
+        household: () => newHousehold,
+        starterInstall: (_) {
+          installs++;
+          return install.future;
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Plan unavailable: disk full'), findsOneWidget);
+
+    await tester.tap(tab('Settings'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Try again'));
+    await tester.pump();
+    await tester.pump();
+    expect(installs, 1);
+    expect(find.byType(NavigationBar), findsNothing);
+    expect(title('Plan'), findsNothing);
+
+    install.complete(okStarterReport);
+    await tester.pumpAndSettle();
+    expect(title(coverTitle), findsOneWidget);
+    expect(find.text(firstRunCopy), findsOneWidget);
+  });
+
+  testWidgets(
+    'repeated startup errors do not consume the recovery transition',
+    (tester) async {
+      usePixel5(tester);
+      var healthReads = 0;
+      var installs = 0;
+      await tester.pumpWidget(
+        harness(
+          health: () {
+            healthReads++;
+            if (healthReads < 3) {
+              throw const KimattaError.storage(message: 'disk full');
+            }
+            return okReport;
+          },
+          household: () => newHousehold,
+          starterInstall: (_) async {
+            installs++;
+            return okStarterReport;
+          },
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(tab('Settings'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Try again'));
+      await tester.pumpAndSettle();
+      expect(
+        find.text('Local database unavailable: disk full'),
+        findsOneWidget,
+      );
+      expect(installs, 0);
+
+      await tester.tap(find.text('Try again'));
+      await tester.pumpAndSettle();
+      expect(installs, 1);
+      expect(title(coverTitle), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'a same-id restore resets startup and completion to the new database',
+    (tester) async {
+      usePixel5(tester);
+      var restored = false;
+      var healthReads = 0;
+      var installs = 0;
+      final reloadedHealth = Completer<HealthReport>();
+      final completed = <String>[];
+      final backup = _FakeBackupActions(
+        latest: _fakeExportPath,
+        onRestore: () async {
+          restored = true;
+          return okReport;
+        },
+      );
+      await tester.pumpWidget(
+        harness(
+          initial: '/plan/cover',
+          health: () {
+            healthReads++;
+            return healthReads == 1 ? okReport : reloadedHealth.future;
+          },
+          household: () => restored ? newHousehold : okHousehold,
+          starterInstall: (_) async {
+            installs++;
+            return okStarterReport;
+          },
+          completeOnboarding: (id) async {
+            completed.add(id);
+            return okHousehold;
+          },
+          backup: backup,
+          cover: (request) => coverOutcome(applied: request.apply),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(installs, 1);
+
+      // Leaving Cover caches the old generation's already-onboarded no-op completion.
+      await tester.tap(tab('Settings'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(restoreButtonLabel));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(restoreConfirmAction));
+      await tester.pump();
+      await tester.pump();
+
+      // The invalidated household carries its old value while health reloads. It must not
+      // consume the new generation's startup transition or start another install yet.
+      expect(installs, 1);
+      expect(find.byType(NavigationBar), findsNothing);
+      reloadedHealth.complete(okReport);
+      await tester.pumpAndSettle();
+      expect(installs, 2);
+      expect(title(coverTitle), findsOneWidget);
+      expect(find.text(firstRunCopy), findsOneWidget);
+
+      await tester.tap(find.text('Accept'));
+      await tester.pumpAndSettle();
+      expect(completed, ['h-1']);
+      expect(find.text(firstRunCopy), findsNothing);
+      await tester.tap(tab('Settings'));
+      await tester.pumpAndSettle();
+      expect(completed, ['h-1']);
+      expect(title('Settings'), findsOneWidget);
+    },
+  );
 
   // AC-2: the cycle is editable and the exact request is what the user built.
   testWidgets('the cycle editor saves the edited scope and length', (
@@ -2581,7 +2883,6 @@ void main() {
   // `initial` trips `App.didUpdateWidget`, and that assertion leaves the element tree
   // half-updated for every test after it in this file (see the closing test's note).
   for (final location in const [
-    '/welcome',
     '/settings/cycle',
     '/settings/restrictions',
     '/recipes',
@@ -2984,69 +3285,6 @@ void main() {
       await tester.tap(find.widgetWithText(FilledButton, 'Save restrictions'));
       await tester.pumpAndSettle();
       expect(sent, const [RestrictionDto.known(kind: 'peanuts')]);
-    },
-  );
-
-  /// `_finish` needs the household's id, so a tap before it resolves would complete nothing
-  /// while still navigating on — reachable through Android state restoration, which restores
-  /// `/welcome` while Riverpod rebuilds from scratch.
-  testWidgets('Welcome waits for the household before it can complete', (
-    tester,
-  ) async {
-    usePixel5(tester);
-    final pending = Completer<HouseholdDto>();
-    await tester.pumpWidget(
-      harness(initial: '/welcome', household: () => pending.future),
-    );
-    await tester.pump();
-    expect(
-      tester
-          .widget<FilledButton>(
-            find.widgetWithText(FilledButton, 'Get started'),
-          )
-          .onPressed,
-      isNull,
-    );
-    expect(
-      tester
-          .widget<TextButton>(find.widgetWithText(TextButton, 'Set up first'))
-          .onPressed,
-      isNull,
-    );
-    pending.complete(newHousehold);
-    await tester.pumpAndSettle();
-    expect(
-      tester
-          .widget<FilledButton>(
-            find.widgetWithText(FilledButton, 'Get started'),
-          )
-          .onPressed,
-      isNotNull,
-    );
-  });
-
-  /// The error arm the gate above deliberately lets through: buttons dead on a screen with no
-  /// navigation bar would trap the user, so they stay live and the failure is said out loud
-  /// rather than navigating on as if setup had been recorded.
-  testWidgets(
-    'Welcome explains a household failure instead of skipping silently',
-    (tester) async {
-      usePixel5(tester);
-      await tester.pumpWidget(
-        harness(
-          initial: '/welcome',
-          household: () =>
-              throw const KimattaError.storage(message: 'disk full'),
-        ),
-      );
-      await tester.pumpAndSettle();
-      await tester.tap(find.widgetWithText(FilledButton, 'Get started'));
-      await tester.pumpAndSettle();
-      expect(
-        find.text('Setup unavailable: the household did not load'),
-        findsOneWidget,
-      );
-      expect(title('Plan'), findsOneWidget);
     },
   );
 
@@ -3687,8 +3925,8 @@ void main() {
     'starter content installs once per launch for an already-onboarded household',
     (tester) async {
       // Adversarial: this is the regression an onboarding-wired install would have
-      // shipped. `okHousehold.onboarded` is true, so Welcome is unreachable and a
-      // one-shot tied to it would never run again on this device.
+      // shipped. `okHousehold.onboarded` is true, so the first-run Cover path is unreachable and
+      // a one-shot tied to it would never run again on this device.
       usePixel5(tester);
       final calls = <String>[];
       await tester.pumpWidget(

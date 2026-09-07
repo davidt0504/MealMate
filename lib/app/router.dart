@@ -4,7 +4,6 @@ import 'package:go_router/go_router.dart';
 import 'package:meal_mate/app/placeholder_screen.dart';
 import 'package:meal_mate/app/shell.dart';
 import 'package:meal_mate/features/household/household_screen.dart';
-import 'package:meal_mate/features/onboarding/welcome_screen.dart';
 import 'package:meal_mate/features/pantry/pantry_screen.dart';
 import 'package:meal_mate/features/planning/cover_screen.dart';
 import 'package:meal_mate/features/planning/cycle_editor_screen.dart';
@@ -19,9 +18,6 @@ import 'package:meal_mate/features/shopping/shopping_screen.dart';
 /// Plan is home: the product's default state is "this week is covered" (PRD v3 §15).
 const homeLocation = '/plan';
 
-/// First run. Outside the shell, so no navigation bar is shown while it is up.
-const welcomeLocation = '/welcome';
-
 /// The `?offset=` query value as a cycle offset. `offset` crosses to Rust as an i32 and
 /// `sse_encode_i_32` narrows with `putInt32`, which keeps the low 32 bits and does not throw —
 /// so an unsaturated 64-bit value arrives as an unrelated in-range window instead of being
@@ -35,12 +31,14 @@ int coverOffset(String? raw) {
   return parsed.clamp(-2147483648, 2147483647);
 }
 
-GoRouter buildRouter({String initialLocation = homeLocation}) => GoRouter(
+GoRouter buildRouter({
+  String initialLocation = homeLocation,
+  required CompleteFirstRun completeFirstRun,
+}) => GoRouter(
   initialLocation: initialLocation,
   restorationScopeId: 'router',
   errorBuilder: (context, state) => _NotFoundScreen(uri: state.uri),
   routes: [
-    GoRoute(path: welcomeLocation, builder: (_, _) => const WelcomeScreen()),
     StatefulShellRoute.indexedStack(
       restorationScopeId: 'shell',
       builder: (context, state, shell) => AppShell(navigationShell: shell),
@@ -90,7 +88,12 @@ GoRouter buildRouter({String initialLocation = homeLocation}) => GoRouter(
                   path: 'cover',
                   builder: (context, state) => CoverScreen(
                     offset: coverOffset(state.uri.queryParameters['offset']),
+                    completeFirstRun: completeFirstRun,
                   ),
+                  onExit: (_, _) async {
+                    await completeFirstRun();
+                    return true;
+                  },
                 ),
               ],
             ),

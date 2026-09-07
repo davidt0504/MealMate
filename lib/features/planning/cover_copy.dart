@@ -6,6 +6,8 @@ import 'package:meal_mate/src/rust/api/planning.dart';
 // (Accept, Swap, Cover My Week) stay in the widget, per the planner's convention.
 
 const coverTitle = 'Cover My Week';
+const firstRunCopy =
+    'Kimatta gets dinner planning out of your head; change anything that doesn’t fit.';
 
 /// The three quiet banner states; the fourth renders [needsYouCopy] instead.
 const coveredCopy = 'This week is covered.';

@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import 'package:meal_mate/features/household/household_screen.dart'
     show describeFailure;
+import 'package:meal_mate/features/household/household_provider.dart';
 import 'package:meal_mate/features/planning/cover_copy.dart';
 import 'package:meal_mate/features/planning/cover_provider.dart';
 import 'package:meal_mate/features/planning/planner_copy.dart'
@@ -18,10 +19,17 @@ import 'package:meal_mate/src/rust/api/recipe.dart';
 /// The Cover My Week result view (MVP-024): an exception console, not a feed. Everything
 /// rendered comes from one `CoverView`; the screen holds no durable state and issues coarse
 /// commands through the provider (invariants 17, 21).
+typedef CompleteFirstRun = Future<void> Function();
+
 class CoverScreen extends ConsumerStatefulWidget {
-  const CoverScreen({super.key, required this.offset});
+  const CoverScreen({
+    super.key,
+    required this.offset,
+    required this.completeFirstRun,
+  });
 
   final int offset;
+  final CompleteFirstRun completeFirstRun;
 
   @override
   ConsumerState<CoverScreen> createState() => _CoverScreenState();
@@ -74,10 +82,13 @@ class _CoverScreenState extends ConsumerState<CoverScreen> {
       for (final code in result.assumptions) ?assumptionCopy(code),
     ];
     final showAccept = result.status != OutcomeStatusDto.needsAttention;
+    final firstRun =
+        ref.watch(householdProvider).valueOrNull?.onboarded == false;
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
         Text(_banner(view), style: textTheme.titleMedium),
+        if (firstRun) ...[const SizedBox(height: 4), const Text(firstRunCopy)],
         if (_accepted && view.outcome.applied) ...[
           const SizedBox(height: 4),
           Align(
@@ -330,6 +341,7 @@ class _CoverScreenState extends ConsumerState<CoverScreen> {
     setState(() => _busy = true);
     try {
       await _notifier.accept();
+      await widget.completeFirstRun();
       if (mounted) setState(() => _accepted = true);
     } catch (e) {
       _report(e);

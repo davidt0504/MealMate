@@ -6,6 +6,7 @@ import 'package:meal_mate/src/rust/api/planning.dart';
 /// Every exported string, explicitly — the safety regex must see the whole surface.
 final coverCopySamples = <String>[
   coverTitle,
+  firstRunCopy,
   coveredCopy,
   tentativeCopy,
   unresolvedCopy,
@@ -57,10 +58,19 @@ void main() {
     // construction that would is deriving the samples from one exported map the widgets also
     // read. That residual is tracked in `KNOWN_ISSUES-low.md`.
     expect(coverCopySamples, isNotEmpty);
-    expect(coverCopySamples.length, 31);
+    expect(coverCopySamples.length, 32);
     for (final sample in coverCopySamples) {
       expect(assurance.hasMatch(sample), isFalse, reason: sample);
     }
+  });
+
+  test('the first-run sentence uses product language', () {
+    final machinery = RegExp(
+      r'\b(controller|optimizer|algorithm|feedback loop|control system)\b',
+      caseSensitive: false,
+    );
+    expect(machinery.hasMatch(firstRunCopy), isFalse);
+    expect(firstRunCopy, isNot(contains('safe')));
   });
 
   test('assumption map keeps pantry and wording-only quiet', () {
