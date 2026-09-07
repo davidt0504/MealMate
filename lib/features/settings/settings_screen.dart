@@ -80,7 +80,7 @@ class SettingsScreen extends ConsumerWidget {
         // cached health report would keep reporting a database no bridge call can reach —
         // and the recovery row, gated on `health is AsyncError`, would never appear.
         if (context.mounted) {
-          invalidateAfterDatabaseSwap(ref.invalidate);
+          ref.read(databaseGenerationProvider.notifier).advanceAfterSwap();
         }
       }
       if (context.mounted) {
@@ -117,7 +117,7 @@ class SettingsScreen extends ConsumerWidget {
         // As in `_restore`: `reset_database` leaves the slot empty on the way through and
         // returns without refilling it when the reopen fails.
         if (context.mounted) {
-          invalidateAfterDatabaseSwap(ref.invalidate);
+          ref.read(databaseGenerationProvider.notifier).advanceAfterSwap();
         }
       }
       if (context.mounted) {

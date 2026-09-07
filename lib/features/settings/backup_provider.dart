@@ -100,20 +100,33 @@ class BackupBusy extends Notifier<bool> {
 
 final backupBusyProvider = NotifierProvider<BackupBusy, bool>(BackupBusy.new);
 
-/// Every provider that caches database-derived state, enumerated: the household id is
-/// often unchanged across a restore, so the `selectAsync((h) => h.id)` pattern means an
-/// invalidated household does NOT cascade — each consumer is invalidated by name.
-/// Family/autoDispose providers are covered whole by invalidating the family.
-void invalidateAfterDatabaseSwap(void Function(ProviderOrFamily) invalidate) {
-  invalidate(healthReportProvider);
-  invalidate(householdProvider);
-  invalidate(recipeLibraryProvider);
-  invalidate(archivedRecipesProvider);
-  invalidate(recipeDetailProvider);
-  invalidate(planningCycleProvider);
-  invalidate(restrictionsProvider);
-  invalidate(pantryProvider);
-  invalidate(shoppingProvider);
-  invalidate(plannerProvider);
-  invalidate(coverProvider);
+/// The in-memory identity of the database all cached providers describe. A restore can put back
+/// an older snapshot with the same household id, so DTO equality cannot identify this boundary.
+/// Invalidate the old snapshot before publishing the generation: rebuilding an app listener
+/// between those operations could otherwise consume the old household as this generation's data.
+class DatabaseGeneration extends Notifier<int> {
+  @override
+  int build() => 0;
+
+  /// Every provider that caches database-derived state, enumerated. The household id is often
+  /// unchanged across a restore, so `selectAsync((h) => h.id)` does not provide this cascade.
+  /// Family/autoDispose providers are covered whole by invalidating the family.
+  void advanceAfterSwap() {
+    ref.invalidate(healthReportProvider);
+    ref.invalidate(householdProvider);
+    ref.invalidate(recipeLibraryProvider);
+    ref.invalidate(archivedRecipesProvider);
+    ref.invalidate(recipeDetailProvider);
+    ref.invalidate(planningCycleProvider);
+    ref.invalidate(restrictionsProvider);
+    ref.invalidate(pantryProvider);
+    ref.invalidate(shoppingProvider);
+    ref.invalidate(plannerProvider);
+    ref.invalidate(coverProvider);
+    state++;
+  }
 }
+
+final databaseGenerationProvider = NotifierProvider<DatabaseGeneration, int>(
+  DatabaseGeneration.new,
+);
