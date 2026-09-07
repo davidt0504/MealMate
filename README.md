@@ -4,6 +4,8 @@ A household meal-planning app: recipes, meal plans, a pantry-aware shopping list
 the loop between them. Android is the MVP and initial-launch platform; iOS is the first
 post-launch priority.
 
+> **Android APK:** [Download the latest release (v1.0.0)](https://github.com/davidt0504/MealMate/releases/download/v1.0.0/app-release.apk)
+
 ## Architecture direction (PRD v3)
 
 Adopted 2026-08-24 (`docs/ROADMAP.md` D-028). The app is a focused consumer food product built
@@ -68,7 +70,7 @@ git tag v1.0.0
 git push origin v1.0.0
 ```
 
-When the workflow succeeds, download `MealMate-v1.0.0.apk` from the newly created release.
+When the workflow succeeds, download `app-release.apk` from the newly created release.
 You can also re-run it from **Actions → Publish Android APK → Run workflow**, providing an
 existing tag. The current project signs release builds with its debug key, so these downloads
 are appropriate for internal testing and sideloading—not public production distribution. Use a
