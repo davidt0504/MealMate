@@ -1192,3 +1192,24 @@ Full review: /home/davidlinux/.local/state/claude-orch/5f7efeea1579/0276579f2864
   **Status:** OPEN
 
 ---
+## master -- 2026-09-06
+
+Source: /home/davidlinux/.claude/reviews/impl-handoff-mvp032-owner-recipes-2026-09-06T1644-18f1.md
+Full review: /home/davidlinux/.claude/reviews/redteam-mvp032-owner-recipes-2026-09-06T1653-4415.md
+
+### LOW
+
+- **Four orphan catalog ids left by the two dropped federal recipes still seed every device** (`rust/crates/food-domain/content/starter_recipes.json:322`, `:624`, `:632`, `:745`) -- `ing-turkey`, `ing-marjoram`, `ing-tarragon` and `ing-red-beans` are referenced by no authored entry; they trace to Homemade Turkey Soup and New Orleans Red Beans, dropped at the 2026-09-06 roster review. The catalog is never filtered, so all four install and sit as unusable rows on the eager Pantry list. `every_catalog_reference_resolves` only checks the forward direction. Fix: delete the four entries and add the reverse assertion beside it, so the next content drop cannot leave the same residue.
+  Full review: /home/davidlinux/.claude/reviews/redteam-mvp032-owner-recipes-2026-09-06T1653-4415.md
+  **Status:** RESOLVED 2026-09-06 -- the four entries are deleted (catalog 164 -> 160) and the
+  reverse assertion `every_catalog_id_is_referenced_by_some_entry` is in `starter.rs` beside
+  `every_catalog_reference_resolves`. It runs over `all_starter_content()` on purpose: against the
+  shipped subset it would fail on the eight ids the ten unshipped Kimatta entries legitimately
+  hold, which are noted under the `MVP-011` AC-3 entry in `KNOWN_ISSUES.md` instead.
+
+- **`okStarterReport`'s values and its docstring describe three different rosters** (`test/app_test.dart:47`) -- the fixture says `installed: 24, catalogInstalled: 131`, its docstring claims "the 131-entry catalog seeds and the 24 federal entries install", and the new library-invalidation test at `:5376` says it "models 26"; the shipped roster is 49 recipes and 164 catalog entries. Only `pendingCookReview: 10` is current. The widget logic reads the fields as `> 0`, so nothing fails and the drift repeats at `MVP-033`. Fix: set 49/164/49/10 and correct both docstrings, or drop the counts from the prose.
+  Full review: /home/davidlinux/.claude/reviews/redteam-mvp032-owner-recipes-2026-09-06T1653-4415.md
+  **Status:** RESOLVED 2026-09-06 -- fixture set to 49 / 160 / 49 / 10 and both docstrings rewritten
+  to say what the numbers are, including the `models 26` claim at `test/app_test.dart:5378`.
+
+---

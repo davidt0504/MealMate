@@ -44,14 +44,16 @@ import 'package:meal_mate/src/rust/api/shopping.dart';
 
 const okReport = HealthReport(dbPath: '/x/kimatta.db', schemaVersion: 5);
 
-/// A *first* install as it now returns: the 131-entry catalog seeds and the 24 federal entries
-/// install, because D-041's rights arm ships them without a cook review. The ten `original`
-/// entries stay pending — they ship by neither arm until someone cooks them.
+/// A *first* install as it now returns: the 160-entry catalog seeds and all 49 shipping recipes
+/// install — 24 federal on D-041's rights arm and 25 owner household entries on the cook arm.
+/// The ten Kimatta-authored entries stay pending; they ship by neither arm until someone cooks
+/// them. The widget logic reads these fields only as `> 0`, so nothing asserts on the values —
+/// which is exactly why they had drifted three rosters behind before 2026-09-06.
 const okStarterReport = StarterInstallReportDto(
-  installed: 24,
+  installed: 49,
   skipped: 0,
-  catalogInstalled: 131,
-  available: 24,
+  catalogInstalled: 160,
+  available: 49,
   pendingCookReview: 10,
 );
 
@@ -5373,7 +5375,7 @@ void main() {
   });
 
   /// MVP-032 step 14: the recipe half of the same hazard. The install now writes recipes —
-  /// `okStarterReport` models 26 — and `RecipeLibraryNotifier.build` depends only on the
+  /// `okStarterReport` models 49 — and `RecipeLibraryNotifier.build` depends only on the
   /// household and its restrictions, so nothing else re-reads it. Without the launch invalidate
   /// a Recipes tab opened before the unawaited install lands keeps its empty first read, which
   /// is exactly the fresh-install case AC-5 asks to see filled.
@@ -5387,14 +5389,16 @@ void main() {
         initial: '/recipes',
         recipes: () {
           reads++;
-          return reads == 1
-              ? const <RecipeSummaryDto>[]
-              : const [okSummary];
+          return reads == 1 ? const <RecipeSummaryDto>[] : const [okSummary];
         },
       ),
     );
     await tester.pumpAndSettle();
-    expect(reads, greaterThan(1), reason: 'the library was re-read after the install');
+    expect(
+      reads,
+      greaterThan(1),
+      reason: 'the library was re-read after the install',
+    );
     expect(find.text(okSummary.title), findsOneWidget);
   });
 

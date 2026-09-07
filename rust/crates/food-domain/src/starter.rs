@@ -889,6 +889,141 @@ mod tests {
     }
 
     #[test]
+    fn every_catalog_id_is_referenced_by_some_entry() {
+        // The reverse of `every_catalog_reference_resolves`, which only checks that every
+        // reference resolves. Four ids outlived the recipes that used them when two federal
+        // entries were dropped at the 2026-09-06 roster review, and nothing caught it: the
+        // catalog is installed unfiltered, so an unreferenced id becomes a permanently unusable
+        // Pantry row on every device. `all_starter_content` is deliberate -- against the shipped
+        // subset this would fail on the ids the ten unshipped entries legitimately hold.
+        let content = all_starter_content().unwrap();
+        let mut referenced: Vec<&str> = Vec::new();
+        for recipe in &content.recipes {
+            for line in &recipe.lines {
+                if let Some(IngredientRef::Catalog(id)) = line.ingredient() {
+                    referenced.push(id.as_str());
+                }
+            }
+        }
+        assert!(!referenced.is_empty());
+        for ingredient in &content.catalog {
+            assert!(
+                referenced.contains(&ingredient.id().as_str()),
+                "catalog id {} is referenced by no authored entry",
+                ingredient.id().as_str()
+            );
+        }
+    }
+
+    /// `assess` reads `IngredientLine::name` and nothing else, so a pasta line named only by its
+    /// shape matches no `GLUTEN_TERMS` entry and the dish ships gluten-free by declaration. Three
+    /// did. The names now carry the word the catalog already uses for them.
+    #[test]
+    fn every_pasta_line_name_matches_gluten() {
+        // Read the names out of the file rather than restating them: hard-coded literals would
+        // only re-assert that `GLUTEN_TERMS` contains "pasta", and would keep passing if a line
+        // were shortened back to a bare shape -- which is the defect this pins.
+        let content = all_starter_content().unwrap();
+        let gluten = HouseholdRestrictions::new([Restriction::Known(RestrictionKind::Gluten)]);
+        let mut checked = 0;
+        for slug in [
+            "crockpot-mac-and-cheese",
+            "sausage-and-broccoli-orzo",
+            "taco-pasta",
+            "meatball-casserole",
+        ] {
+            let entry = content
+                .recipes
+                .iter()
+                .find(|r| r.slug == slug)
+                .unwrap_or_else(|| panic!("{slug} is not in the file"));
+            for name in entry.lines.iter().map(IngredientLine::name) {
+                if ["macaroni", "orzo", "rotini"]
+                    .iter()
+                    .any(|shape| name.contains(shape))
+                {
+                    assert!(
+                        !assess([name], &gluten).conflicts.is_empty(),
+                        "{slug}: line {name:?} names a wheat pasta and matches no gluten term, \
+                         so a gluten-restricted household is not warned"
+                    );
+                    checked += 1;
+                }
+            }
+        }
+        assert_eq!(
+            checked, 4,
+            "expected one pasta line in each of the four entries"
+        );
+    }
+
+    #[test]
+    fn the_three_renamed_wheat_pasta_dishes_declare_gluten() {
+        let content = all_starter_content().unwrap();
+        for slug in [
+            "crockpot-mac-and-cheese",
+            "sausage-and-broccoli-orzo",
+            "taco-pasta",
+        ] {
+            let entry = content
+                .recipes
+                .iter()
+                .find(|r| r.slug == slug)
+                .unwrap_or_else(|| panic!("{slug} is not in the file"));
+            assert!(
+                entry.expected_conflicts.contains(&RestrictionKind::Gluten),
+                "{slug} declares {:?}, without gluten",
+                entry.expected_conflicts
+            );
+        }
+    }
+
+    /// The assertion that would have caught the original defect. `meatball-casserole` declared
+    /// gluten before its rotini line was renamed, but only through its separate "pasta sauce"
+    /// line -- delete or rename that line and the declaration silently flips. Its pasta line now
+    /// carries gluten on its own.
+    #[test]
+    fn meatball_casserole_carries_gluten_on_its_pasta_line_alone() {
+        let content = all_starter_content().unwrap();
+        let entry = content
+            .recipes
+            .iter()
+            .find(|r| r.slug == "meatball-casserole")
+            .unwrap();
+        let gluten = HouseholdRestrictions::new([Restriction::Known(RestrictionKind::Gluten)]);
+        let without_sauce = entry
+            .lines
+            .iter()
+            .map(IngredientLine::name)
+            .filter(|n| *n != "pasta sauce");
+        assert!(!assess(without_sauce, &gluten).conflicts.is_empty());
+    }
+
+    /// Written in the negative on purpose, and it is the one pasta entry still standing on the
+    /// accident the test above closes: `ravioli-bake` declares gluten only through its "pasta
+    /// sauce" line, because no source text lets "frozen cheese ravioli" be extended to name pasta.
+    /// This pins the current state so the day `GLUTEN_TERMS` gains "ravioli" -- the MVP-009 rule
+    /// change with a `RULE_VERSION` bump recorded in `KNOWN_ISSUES.md` -- this goes red and is
+    /// deleted, rather than the residual passing unnoticed.
+    #[test]
+    fn ravioli_bake_declares_gluten_only_through_its_sauce_line() {
+        let content = all_starter_content().unwrap();
+        let entry = content
+            .recipes
+            .iter()
+            .find(|r| r.slug == "ravioli-bake")
+            .unwrap();
+        assert!(entry.expected_conflicts.contains(&RestrictionKind::Gluten));
+        let gluten = HouseholdRestrictions::new([Restriction::Known(RestrictionKind::Gluten)]);
+        let without_sauce = entry
+            .lines
+            .iter()
+            .map(IngredientLine::name)
+            .filter(|n| *n != "pasta sauce");
+        assert!(assess(without_sauce, &gluten).conflicts.is_empty());
+    }
+
+    #[test]
     fn canonical_collapses_interleaved_duplicates_and_ignores_authoring_order() {
         // The first vector is the shape a lines-outer `assess` refactor would produce — same-kind
         // conflicts no longer adjacent, which is exactly what a bare `dedup` fails to collapse.

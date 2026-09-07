@@ -688,6 +688,55 @@ mod tests {
         assert_eq!(r.score_tiers[0], 2, "both slots covered");
     }
 
+    /// MVP-032 made `CandidateSource::StarterMeal` reachable in production for the first time:
+    /// before it, `shipped_starter_content()` was empty, so no starter could ever be a candidate.
+    /// The same change gave this module `without_starters` and called it from `open_seeded` for
+    /// every household, which left the newly-live `CandidateSourceDto::StarterMeal` arm and the
+    /// `starter:<slug>` stub crossing to Dart with no bridge-layer coverage at all —
+    /// `cover_cycle_maps_every_enum_and_nested_dto` asserts `HouseholdRecipe`. This is the one
+    /// test in the module that does not strip the roster.
+    ///
+    /// It pins the shipped slug *set*, not a named dish: the winner is score-chosen among the
+    /// starters that fit `seed`'s 40-minute dinner window, so file order proves nothing and a
+    /// later content edit must not be able to break this.
+    #[test]
+    fn a_starter_won_slot_crosses_as_a_starter_meal() {
+        let mut conn = open(":memory:").unwrap();
+        seed(&mut conn, "h");
+        let out = cover_in(&mut conn, request("h", false)).unwrap();
+        let slugs: Vec<String> = shipped_starter_content()
+            .unwrap()
+            .recipes
+            .iter()
+            .map(|r| r.slug.clone())
+            .collect();
+        assert!(!slugs.is_empty(), "the shipped roster is empty");
+        let starter = out
+            .result
+            .slots
+            .iter()
+            .find(|s| s.source == Some(CandidateSourceDto::StarterMeal))
+            .expect("a starter should win a slot when the roster is not stripped");
+        assert_eq!(starter.components.len(), 1);
+        let component = &starter.components[0];
+        assert!(
+            component.recipe_id.is_none(),
+            "a starter is not a household recipe, but crossed with recipe_id {:?}",
+            component.recipe_id
+        );
+        let note = component
+            .note
+            .as_deref()
+            .expect("a starter component carries its slug in `note`");
+        let slug = note
+            .strip_prefix("starter:")
+            .unwrap_or_else(|| panic!("{note:?} is not a starter stub"));
+        assert!(
+            slugs.iter().any(|s| s == slug),
+            "{slug} is not a shipped starter slug"
+        );
+    }
+
     /// A resolved slot rejects every other candidate with `LOCK_CONFLICT` by design, so those
     /// rejections scale with `slots × candidates` and say nothing the slot's `locked_by_user`
     /// state does not. They stay in the domain result and as a ledger count; they do not cross.
