@@ -53,27 +53,6 @@ The app is local-only — no backend, and the release manifest carries no `INTER
 permission — so a sideloaded build is a complete, usable app with no setup beyond
 installing it. Two phones are two independent households: there is no sync until `MVP-018`.
 
-## Downloading an APK from GitHub
-
-Every pushed version tag such as `v1.0.0` triggers the **Publish Android APK** GitHub
-Actions workflow. It builds the universal release APK and attaches it to that tag's GitHub
-Release, where it can be downloaded directly from the repository's **Releases** page.
-
-To publish a version, first update `version:` in `pubspec.yaml` (the build number after `+`
-must be higher than every previously published Android build), commit the release-ready
-source, then run:
-
-```bash
-git tag v1.0.0
-git push origin v1.0.0
-```
-
-When the workflow succeeds, download `MealMate-v1.0.0.apk` from the newly created release.
-You can also re-run it from **Actions → Publish Android APK → Run workflow**, providing an
-existing tag. The current project signs release builds with its debug key, so these downloads
-are appropriate for internal testing and sideloading—not public production distribution. Use a
-dedicated release keystore stored as GitHub Actions secrets before sharing broadly.
-
 **Build once.** One universal APK, all three ABIs, so it installs on any Android phone:
 
 ```bash

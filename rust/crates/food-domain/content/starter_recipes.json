@@ -18,10 +18,10 @@
     "cook_review": "cook_review is null until a human cooks the dish. Under D-041 the shipping rule is two-armed: an entry ships with a recorded cook_review OR with basis us_federal_public_domain and a source_url. The federal entries ship on the publisher arm. The owner's twenty-five household entries ship on the cook arm: 2026-09-06 is the date the owner attested that he or his wife has cooked each of them, not the date of a particular cooking, and each entry's cook_review.corrections says so. The ten Kimatta entries still need a cook and do not ship. See StarterRecipe::is_shippable.",
     "rights": "basis us_federal_public_domain asserts: published by a US federal agency and asserted by that agency to be free of use restrictions. It is NOT a claim that 17 USC 105 operates automatically — 105 reaches works of federal officers and employees (101), and NHLBI states the Keep the Beat recipes were 'developed just for the NHLBI', i.e. contractor-developed. Shipping does not rest on the label: ingredient lists and functional steps are uncopyrightable and every instruction is rewritten. NHLBI asks that its material not be used in 'any direct or indirect product endorsement or advertising' and that the source be cited; rights.attribution carries that citation. MVP-020: render attribution, never the raw basis string, and never in a way that reads as NHLBI endorsing this app. Do not carry the sources' 'heart-healthy' framing into titles or copy — this app makes no health claim. Owner-approved 2026-09-05 at the MVP-032 Phase 0 stop.",
     "units": "prefer the unit family a catalog id already carries, because UnitFamily::of puts tsp|tbsp|cup|fl_oz in VolumeUs, ml|l in VolumeMetric, g|kg in MassMetric, oz|lb in MassUs and piece in Count, and those families do not aggregate across each other -- so two lines on one id in different families become two shopping lines. Hence 8 oz reusing ing-spaghetti converts to g, and a half cup reusing ing-vegetable-broth converts to ml. This is a preference, not an invariant, and the file does not satisfy it everywhere: about eighteen ids carry two families because the recipes themselves measure differently -- '3 garlic cloves' against '1 Tbsp minced garlic', '1 lemon' against '2 Tbsp lemon juice', '2 carrots' against '1 C sliced carrots'. Forcing one family there would mean inventing a conversion the shopping module deliberately refuses to make (see shopping.rs: cross-system pairs are absent because 1 cup is not an exact number of ml). The split is the designed outcome: each line keeps its own original_text and stays separate. Nothing enforces the preference.",
-    "expected_conflicts_note": "expected_conflicts records what food_domain::assess actually returns under rule version 1, not a nutritional claim. peanut-noodle-bowl therefore declares gluten: rule version 1 matches the term \"noodles\" in \"rice noodles\", which are gluten-free. The declaration is kept honest rather than dodged by renaming the ingredient — MVP-009 accepted explainable false positives, over-warning is the safe direction, and the warning copy never claims safety. The reverse direction is present too and is the one to watch: rule version 1 has no gluten term matching soy sauce, so vegetable-fried-rice declares soy and sesame but no gluten conflict, even though conventionally brewed soy sauce is made with wheat and is a well-known hidden gluten source. peanut-noodle-bowl carries the same soy sauce and is flagged gluten only because \"noodles\" matches inside \"rice noodles\", so the roster is inconsistent on this one ingredient, and inconsistent in the unsafe direction on one of the two. Adding soy sauce to the gluten terms — and deciding the same question for tamari and miso, which rule version 1 already matches as soy but not as gluten — is an MVP-009 rule change with a RULE_VERSION bump, not a content edit; renaming the ingredient to dodge the matcher is not an option here either. One rule-version-1 miss arrives with the owner's household entries, in the unsafe direction and recorded rather than dodged: crockpot-barbecue-chicken and crockpot-chicken-tacos declare no dairy conflict for their ranch dressing and ranch seasoning lines, which are buttermilk-based; DAIRY's terms match neither \"ranch dressing\" nor \"ranch seasoning\". Adding \"ranch\" to the dairy terms is an MVP-009 rule change with a RULE_VERSION bump, not a content edit. A second miss was found and closed at the source instead: meatball-casserole declared no vegetarian conflict because MEAT_TERMS has no \"meatball\" or \"meat\" term and the line was named only \"frozen meatballs\". The owner confirmed 2026-09-06 that the meatballs are beef or turkey, so the ingredient is now named \"beef or turkey meatballs\" and the matcher sees the meat on both terms. That is an accuracy fix that happens to match, which is the opposite of renaming an ingredient to dodge a match -- the name got more true, not less. Where a name cannot be made more accurate, the miss stays declared, as the ranch lines above are. Four more line names were made accurate on 2026-09-06 for the same reason, after a review found three shipped wheat-pasta dishes declaring no gluten conflict. GLUTEN_TERMS matches \"pasta\" but carries no term for a pasta shape, so crockpot-mac-and-cheese (\"elbow macaroni\"), sausage-and-broccoli-orzo (\"orzo\") and taco-pasta (\"rotini\") shipped gluten-free by declaration. Those lines are now named \"elbow macaroni pasta\", \"orzo pasta\" and \"rotini pasta\", and the three entries declare gluten. meatball-casserole's rotini line was renamed the same way: it already declared gluten, but only through its separate \"pasta sauce\" line, and its own original_text reads \"1 box (16 oz) uncooked rotini pasta\", so the shortened name was the inaccuracy. Gluten-free-by-declaration therefore moves from 34 to 31. ravioli-bake is the one left standing on that accident: it declares gluten only through its \"pasta sauce\" line, and no source text lets \"frozen cheese ravioli\" be extended to name pasta. The test ravioli_bake_declares_gluten_only_through_its_sauce_line pins that in the negative, so the day GLUTEN_TERMS gains \"ravioli\" it goes red rather than passing unnoticed. Adding pasta-shape terms is the real fix, it is an MVP-009 rule change with a RULE_VERSION bump, and it is recorded in KNOWN_ISSUES.md alongside the soy sauce and ranch misses that the same bump should settle.",
+    "expected_conflicts_note": "expected_conflicts records what food_domain::assess actually returns under rule version 1, not a nutritional claim. peanut-noodle-bowl therefore declares gluten: rule version 1 matches the term \"noodles\" in \"rice noodles\", which are gluten-free. The declaration is kept honest rather than dodged by renaming the ingredient — MVP-009 accepted explainable false positives, over-warning is the safe direction, and the warning copy never claims safety. The reverse direction is present too and is the one to watch: rule version 1 has no gluten term matching soy sauce, so vegetable-fried-rice declares soy and sesame but no gluten conflict, even though conventionally brewed soy sauce is made with wheat and is a well-known hidden gluten source. peanut-noodle-bowl carries the same soy sauce and is flagged gluten only because \"noodles\" matches inside \"rice noodles\", so the roster is inconsistent on this one ingredient, and inconsistent in the unsafe direction on one of the two. Adding soy sauce to the gluten terms — and deciding the same question for tamari and miso, which rule version 1 already matches as soy but not as gluten — is an MVP-009 rule change with a RULE_VERSION bump, not a content edit; renaming the ingredient to dodge the matcher is not an option here either. One rule-version-1 miss arrives with the owner's household entries, in the unsafe direction and recorded rather than dodged: crockpot-barbecue-chicken and crockpot-chicken-tacos declare no dairy conflict for their ranch dressing and ranch seasoning lines, which are buttermilk-based; DAIRY's terms match neither \"ranch dressing\" nor \"ranch seasoning\". Adding \"ranch\" to the dairy terms is an MVP-009 rule change with a RULE_VERSION bump, not a content edit. A second miss was found and closed at the source instead: meatball-casserole declared no vegetarian conflict because MEAT_TERMS has no \"meatball\" or \"meat\" term and the line was named only \"frozen meatballs\". The owner confirmed 2026-09-06 that the meatballs are beef or turkey, so the ingredient is now named \"beef or turkey meatballs\" and the matcher sees the meat on both terms. That is an accuracy fix that happens to match, which is the opposite of renaming an ingredient to dodge a match -- the name got more true, not less. Where a name cannot be made more accurate, the miss stays declared, as the ranch lines above are.",
     "expected_conflicts_order": "order is not significant: every_recipe_matches_its_declared_conflicts sorts both sides into RestrictionKind::ALL order before comparing, so entries may list expected_conflicts in any order.",
     "line_fidelity": "one JSON line per source ingredient line, in source order, with original_text verbatim. Two deliberate exceptions, each also recorded in the entry's rights.modifications: a source that lists the same ingredient on two lines is merged and summed, and the two meatball sub-lists in turkey-and-beef-meatballs are flattened. Items the source marks optional, and garnishes, carry optional: true. Non-food equipment (skewers) is not a line; cooking spray is, because it is bought.",
-    "prep_minutes": "prep_minutes is the time the meal costs YOU, not its elapsed time. Tier 0 compares it against the household's SLOT_WINDOW policy, documented as 'Minutes available per slot', and a dish whose prep_minutes exceeds that window is REJECTED outright (tier0.rs, PREP_WINDOW_IMPOSSIBLE) rather than merely scored down. So the test when authoring is: could you leave the house while it cooks? Slow cooker yes, so record the active work only. Oven or stovetop no, so record prep plus cook. This is a workaround for the domain carrying one time field where it needs two (active and elapsed); see KNOWN_ISSUES.md and OPT-004. Owner decision 2026-09-06. Scope, recorded 2026-09-06 after review: this rule is applied to the twenty-five owner entries throughout, and to four federal entries -- barbecued-chicken (75 = 10 prep + 65 cook), minestrone-soup (75 = 15 + 60), pink-beans-with-plantain (70 = 10 + 60) and vegetable-stew (65 = 20 + 45) -- each checked against the publisher's own prep and cook columns in docs/research/starter-candidates.md. Two more are prep-only and correct anyway: cold-fusilli-with-summer-vegetables, because its thirty minutes are an unattended chill, and chickpeas-with-tomatoes-and-oregano, because the publisher records no cook time at all, so prep-only and prep+cook are the same number. pita-pizzas follows neither convention: it ships 25 against a published 10 prep and 8 cook. The remaining seventeen federal entries still carry the 2026-09-05 prep-only convention, so lentil-soup records 15 against a ninety-minute attended simmer. Do not read this file as internally consistent on this field until the two-field split lands. Tier 0 rejects a value that is too high and silently accepts one that is too low, so the error direction in those seventeen is admission into a window the dish cannot fit -- unreachable today only because nothing writes a food.slot_window policy yet.",
+    "prep_minutes": "prep_minutes is the time the meal costs YOU, not its elapsed time. Tier 0 compares it against the household's SLOT_WINDOW policy, documented as 'Minutes available per slot', and a dish whose prep_minutes exceeds that window is REJECTED outright (tier0.rs, PREP_WINDOW_IMPOSSIBLE) rather than merely scored down. So the test when authoring is: could you leave the house while it cooks? Slow cooker yes, so record the active work only. Oven or stovetop no, so record prep plus cook. This is a workaround for the domain carrying one time field where it needs two (active and elapsed); see KNOWN_ISSUES.md and OPT-004. Owner decision 2026-09-06.",
     "pending_recipes": "refs/recipes-pending.json holds five more of the owner's transcribed recipes that this file deliberately does not carry: three sides (honey glazed carrots, roasted green beans, roasted vegetables) and two breakfast or baking dishes (banana bread, apple cinnamon roll casserole). The planner covers dinner only and MealScope::dinner_only is still the default, and a side is not a meal, so shipping them today would make banana bread a candidate for Tuesday dinner. They are transcribed in the same shape as an entry here and need only a slot-suitability value. OPT-004 imports them; see its Phase 3."
   },
   "catalog": [
@@ -315,6 +315,14 @@
       "aliases": [
         "chicken drumsticks",
         "chicken breasts"
+      ],
+      "store_category": "meat"
+    },
+    {
+      "id": "ing-turkey",
+      "canonical_name": "cooked turkey",
+      "aliases": [
+        "leftover turkey"
       ],
       "store_category": "meat"
     },
@@ -613,6 +621,22 @@
       "store_category": "pantry"
     },
     {
+      "id": "ing-marjoram",
+      "canonical_name": "marjoram",
+      "aliases": [
+        "dried marjoram"
+      ],
+      "store_category": "pantry"
+    },
+    {
+      "id": "ing-tarragon",
+      "canonical_name": "tarragon",
+      "aliases": [
+        "dried tarragon"
+      ],
+      "store_category": "pantry"
+    },
+    {
       "id": "ing-chives",
       "canonical_name": "chives",
       "aliases": [
@@ -714,6 +738,14 @@
       "canonical_name": "kidney beans",
       "aliases": [
         "red kidney beans"
+      ],
+      "store_category": "pantry"
+    },
+    {
+      "id": "ing-red-beans",
+      "canonical_name": "dry red beans",
+      "aliases": [
+        "red beans"
       ],
       "store_category": "pantry"
     },
@@ -7453,13 +7485,12 @@
       "expected_conflicts": [
         "dairy",
         "eggs",
-        "gluten",
         "vegan"
       ],
       "lines": [
         {
           "original_text": "8 oz elbow macaroni, cooked",
-          "name": "elbow macaroni pasta",
+          "name": "elbow macaroni",
           "catalog_id": "ing-small-pasta",
           "quantity": {
             "kind": "exact",
@@ -8201,7 +8232,7 @@
       "lines": [
         {
           "original_text": "1 box (16 oz) uncooked rotini pasta",
-          "name": "rotini pasta",
+          "name": "rotini",
           "catalog_id": "ing-rotini",
           "quantity": {
             "kind": "exact",
@@ -8865,7 +8896,6 @@
       },
       "expected_conflicts": [
         "dairy",
-        "gluten",
         "vegetarian",
         "vegan"
       ],
@@ -8948,7 +8978,7 @@
         },
         {
           "original_text": "2 cups orzo",
-          "name": "orzo pasta",
+          "name": "orzo",
           "catalog_id": "ing-orzo",
           "quantity": {
             "kind": "exact",
@@ -9334,7 +9364,6 @@
       },
       "expected_conflicts": [
         "dairy",
-        "gluten",
         "vegetarian",
         "vegan"
       ],
@@ -9380,7 +9409,7 @@
         },
         {
           "original_text": "2 1/2 c. uncooked rotini",
-          "name": "rotini pasta",
+          "name": "rotini",
           "catalog_id": "ing-rotini",
           "quantity": {
             "kind": "exact",

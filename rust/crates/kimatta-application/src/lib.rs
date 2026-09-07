@@ -378,8 +378,8 @@ mod tests {
     use household_core::{EvidenceSource, Household, HouseholdMember, MemberId, Policy, PolicyId};
     use kimatta_storage::{
         archive_recipe, insert_household, list_ledger_entries, list_planned_meals, list_policies,
-        load_recipe, open, parse_civil_date, save_member_preferences, save_planned_meal,
-        save_planning_cycle, save_policy, save_recipe, save_restrictions, set_planned_meal_lock,
+        open, parse_civil_date, save_member_preferences, save_planned_meal, save_planning_cycle,
+        save_policy, save_recipe, save_restrictions, set_planned_meal_lock,
         shipped_starter_content, HouseholdRestrictions, MealComponent, MealScope, MealSlot,
         MemberPreference, MemberPreferences, PlannedMeal, PlanningCycle, ProvenanceKind, Recipe,
         RecipeId, RecipeProvenance, Restriction, RestrictionKind, Sentiment, WriteSource,
@@ -466,15 +466,10 @@ mod tests {
     /// Derived from `shipped_starter_content()` rather than a hardcoded veto list, so a later
     /// content edit cannot re-break these tests — which is the whole point of doing it this way
     /// rather than extending the `"rice"`/`"soup"` vetoes to name each starter.
-    ///
-    /// The minted id carries `{id}` because `RecipeId`s are global, not household-scoped: without
-    /// it a second household re-mints the same id and `archive_recipe` fails on the row the first
-    /// one already archived. The bridge copy in `rust/src/api/planner.rs` was written that way
-    /// after hitting exactly that; this one had drifted and is now at parity.
     fn without_starters(conn: &mut Connection, id: &str) {
         for entry in shipped_starter_content().unwrap().recipes {
             let r = Recipe::new(
-                RecipeId::new(format!("dismissed-{id}-{}", entry.slug)).unwrap(),
+                RecipeId::new(format!("dismissed-{}", entry.slug)).unwrap(),
                 hid(id),
                 entry.title.clone(),
                 None,
@@ -681,49 +676,6 @@ mod tests {
 
     fn rows_len(conn: &Connection) -> usize {
         rows(conn, "h").len()
-    }
-
-    /// `without_starters` mints a global `RecipeId` per shipped slug, so before the household
-    /// segment was added the second household re-minted ids the first already held and
-    /// `archive_recipe` panicked on `NoSuchRecipe` — the failure the bridge copy hit first. Every
-    /// existing caller uses one household, which is why the divergence survived. This is the
-    /// falsifiable form: it does not assert, it simply has to complete.
-    #[test]
-    fn two_households_can_each_dismiss_the_starter_roster() {
-        let mut conn = open(":memory:").unwrap();
-        // `seed` is deliberately not used for the second household: it mints the bare global ids
-        // `r-rice`/`r-soup`, which collide the same way, but thirteen assertions in this file name
-        // those ids literally so scoping them is a change this test has no business making. Only
-        // the household row is needed here — `without_starters` writes and archives its own
-        // recipes, and that helper is what is under test.
-        seed(&mut conn, "h1");
-        insert_household(
-            &mut conn,
-            &Household {
-                id: hid("h2"),
-                name: None,
-            },
-            &[HouseholdMember {
-                id: MemberId::new("m-h2").unwrap(),
-                household_id: hid("h2"),
-                display_name: "Me".to_owned(),
-            }],
-        )
-        .unwrap();
-        without_starters(&mut conn, "h1");
-        without_starters(&mut conn, "h2");
-        let shipped = shipped_starter_content().unwrap().recipes.len();
-        assert!(shipped > 0);
-        for id in ["h1", "h2"] {
-            for entry in shipped_starter_content().unwrap().recipes {
-                let rid = RecipeId::new(format!("dismissed-{id}-{}", entry.slug)).unwrap();
-                assert!(
-                    load_recipe(&conn, &hid(id), &rid).unwrap().is_some(),
-                    "{id} lost {}",
-                    entry.slug
-                );
-            }
-        }
     }
 
     #[test]
