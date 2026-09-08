@@ -66,6 +66,38 @@ flutter:
   # the material Icons class.
   uses-material-design: true
 
+  assets:
+    - assets/fonts/atkinsonhyperlegible/OFL.txt
+    - assets/fonts/shipporimincho/OFL.txt
+    - assets/fonts/zenoldmincho/OFL.txt
+    - assets/fonts/zenmarugothic/OFL.txt
+
+  fonts:
+    - family: Atkinson Hyperlegible
+      fonts:
+        - asset: assets/fonts/atkinsonhyperlegible/AtkinsonHyperlegible-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/atkinsonhyperlegible/AtkinsonHyperlegible-Bold.ttf
+          weight: 700
+    - family: Shippori Mincho
+      fonts:
+        - asset: assets/fonts/shipporimincho/ShipporiMincho-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/shipporimincho/ShipporiMincho-Bold.ttf
+          weight: 700
+    - family: Zen Old Mincho
+      fonts:
+        - asset: assets/fonts/zenoldmincho/ZenOldMincho-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/zenoldmincho/ZenOldMincho-Bold.ttf
+          weight: 700
+    - family: Zen Maru Gothic
+      fonts:
+        - asset: assets/fonts/zenmarugothic/ZenMaruGothic-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/zenmarugothic/ZenMaruGothic-Bold.ttf
+          weight: 700
+
   # To add assets to your application, add an assets section, like this:
   # assets:
   #   - images/a_dot_burr.jpeg

@@ -78,6 +78,7 @@ class _CoverScreenState extends ConsumerState<CoverScreen> {
     final low = result.attention
         .where((a) => a.urgency == UrgencyDto.low)
         .toList();
+    final needsYou = high.isNotEmpty;
     final assumptionLines = [
       for (final code in result.assumptions) ?assumptionCopy(code),
     ];
@@ -87,7 +88,12 @@ class _CoverScreenState extends ConsumerState<CoverScreen> {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        Text(_banner(view), style: textTheme.titleMedium),
+        Text(
+          _banner(view),
+          style: textTheme.titleMedium?.copyWith(
+            color: needsYou ? Theme.of(context).colorScheme.tertiary : null,
+          ),
+        ),
         if (firstRun) ...[const SizedBox(height: 4), const Text(firstRunCopy)],
         if (_accepted && view.outcome.applied) ...[
           const SizedBox(height: 4),
@@ -112,6 +118,10 @@ class _CoverScreenState extends ConsumerState<CoverScreen> {
             child: Semantics(
               label: acceptSemanticsCopy,
               child: FilledButton(
+                style: FilledButton.styleFrom(
+                  backgroundColor: Theme.of(context).colorScheme.tertiary,
+                  foregroundColor: Theme.of(context).colorScheme.onTertiary,
+                ),
                 onPressed: _busy ? null : _accept,
                 child: const Text('Accept'),
               ),

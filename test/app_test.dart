@@ -8,7 +8,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:meal_mate/app/app.dart';
+import 'package:meal_mate/app/appearance_provider.dart';
+import 'package:meal_mate/app/font_licenses.dart';
 import 'package:meal_mate/app/router.dart';
+import 'package:meal_mate/app/theme.dart';
 import 'package:meal_mate/features/household/household_provider.dart';
 import 'package:meal_mate/features/household/household_screen.dart';
 import 'package:meal_mate/features/settings/backup_copy.dart';
@@ -60,11 +63,17 @@ const okStarterReport = StarterInstallReportDto(
 /// A steady-state install: it short-circuited and wrote nothing, so nothing downstream needs
 /// re-reading. `okStarterReport` models a *first* install, which is why every harness launch
 /// re-reads the pantry and the recipe library unless a test opts out with this.
+///
+/// The short-circuit writes nothing, so `installed` and `catalogInstalled` are 0 while `skipped`
+/// is the whole shipping roster: `install_starter_content` returns `skipped: recipes.len()` on
+/// that path, and `available` is `shipped_starter_content().recipes.len()` — both 49, the same
+/// roster `okStarterReport` above installs. These had drifted to the 24-entry federal-only roster
+/// and nothing caught it, because the widget logic reads every field only as `> 0`.
 const noCatalogStarterReport = StarterInstallReportDto(
   installed: 0,
-  skipped: 24,
+  skipped: 49,
   catalogInstalled: 0,
-  available: 24,
+  available: 49,
   pendingCookReview: 10,
 );
 
@@ -980,6 +989,7 @@ const knownKinds = [
 
 Widget harness({
   String initial = '/plan',
+  AppearanceSelection appearance = const AppearanceSelection.defaults(),
   FutureOr<HealthReport> Function()? health,
   FutureOr<HouseholdDto> Function()? household,
   Future<HouseholdDto> Function(String, String?)? rename,
@@ -1019,6 +1029,7 @@ Widget harness({
   BackupActions? backup,
 }) => ProviderScope(
   overrides: [
+    appearanceProvider.overrideWith(() => _FakeAppearanceNotifier(appearance)),
     // Unconditional, like the planner's: the Cover route is reachable from Plan, and an
     // un-overridden provider would reach the real bridge.
     coverProvider.overrideWith(() => _FakeCoverNotifier(cover, decide)),
@@ -1100,6 +1111,15 @@ Widget harness({
   ],
   child: App(initialLocation: initial),
 );
+
+class _FakeAppearanceNotifier extends AppearanceNotifier {
+  _FakeAppearanceNotifier(this._initial);
+
+  final AppearanceSelection _initial;
+
+  @override
+  AppearanceSelection build() => _initial;
+}
 
 /// A Cover outcome, defaults benign: one covered slot, no attention, quiet assumptions.
 CoverCycleOutcomeDto coverOutcome({
@@ -1210,6 +1230,7 @@ void usePixel5(WidgetTester tester) {
   addTearDown(tester.view.resetDevicePixelRatio);
   addTearDown(tester.platformDispatcher.clearPlatformBrightnessTestValue);
   addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+  addTearDown(tester.platformDispatcher.clearAccessibilityFeaturesTestValue);
 }
 
 /// Same device pixel ratio as [usePixel5] but tall enough for the whole Restrictions form —
@@ -1226,6 +1247,7 @@ void useTallView(WidgetTester tester) {
   addTearDown(tester.view.resetDevicePixelRatio);
   addTearDown(tester.platformDispatcher.clearPlatformBrightnessTestValue);
   addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+  addTearDown(tester.platformDispatcher.clearAccessibilityFeaturesTestValue);
 }
 
 void main() {
@@ -1252,6 +1274,119 @@ void main() {
       expect(coverOffset('4294967297'), 2147483647);
       expect(coverOffset('-4294967297'), -2147483648);
     });
+  });
+
+  testWidgets(
+    'all appearance candidates survive the route, brightness, and scale matrix',
+    (tester) async {
+      usePixel5(tester);
+      const routes = <String>[
+        '/plan',
+        '/plan/cover',
+        '/recipes',
+        '/recipes/r-1',
+        '/shopping',
+        '/pantry',
+        '/settings',
+      ];
+
+      for (final palette in PaletteChoice.values) {
+        for (final type in TypeChoice.values) {
+          for (final brightness in Brightness.values) {
+            tester.platformDispatcher.platformBrightnessTestValue = brightness;
+            for (final scale in const <double>[1, 2]) {
+              tester.platformDispatcher.textScaleFactorTestValue = scale;
+              for (final route in routes) {
+                final cell =
+                    '${palette.name}/${type.name}/${brightness.name}/'
+                    '${scale}x/$route';
+                await tester.pumpWidget(
+                  KeyedSubtree(
+                    key: UniqueKey(),
+                    child: harness(
+                      initial: route,
+                      appearance: AppearanceSelection(
+                        palette: palette,
+                        type: type,
+                      ),
+                    ),
+                  ),
+                );
+                await tester.pumpAndSettle();
+                expect(tester.takeException(), isNull, reason: cell);
+
+                final materialApp = tester.widget<MaterialApp>(
+                  find.byType(MaterialApp),
+                );
+                expect(
+                  materialApp.theme!.colorScheme,
+                  candidateColorScheme(palette, Brightness.light),
+                  reason: '$cell light scheme',
+                );
+                expect(
+                  materialApp.darkTheme!.colorScheme,
+                  candidateColorScheme(palette, Brightness.dark),
+                  reason: '$cell dark scheme',
+                );
+              }
+            }
+          }
+        }
+      }
+    },
+  );
+
+  testWidgets('appearance pickers switch the live app without replacing App', (
+    tester,
+  ) async {
+    usePixel5(tester);
+    await tester.pumpWidget(harness(initial: '/settings'));
+    await tester.pumpAndSettle();
+    final appState = tester.state(find.byType(App));
+
+    final palettePicker = find.byKey(const ValueKey('appearance-palette'));
+    await tester.scrollUntilVisible(palettePicker, 300);
+    await tester.tap(palettePicker);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(PaletteChoice.navyCream.label).last);
+    await tester.pumpAndSettle();
+
+    final typePicker = find.byKey(const ValueKey('appearance-type pairing'));
+    await tester.ensureVisible(typePicker);
+    await tester.tap(typePicker);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(TypeChoice.zenMaruAtkinson.label).last);
+    await tester.pumpAndSettle();
+
+    expect(tester.state(find.byType(App)), same(appState));
+    final materialApp = tester.widget<MaterialApp>(find.byType(MaterialApp));
+    expect(
+      materialApp.theme!.colorScheme,
+      candidateColorScheme(PaletteChoice.navyCream, Brightness.light),
+    );
+    expect(
+      materialApp.theme!.textTheme.titleLarge!.fontFamily,
+      'Zen Maru Gothic',
+    );
+  });
+
+  testWidgets('Settings opens the standard page with all font licenses', (
+    tester,
+  ) async {
+    usePixel5(tester);
+    registerFontLicenses();
+    await tester.pumpWidget(harness(initial: '/settings'));
+    await tester.pumpAndSettle();
+    final entry = find.byKey(const ValueKey('open-source-licenses'));
+    await tester.scrollUntilVisible(entry, 300);
+    await tester.tap(entry);
+    await tester.pumpAndSettle();
+
+    expect(find.byType(LicensePage), findsOneWidget);
+    expect(find.text('Atkinson Hyperlegible'), findsOneWidget);
+    expect(find.text('Shippori Mincho'), findsOneWidget);
+    expect(find.text('Zen Maru Gothic'), findsOneWidget);
+    expect(find.text('Zen Old Mincho'), findsOneWidget);
   });
 
   testWidgets('all five destinations are reachable', (tester) async {
@@ -1308,7 +1443,13 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    expect(find.text(needsYouCopy(2)), findsOneWidget);
+    final needsBanner = find.text(needsYouCopy(2));
+    expect(needsBanner, findsOneWidget);
+    final needsContext = tester.element(needsBanner);
+    expect(
+      tester.widget<Text>(needsBanner).style!.color,
+      Theme.of(needsContext).colorScheme.tertiary,
+    );
     expect(find.text(infeasibleQuestionCopy), findsOneWidget);
     expect(find.text(wordingQuestionCopy), findsOneWidget);
     // NeedsAttention hides Accept (AC-4 refusal path).
@@ -1330,7 +1471,21 @@ void main() {
     expect(find.text(questionsHeading), findsNothing);
     // Pantry stays quiet: non-blocking, no disclosure entry (invariant 6).
     expect(find.text(assumptionsHeading), findsNothing);
-    expect(find.text('Accept'), findsOneWidget);
+    final accept = find.widgetWithText(FilledButton, 'Accept');
+    expect(accept, findsOneWidget);
+    final acceptContext = tester.element(accept);
+    expect(
+      tester
+          .widget<FilledButton>(accept)
+          .style!
+          .backgroundColor!
+          .resolve(<WidgetState>{}),
+      Theme.of(acceptContext).colorScheme.tertiary,
+    );
+    expect(
+      tester.widget<Text>(find.text(coveredCopy)).style!.color,
+      isNot(Theme.of(acceptContext).colorScheme.tertiary),
+    );
   });
 
   testWidgets(
@@ -4592,6 +4747,33 @@ void main() {
     await tester.pumpAndSettle();
     expectVisible(tester, find.text('Give the recipe a title.'));
     expect(saves, 0);
+  });
+
+  testWidgets('error reveal is immediate when animations are disabled', (
+    tester,
+  ) async {
+    usePixel5(tester);
+    tester.platformDispatcher.accessibilityFeaturesTestValue =
+        const FakeAccessibilityFeatures(disableAnimations: true);
+    await tester.pumpWidget(harness(initial: '/recipes/new'));
+    await tester.pumpAndSettle();
+
+    await tapVisible(tester, find.widgetWithText(FilledButton, 'Save recipe'));
+    await tester.pump();
+    await tester.pump();
+
+    expectVisible(tester, find.text('Give the recipe a title.'));
+    final scrollables = tester.stateList<ScrollableState>(
+      find.byType(Scrollable),
+    );
+    expect(scrollables, isNotEmpty);
+    expect(
+      scrollables.every(
+        (scrollable) => !scrollable.position.isScrollingNotifier.value,
+      ),
+      isTrue,
+      reason: 'reduced motion must not leave a scroll animation running',
+    );
   });
 
   // The row branch, and the case the two-row form cannot show: `tapVisible` scrolls Save —

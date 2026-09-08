@@ -1,5 +1,7 @@
 # Known Issues — LOW
 
+- **Accept does not visibly settle after a covered week is accepted** (`lib/features/planning/cover_screen.dart`, `docs/bugs/MVP-033_ACCEPT_FEEDBACK.md`) — on Samsung Galaxy S20 FE / Android 13, release `v1.0.1+2`, the first-run proposal accepted in one tap and exposed the shopping-list route, but the enabled-looking **Accept** button stayed in place with no explicit success acknowledgement. The result is ambiguous feedback, not a failed write or blocked navigation. Fix: after a successful `_notifier.accept()`, replace or disable the primary action and retain the calm shopping-list route; cover success, failure, and repeat-tap behavior in widget tests. **Status:** OPEN.
+
 ## orch/4 -- 2026-08-28
 
 Full review: (lost) `wt/4/.orch/redteam-app-dart-2026-08-28T1845.md` was removed with the step-4 worktree before the orchestrator relayed it; the entries below are the only surviving record. Follow-up review: /home/davidlinux/.claude/reviews/redteam-mvp003-integration-verify-2026-08-28T1904-03fd.md
@@ -1230,6 +1232,27 @@ Full review: /home/davidlinux/.claude/reviews/redteam-mvp-032-generalized-2026-0
 
 - **`starter-candidates.md` contradicts itself on who made the five authorship rejections** (`docs/research/starter-candidates.md:30`, `:269`) -- line 30 says the five were "rejected here, not passed to the owner"; lines 269-277 say the owner marked the rows and "the rejections above stand"; `docs/ROADMAP.md:208` summarises AC-1 as "owner marks dated 2026-09-05 (26 `select`, 5 `reject`)". AC-1's whole content is the audit trail, so a document stating both positions weakens it. Fix: reword line 30's parenthetical to say the research pass rejected under the card's authorship rule and the owner ratified at the stop.
   Full review: /home/davidlinux/.claude/reviews/redteam-mvp-032-generalized-2026-09-07T0957-70a3.md
+  **Status:** OPEN
+
+---
+
+## master -- 2026-09-07
+
+Source: rust/crates/food-domain/src/starter.rs
+Full review: /home/davidlinux/.claude/reviews/redteam-starter-allergen-federal-tests-2026-09-07T1823-7363.md
+
+### LOW
+
+- **The allergen sweep is case-sensitive while `assess` is not** (`rust/crates/food-domain/src/starter.rs:1026`) -- `name.contains(word)` matches raw case; `assess` lowercases tokens. All 530 line names are lowercase today by accident of authoring, with no assertion pinning it, so a future line named `"Ziti"` or `"Ranch dressing"` is skipped entirely and ships the defect the sweep exists to catch. Fix: lowercase once per line before the kind loop, or assert every line name equals its own lowercase.
+  Full review: /home/davidlinux/.claude/reviews/redteam-starter-allergen-federal-tests-2026-09-07T1823-7363.md
+  **Status:** OPEN
+
+- **`ravioli-bake`'s rule-version-1 miss is pinned in two tests** (`rust/crates/food-domain/src/starter.rs:1004`, `:1124`) -- the `RECORDED_RULE_V1_MISSES` row and `ravioli_bake_declares_gluten_only_through_its_sauce_line` both assert the same negative about the same line, so the `RULE_VERSION` 1 -> 2 bump has two sites to update for one miss and can update one and miss the other. Fix: keep the sweep row (line-scoped, coupled to `policy.expected_conflicts_note`) and fold the sauce-line nuance into its doc comment, or cross-reference the two.
+  Full review: /home/davidlinux/.claude/reviews/redteam-starter-allergen-federal-tests-2026-09-07T1823-7363.md
+  **Status:** OPEN
+
+- **`unwrap_or_default()` guards a state the same test already proved unreachable** (`rust/crates/food-domain/src/starter.rs:835`) -- `:813` unconditionally asserts `source_url().is_some_and(|u| !u.is_empty())` for the same recipe, so the `None` arm cannot be reached; the guard also re-reads the option instead of binding it once. Fix: hoist one `let url` above the first assertion, or use `.expect()` so a future reordering fails loudly rather than degrading to `""`.
+  Full review: /home/davidlinux/.claude/reviews/redteam-starter-allergen-federal-tests-2026-09-07T1823-7363.md
   **Status:** OPEN
 
 ---

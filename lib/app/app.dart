@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import 'package:meal_mate/app/appearance_provider.dart';
 import 'package:meal_mate/app/router.dart';
 import 'package:meal_mate/app/theme.dart';
 import 'package:meal_mate/features/household/household_provider.dart';
@@ -71,6 +72,7 @@ class _AppState extends ConsumerState<App> {
 
   @override
   Widget build(BuildContext context) {
+    final appearance = ref.watch(appearanceProvider);
     // Holds householdProvider — and through it healthReportProvider — for the
     // app's lifetime, so the DB is opened, migrated and bootstrapped exactly
     // once. `ref.read` registers no listener: under a Riverpod major that
@@ -125,8 +127,13 @@ class _AppState extends ConsumerState<App> {
       title: 'Kimatta (dev)',
       restorationScopeId: 'app',
       scaffoldMessengerKey: _messengerKey,
-      theme: lightTheme,
-      darkTheme: darkTheme,
+      theme: buildTheme(appearance.palette, appearance.type, Brightness.light),
+      darkTheme: buildTheme(
+        appearance.palette,
+        appearance.type,
+        Brightness.dark,
+      ),
+      themeMode: ThemeMode.system,
       routerConfig: _router,
       builder: (context, child) => Stack(
         children: [

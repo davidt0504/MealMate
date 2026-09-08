@@ -41,6 +41,18 @@ The app looks like Kimatta rather than a Material seed: calm, decided, warm by v
 - **The lab is marked throwaway** with a `ponytail:` comment naming this card's Phase B as the strip step, and never ships past a build the owner installs. A picker in a beta build is a stop condition.
 - Type candidates: Shippori Mincho + Atkinson Hyperlegible; Zen Old Mincho + Atkinson Hyperlegible; Zen Maru Gothic + Atkinson Hyperlegible; Atkinson Hyperlegible alone with hierarchy by size and weight. Palette candidates as listed in `.impeccable.md`.
 
+### Planning clarifications (2026-09-07)
+
+- “Theme only” permits the two Settings preview controls, one permanent standard Flutter
+  licenses-page entry point required by AC-4, and wiring the accent token to the two semantic
+  sites named above. It does not permit other layout, copy, route, or component redesign.
+- `primary` remains quiet ink for ordinary controls; the rare accent is `tertiary`, consumed
+  locally by **Accept** and a non-zero “needs you” banner so every filled button does not become
+  accent-colored.
+- The owner approves both light and dark schemes belonging to the selected palette. Runtime
+  brightness continues to follow `ThemeMode.system`; brightness is not a third picker or a
+  persisted preference.
+
 ## Scope
 
 **Phase A — appearance lab**

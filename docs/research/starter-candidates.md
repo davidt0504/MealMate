@@ -2,7 +2,10 @@
 
 > Research output and **owner decision document**. Nothing under
 > `rust/crates/food-domain/content/` changes until every row below carries a dated
-> `select` / `reject` / `hold` mark and both decision items are answered.
+> `select` / `reject` / `hold` mark and both decision items are answered. The gate covers the
+> rows put to the owner: a row excluded on authorship never enters it, because that rubric
+> exclusion is not the owner's to lower (see the `federal author` legend and §8). The five `no`
+> rows are therefore unmarked by design, not pending.
 
 - **Researched:** 2026-09-05, by read-only page reads of `.gov` recipe collections.
 - **Card:** `docs/task/mvp/MVP-032_STARTER_CONTENT_II_FEDERAL_SOURCES.md`
@@ -27,7 +30,11 @@ omitted.
 
 `federal author` — `literal-yes` = the recipe page's own source line names a federal
 agency; `trace-only` = federal only via the authorship-trace URL; `no` = traces to a
-non-federal body (rejected here, not passed to the owner).
+non-federal body. The `no` rows were rejected by this research pass under the card's
+authorship rule rather than being put to the owner as a choice — authorship is the one
+threshold the card says is never lowered — and the owner's 2026-09-05 review in §8 records
+those rejections standing. So they carry no owner `select`/`reject` mark of their own, and
+`docs/ROADMAP.md`'s AC-1 evidence sentence should not be read as reporting one.
 
 `restriction kinds` — **the real matcher's output**, not a prediction. Produced by running
 `food_domain::assess` over each row's planned authored ingredient names against all 11
@@ -81,9 +88,9 @@ agency — see decision item 1.
 
 | collection (as printed in the source line) | authorship trace URL | what that page says |
 |---|---|---|
-| *Deliciously Healthy Dinners* | `nhlbi.nih.gov/resources/keep-beat-recipes-deliciously-healthy-dinners` | NHLBI publication, January 2010; "a brand new version of the popular Keep the Beat classic cookbook" with "75 new deliciously healthy recipes". No developer named, no testing statement. |
+| *Deliciously Healthy Dinners* | `nhlbi.nih.gov/resources/keep-beat-recipes-deliciously-healthy-dinners` | NHLBI publication, January 2010; "a brand new version of the popular Keep the Beat classic cookbook" with "75 new deliciously healthy recipes". No developer named, no testing statement **on this landing page** — **corrected 2026-09-07: the publication itself names both.** NIH Pub 10-2921's acknowledgments read "Recipes were developed by David Kamen … Chef/Instructor at the Culinary Institute of America, and Colleen Pierre … consultant", with testing by Northern Illinois University. Reading the landing page instead of the publication is what let this through; see the AC-2 amendment on the `MVP-032` `Done` row in `docs/ROADMAP.md` and the HIGH entry in `KNOWN_ISSUES.md`. |
 | *Deliciously Healthy Family Meals* | `nhlbi.nih.gov/resources/keep-beat-recipes-deliciously-healthy-family-meals` | NHLBI publication; "This Keep the Beat cookbook contains 40 recipes **developed just for the NHLBI**". No testing statement. |
-| *Delicious Heart Healthy Latino Recipes* | `nhlbi.nih.gov/resources/delicious-heart-healthy-latino-recipes-book-platillos-latinos-sabrosos-y-saludables` | NHLBI publication, April 2024. No developer credit, no testing statement, no copyright statement. |
+| *Delicious Heart Healthy Latino Recipes* | `nhlbi.nih.gov/resources/delicious-heart-healthy-latino-recipes-book-platillos-latinos-sabrosos-y-saludables` | NHLBI publication, April 2024. No developer credit, no testing statement, no copyright statement **on this landing page** — **corrected 2026-09-07:** the publication (NIH Pub 24-HL-4049S) states NHLBI developed the cookbook, and credits recipe *testing* to Wahida Karmally and colleagues at Columbia University's Irving Center, with review by promotores from the National Association of Community Health Workers. Development is federal; a named non-federal party tested. |
 | *Stay Young At Heart* | `nhlbi.nih.gov/health/educational/wecan/eat-right/fun-family-recipes.htm` | NHLBI collection, part of a collaboration between NHLBI, NIDDK, NICHD and NCI — all federal institutes. |
 | *Heart Healthy Home Cooking African American Style* | `nhlbi.nih.gov/resources/heart-healthy-home-cooking-african-american-style` | NHLBI/NIH, February 2021, NIH Publication No. 21-HL-3792. **"26 tested and tasty favorite African American dishes"** — the only explicit testing claim found anywhere in this research. |
 | *Honoring the Gift of Heart Health Manual for American Indians and Native Alaskans* | `nhlbi.nih.gov/education/heart-truth/CHW/HTGHH` | Developed by NHLBI, the Center on Minority Health and Health Disparities and the IHS **"in partnership with Laguna Pueblo in New Mexico, Bristol Bay Area Health Corporation in Alaska, and the Ponca Tribe in Oklahoma."** Named co-developers are tribal organizations, which are not federal agencies. |

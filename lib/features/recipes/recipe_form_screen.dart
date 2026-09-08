@@ -290,7 +290,9 @@ class _RecipeFormScreenState extends ConsumerState<RecipeFormScreen> {
       if (context != null) {
         Scrollable.ensureVisible(
           context,
-          duration: const Duration(milliseconds: 200),
+          duration: MediaQuery.disableAnimationsOf(context)
+              ? Duration.zero
+              : const Duration(milliseconds: 200),
         );
       }
     });

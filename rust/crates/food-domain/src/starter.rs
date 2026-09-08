@@ -767,6 +767,46 @@ mod tests {
         );
     }
 
+    /// The mechanizable half of the card's authorship constraint, and deliberately named for what
+    /// it actually decides. `.gov` is **not** federal-only: CISA issues `.gov` to state, local,
+    /// tribal and territorial governments too, and the card excludes state content as firmly as
+    /// partner content. So this is necessary and nowhere near sufficient -- it catches a `.edu` or
+    /// a `.com` reaching CI, and nothing subtler. Which body published the page, and whether that
+    /// body wrote the recipe, is settled by AC-2's fresh-context rights review (section A of
+    /// `docs/research/mvp-032-verifier-prompt.txt`); on 2026-09-07 that review failed 18 of 24
+    /// entries whose hosts all pass this check, which is the measure of the gap.
+    ///
+    /// Deliberately not a URL parser: there is no url crate in the tree and none is worth adding
+    /// for a test over our own content. A scheme-less string is rejected outright rather than
+    /// guessed at, and the authority ends at the first `/`, `?` or `#`, so a query string cannot
+    /// smuggle a `.gov` past the suffix test. Swap it for a parser the day this reads a URL from
+    /// outside the repo.
+    fn government_host(url: &str) -> bool {
+        let Some((_, rest)) = url.split_once("://") else {
+            return false;
+        };
+        let end = rest.find(['/', '?', '#']).unwrap_or(rest.len());
+        let host = &rest[..end];
+        host.ends_with(".gov") || host.ends_with(".mil")
+    }
+
+    #[test]
+    fn government_host_reads_the_authority_and_nothing_else() {
+        assert!(government_host(
+            "https://www.nhlbi.nih.gov/health/heart-healthy-living/healthy-foods/healthy-eating-recipes"
+        ));
+        // No path: the arm no shipped entry reaches, since all 24 carry one.
+        assert!(government_host("https://www.nhlbi.nih.gov"));
+        assert!(!government_host("https://extension.psu.edu/recipe"));
+        // Userinfo parses into the authority, so the whole string is the host and it fails.
+        assert!(!government_host("https://www.nhlbi.nih.gov@evil.example/x"));
+        // A query or fragment ends the authority; without that these two read as `.gov` hosts.
+        assert!(!government_host("https://evil.example?src=nih.gov"));
+        assert!(!government_host("https://evil.example#nih.gov"));
+        // Scheme-less: rejected rather than guessed at, so a bare host cannot pass by accident.
+        assert!(!government_host("nhlbi.nih.gov/health/x"));
+    }
+
     #[test]
     fn every_federal_entry_names_its_agency_and_url() {
         // AC-2's automated half: the rights arm ships on a checkable claim, so both halves of
@@ -798,6 +838,14 @@ mod tests {
             assert!(
                 rights.attribution().is_some_and(|a| !a.is_empty()),
                 "{}: federal basis without the captured attribution line",
+                recipe.slug
+            );
+            let url = recipe.provenance.source_url().unwrap_or_default();
+            assert!(
+                government_host(url),
+                "{}: federal basis on a host that is not even a government one -- {url:?}. \
+                 Note the converse is not checked here and cannot be: `.gov` is open to state, \
+                 local and tribal governments, so passing this proves very little.",
                 recipe.slug
             );
         }
@@ -915,45 +963,131 @@ mod tests {
         }
     }
 
-    /// `assess` reads `IngredientLine::name` and nothing else, so a pasta line named only by its
-    /// shape matches no `GLUTEN_TERMS` entry and the dish ships gluten-free by declaration. Three
-    /// did. The names now carry the word the catalog already uses for them.
+    /// `assess` reads `IngredientLine::name` and nothing else, so a line named only by a pasta
+    /// shape -- or by a sauce or mix whose allergen is not in its name -- matches no term table
+    /// and the dish ships free of that restriction *by declaration*. Three shipped wheat-pasta
+    /// dishes did, and were closed by renaming the lines; the ones no source text lets us rename
+    /// are recorded in `policy.expected_conflicts_note` instead and routed to the `RULE_VERSION`
+    /// 1 -> 2 bump in KNOWN_ISSUES.md.
+    ///
+    /// This sweeps every authored line name against that vocabulary rather than checking a fixed
+    /// list of slugs, so a new entry naming a line `ziti` goes red instead of shipping unnoticed.
+    /// Each recorded miss is exempted per *entry*, not per word: a blanket exemption on the word
+    /// would let the next carrier ship unrecorded, which is the blind spot this test exists to
+    /// close. The exempt arm asserts the miss is still a miss, so the day `RULE_VERSION` goes to
+    /// 2 this goes red and the exception table and the policy note have to be updated together.
     #[test]
-    fn every_pasta_line_name_matches_gluten() {
-        // Read the names out of the file rather than restating them: hard-coded literals would
-        // only re-assert that `GLUTEN_TERMS` contains "pasta", and would keep passing if a line
-        // were shortened back to a bare shape -- which is the defect this pins.
+    fn every_line_name_declares_its_known_allergen_words() {
+        use RestrictionKind::{Dairy, Fish, Gluten};
+
+        // A word a reader takes as naming an allergen, and the kind it should raise.
+        const VOCAB: &[(&str, RestrictionKind)] = &[
+            ("macaroni", Gluten),
+            ("rotini", Gluten),
+            ("orzo", Gluten),
+            ("ravioli", Gluten),
+            ("ziti", Gluten),
+            ("farfalle", Gluten),
+            ("rigatoni", Gluten),
+            ("linguine", Gluten),
+            ("cavatappi", Gluten),
+            ("fusilli", Gluten),
+            ("penne", Gluten),
+            ("angel hair", Gluten),
+            ("soy sauce", Gluten),
+            ("gravy mix", Gluten),
+            ("cream of chicken soup", Gluten),
+            ("worcestershire", Fish),
+            ("ranch", Dairy),
+        ];
+
+        // (slug, word, kind), one row per carrying entry, mirroring the instance lists in
+        // `policy.expected_conflicts_note`. Keyed on the slug on purpose -- see the doc comment.
+        const RECORDED_RULE_V1_MISSES: &[(&str, &str, RestrictionKind)] = &[
+            ("peanut-noodle-bowl", "soy sauce", Gluten),
+            ("vegetable-fried-rice", "soy sauce", Gluten),
+            ("steamed-salmon-and-mushrooms", "soy sauce", Gluten),
+            ("pineapple-chicken-skewers", "soy sauce", Gluten),
+            ("egg-roll-in-a-bowl", "soy sauce", Gluten),
+            ("crockpot-barbecue-chicken", "ranch", Dairy),
+            ("crockpot-chicken-tacos", "ranch", Dairy),
+            ("ravioli-bake", "ravioli", Gluten),
+            ("barbecued-chicken", "worcestershire", Fish),
+            ("easy-shepherds-pie", "worcestershire", Fish),
+            (
+                "crockpot-sausage-and-hashbrown-casserole",
+                "cream of chicken soup",
+                Gluten,
+            ),
+            ("smothered-pork-chops", "cream of chicken soup", Gluten),
+            ("taco-soup", "cream of chicken soup", Gluten),
+            ("smothered-pork-chops", "gravy mix", Gluten),
+        ];
+
         let content = all_starter_content().unwrap();
-        let gluten = HouseholdRestrictions::new([Restriction::Known(RestrictionKind::Gluten)]);
-        let mut checked = 0;
-        for slug in [
-            "crockpot-mac-and-cheese",
-            "sausage-and-broccoli-orzo",
-            "taco-pasta",
-            "meatball-casserole",
-        ] {
-            let entry = content
-                .recipes
-                .iter()
-                .find(|r| r.slug == slug)
-                .unwrap_or_else(|| panic!("{slug} is not in the file"));
-            for name in entry.lines.iter().map(IngredientLine::name) {
-                if ["macaroni", "orzo", "rotini"]
-                    .iter()
-                    .any(|shape| name.contains(shape))
-                {
-                    assert!(
-                        !assess([name], &gluten).conflicts.is_empty(),
-                        "{slug}: line {name:?} names a wheat pasta and matches no gluten term, \
-                         so a gluten-restricted household is not warned"
-                    );
-                    checked += 1;
+        let mut failures: Vec<String> = Vec::new();
+        let mut fired = vec![false; RECORDED_RULE_V1_MISSES.len()];
+        for recipe in &content.recipes {
+            for name in recipe.lines.iter().map(IngredientLine::name) {
+                // Every kind, not the three VOCAB happens to use today: a new VOCAB row carrying
+                // a fourth kind would otherwise never be swept, and nothing else would notice --
+                // `fired` tracks the exception table, not the vocabulary. The `words.is_empty()`
+                // guard below makes the unused kinds free.
+                for kind in RestrictionKind::ALL {
+                    let words: Vec<&str> = VOCAB
+                        .iter()
+                        .filter(|(word, k)| *k == kind && name.contains(word))
+                        .map(|(word, _)| *word)
+                        .collect();
+                    if words.is_empty() {
+                        continue;
+                    }
+                    // Resolve per (name, kind), never per word -- but a line is exempt only when
+                    // *every* allergen word on it is recorded for this entry. Exempting the whole
+                    // line as soon as one word matches would let "ziti with gravy mix" on
+                    // smothered-pork-chops ride its gravy-mix row and ship the ziti miss green,
+                    // which is the blind spot this test exists to close. The failure message
+                    // interpolates `words`, so a mixed line still names both causes.
+                    let mut recorded = 0;
+                    for (i, (slug, word, k)) in RECORDED_RULE_V1_MISSES.iter().enumerate() {
+                        if *k == kind && recipe.slug.as_str() == *slug && name.contains(word) {
+                            recorded += 1;
+                            fired[i] = true;
+                        }
+                    }
+                    let exempt = recorded == words.len();
+                    let restrictions = HouseholdRestrictions::new([Restriction::Known(kind)]);
+                    let warns = !assess([name], &restrictions).conflicts.is_empty();
+                    if exempt && warns {
+                        failures.push(format!(
+                            "{}: line {name:?} is a recorded rule-version-1 {kind:?} miss but now \
+                             warns -- update RECORDED_RULE_V1_MISSES and \
+                             policy.expected_conflicts_note together",
+                            recipe.slug
+                        ));
+                    } else if !exempt && !warns {
+                        failures.push(format!(
+                            "{}: line {name:?} names {words:?} and raises no {kind:?} conflict, \
+                             so a {kind:?}-restricted household is not warned",
+                            recipe.slug
+                        ));
+                    }
                 }
             }
         }
-        assert_eq!(
-            checked, 4,
-            "expected one pasta line in each of the four entries"
+        assert!(failures.is_empty(), "{failures:#?}");
+
+        // A row that matches no line means the record and the content have diverged. Five VOCAB
+        // words match nothing today, so a count of swept lines would not catch that.
+        let cold: Vec<_> = RECORDED_RULE_V1_MISSES
+            .iter()
+            .zip(&fired)
+            .filter(|(_, hit)| !**hit)
+            .map(|(row, _)| row)
+            .collect();
+        assert!(
+            cold.is_empty(),
+            "recorded misses matching no line in the file: {cold:#?}"
         );
     }
 

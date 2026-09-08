@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import 'package:meal_mate/app/appearance_provider.dart';
+import 'package:meal_mate/app/theme.dart';
 import 'package:meal_mate/features/household/household_provider.dart';
 import 'package:meal_mate/features/household/household_screen.dart';
 import 'package:meal_mate/features/planning/planning_cycle.dart';
@@ -162,6 +164,7 @@ class SettingsScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final health = ref.watch(healthReportProvider);
     final household = ref.watch(householdProvider);
+    final appearance = ref.watch(appearanceProvider);
     // Only the destructive pair is gated: an export in flight overwrites nothing.
     final busy = ref.watch(backupBusyProvider);
     final line = switch (health) {
@@ -260,8 +263,99 @@ class SettingsScreen extends ConsumerWidget {
                 ],
               ),
             ),
+          // ponytail: MVP-034 Phase B removes this preview section and its provider after
+          // the owner's dated palette/type pick. The licenses entry below remains.
+          const ListTile(
+            key: ValueKey('appearance-preview'),
+            title: Text('Appearance preview'),
+            subtitle: Text(
+              'Temporary choices for evaluating the Kimatta visual identity.',
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+            child: Column(
+              children: [
+                _AppearancePicker<PaletteChoice>(
+                  label: 'Palette',
+                  value: appearance.palette,
+                  values: PaletteChoice.values,
+                  describe: (choice) => choice.label,
+                  onChanged: (choice) => ref
+                      .read(appearanceProvider.notifier)
+                      .selectPalette(choice),
+                ),
+                const SizedBox(height: 8),
+                _AppearancePicker<TypeChoice>(
+                  label: 'Type pairing',
+                  value: appearance.type,
+                  values: TypeChoice.values,
+                  describe: (choice) => choice.label,
+                  onChanged: (choice) =>
+                      ref.read(appearanceProvider.notifier).selectType(choice),
+                ),
+              ],
+            ),
+          ),
+          ListTile(
+            key: const ValueKey('open-source-licenses'),
+            title: const Text('Open source licenses'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => showLicensePage(
+              context: context,
+              applicationName: 'Kimatta (dev)',
+            ),
+          ),
         ],
       ),
     );
   }
+}
+
+class _AppearancePicker<T> extends StatelessWidget {
+  const _AppearancePicker({
+    required this.label,
+    required this.value,
+    required this.values,
+    required this.describe,
+    required this.onChanged,
+  });
+
+  final String label;
+  final T value;
+  final List<T> values;
+  final String Function(T value) describe;
+  final ValueChanged<T> onChanged;
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    label: label,
+    child: InputDecorator(
+      decoration: InputDecoration(
+        labelText: label,
+        border: const OutlineInputBorder(),
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<T>(
+          key: ValueKey('appearance-${label.toLowerCase()}'),
+          value: value,
+          isExpanded: true,
+          items: [
+            for (final choice in values)
+              DropdownMenuItem<T>(
+                value: choice,
+                child: Text(
+                  describe(choice),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+          ],
+          onChanged: (choice) {
+            if (choice != null) onChanged(choice);
+          },
+        ),
+      ),
+    ),
+  );
 }

@@ -74,4 +74,18 @@ Subagents may be used when the active environment supports them, but independenc
 
 No task implicitly authorizes production/paid resources, destructive replacement, credentials, DNS, signing, store submissions, commit, or push. Cards must call out external actions. Prefer emulators and non-production resources until an owner separately authorizes promotion.
 
+## Owner-build delivery
+
+Owner directive recorded 2026-09-07: a new owner-installable Android build is not handed off as
+a local filesystem path alone. Its corresponding source must be intentionally committed and pushed,
+a new `v*` tag must run `.github/workflows/release-apk.yml` successfully, and the handoff must include
+the direct GitHub Release page or APK link. Verify the release asset exists and record its size and
+SHA-256 digest before calling delivery complete.
+
+A local APK may still be built for verification before the source is ready to publish. Do not attach
+an APK made from an uncommitted or mismatched tree to an older tag, and do not sweep unrelated or
+unreviewed working-tree changes into a release commit merely to satisfy this rule. If the source is
+not yet safe to commit and tag, report the GitHub build as pending rather than presenting the local
+APK as the owner handoff.
+
 A small read-only metadata/dependency validator may be added later if repeated maintenance friction justifies it. Do not add orchestration machinery preemptively.
