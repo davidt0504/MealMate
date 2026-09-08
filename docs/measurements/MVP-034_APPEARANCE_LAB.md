@@ -1,12 +1,32 @@
 # MVP-034 Phase A appearance-lab evidence
 
-Recorded 2026-09-07. Phase A is complete and execution is stopped at the owner-pick gate;
-Phase B has not begun.
+Recorded 2026-09-07 and extended 2026-09-08. The owner approved MVP-034 as an appearance-lab
+deliverable and explicitly retained the lab for continued private-build evaluation. Final palette
+selection and lab removal are deferred to the pre-beta gate in `MVP-022`.
+
+## 2026-09-08 extension
+
+- Added three explicit light/dark directions: **Tea garden**, **Rainy veranda**, and
+  **Cedar · clay**. They interpret calm warmth and confident competence through tinted paper
+  surfaces, low-chroma ink colors, and rare earthen accents.
+- The directional reference was Fumi of Speak Japanese Naturally as a person and teacher, not
+  the channel's visual branding; no artwork, likeness, or channel palette was copied.
+- All 14 schemes pass the existing opacity, no-pure-black/white, and WCAG contrast assertions.
+  Among the added schemes, the lowest body pair is Rainy veranda light
+  `onSurfaceVariant/surfaceDim` at **5.01:1** and the lowest outline pair is Tea garden or Rainy
+  veranda light `outline/surface` at **4.13:1**.
+- **AC-1 PASS (expanded):** the matrix now passes all **784 cells**: 7 palettes × 4 type
+  pairings × 2 brightnesses × 2 scales × 7 routes.
+- Regression gates remain green after the extension: `flutter analyze` passed, full
+  `flutter test` passed **388/388**, and formatting checks passed.
+- Emulator visual checks at 1080×2340: `MVP-034_TEA_GARDEN.png`,
+  `MVP-034_RAINY_VERANDA.png`, `MVP-034_CEDAR_CLAY.png`, and
+  `MVP-034_CEDAR_CLAY_DARK.png`.
 
 ## Candidate implementation
 
-- Four palette choices, each with explicit light and dark `ColorScheme` tokens: Aizome · linen,
-  Navy · cream, Sumi · washi, and Evening kitchen.
+- Seven palette choices, each with explicit light and dark `ColorScheme` tokens: Aizome · linen,
+  Navy · cream, Sumi · washi, Evening kitchen, Tea garden, Rainy veranda, and Cedar · clay.
 - Four type choices: Shippori Mincho + Atkinson Hyperlegible, Zen Old Mincho + Atkinson
   Hyperlegible, Zen Maru Gothic + Atkinson Hyperlegible, and Atkinson Hyperlegible alone.
 - Settings owns the only preview mount point (`rg -n 'appearance-preview' lib` returns one
@@ -16,7 +36,7 @@ Phase B has not begun.
   banner. Focused widget assertions pin both sites. Recipe-form error reveal uses a zero-duration
   scroll when system animations are disabled, also pinned by a widget test.
 
-## Automated evidence
+## Initial automated evidence (2026-09-07)
 
 - **AC-1 PASS:** `flutter test test/app_test.dart --plain-name "all appearance candidates
   survive the route, brightness, and scale matrix"` passed all 448 cells: 4 palettes × 4 type
@@ -61,10 +81,12 @@ Source commit, subset command, source/output hashes, and OKLCH authoring anchors
   above.
 - APK export PASS:
   `C:\Users\David\Downloads\mealmate-dev-20260907-1924.apk`.
-- **Two owner-phone installs NOT VERIFIED:** no physical device was attached. Install/export to
-  both owner phones and the owner's dated appearance choice remain the gate before Phase B.
+- **Two owner-phone installs NOT VERIFIED:** no physical device was attached during the initial
+  run. On 2026-09-08 the owner accepted this residual private-build coverage risk and approved the
+  card as Done; representative physical-device release verification remains part of `MVP-022`.
 
-## Owner decision required
+## Deferred owner decision
 
-Record a dated choice of one palette and one type pairing, and confirm that its light and dark
-schemes should ship under `ThemeMode.system`. Phase B must not start until that decision exists.
+Before `MVP-022` can ship a beta, record a dated choice of one palette and one type pairing,
+confirm its light and dark schemes under `ThemeMode.system`, then strip the preview controls and
+unused candidates. The private-build lab remains intentionally available until then.

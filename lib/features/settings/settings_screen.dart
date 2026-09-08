@@ -263,8 +263,8 @@ class SettingsScreen extends ConsumerWidget {
                 ],
               ),
             ),
-          // ponytail: MVP-034 Phase B removes this preview section and its provider after
-          // the owner's dated palette/type pick. The licenses entry below remains.
+          // ponytail: MVP-022 removes this preview section and its provider before beta,
+          // after the owner's dated palette/type pick. The licenses entry below remains.
           const ListTile(
             key: ValueKey('appearance-preview'),
             title: Text('Appearance preview'),

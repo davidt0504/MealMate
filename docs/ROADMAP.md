@@ -5,8 +5,8 @@ This is the durable operational source of truth after the MVP as well as during 
 ## Current milestone
 
 - **Milestone:** LOCAL-CORE-LOOP-READY; EMULATOR-PERSISTENCE-READY achieved 2026-08-29, DOMAIN-READY achieved 2026-08-27.
-- **Current implementation task:** `MVP-034` — `In Progress` (Phase A appearance lab).
-- **Next implementation task:** None while `MVP-034` is `In Progress`. `MVP-018` stays `Draft`, blocked until `DEC-004` reaches `Done` (owner trademark search, SEQUENCE step 41), and resumes as next after `MVP-034`. `DEC-003` reached `Done` 2026-09-03.
+- **Current implementation task:** None. `MVP-034` reached `Done` 2026-09-08.
+- **Next implementation task:** None. `MVP-018` stays `Draft`, blocked until `DEC-004` reaches `Done` (owner trademark search, SEQUENCE step 41), and resumes as next afterward. `DEC-003` reached `Done` 2026-09-03.
 - **Concurrent owner-paced work:** `DEC-004` — `In Progress`; it does not occupy the implementation lane, but it still directly gates `MVP-018`, `MVP-021`, and `MVP-022` and transitively gates `MVP-019` and `MVP-020`.
 - **Platform:** Android MVP and initial launch. iOS is the first post-launch platform priority.
 
@@ -23,7 +23,7 @@ This is the durable operational source of truth after the MVP as well as during 
 | LOCAL-CORE-LOOP-READY | MVP-006 through MVP-017 and MVP-023 through MVP-025 Done, including offline recovery. **Closed 2026-09-03** — all named cards Done (MVP-011 AC-3 and MVP-025 AC-4 under recorded D-027 acceptances; MVP-024 AC-8 owner-owed before DEC-003). |
 | REAL-DEV-BACKEND-READY | DEC-003, MVP-018, and MVP-019 Done in a non-production project. **Progress (2026-09-03):** DEC-003 `Done`. |
 | SHARING-SECURITY-READY | MVP-020 and MVP-021 security, projection, and routing evidence passes |
-| PRODUCTION-BETA-READY | DEC-004 Done and MVP-022 passes; production activation remains a separately authorized action. **Progress (2026-09-07):** first-run prerequisites `MVP-032` and `MVP-033` are `Done`; `MVP-034` remains before `MVP-022`. |
+| PRODUCTION-BETA-READY | DEC-004 Done and MVP-022 passes; production activation remains a separately authorized action. **Progress (2026-09-08):** first-run prerequisites `MVP-032`, `MVP-033`, and `MVP-034` are `Done`; MVP-022 owns the hard gate to finalize and strip the temporary appearance lab before beta. |
 | MONETIZATION-READY | DEC-006, DEC-007, DEC-008, and MVP-026 through MVP-029 Done. All three decisions are members because MVP-026 depends on DEC-007 and MVP-029 on DEC-008; omitting them would leave the gate unsatisfiable by its own membership |
 | PUBLIC-LAUNCH-READY | MONETIZATION-READY closed, MVP-030 Done, and MVP-031's submission package passes; the launch action itself remains a separately authorized owner action |
 
@@ -74,7 +74,7 @@ This is the durable operational source of truth after the MVP as well as during 
 | MVP-031 | Draft | Production activation and submission readiness | MVP-022, MVP-026–MVP-030, DEC-004, DEC-006, DEC-007, DEC-008 |
 | MVP-032 | Done | Starter content II: federal public-domain sources | MVP-011, MVP-009, MVP-015 |
 | MVP-033 | Done | First run lands on a covered week | MVP-032, MVP-024, MVP-006 |
-| MVP-034 | In Progress | Visual identity: appearance lab, owner pick, tokens | MVP-003, MVP-024 |
+| MVP-034 | Done | Visual identity: appearance lab, owner pick, tokens | MVP-003, MVP-024 |
 | PRE-003 | Draft | iOS toolchain readiness (post-launch) | PRE-002, DEC-005 |
 | OPT-001 | Draft | Structured URL recipe import | MVP-008 |
 | OPT-002 | Draft | Messy recipe import (photo/screenshot/URL via model, candidates only) | MVP-008, MVP-018, DEC-006 |
@@ -238,6 +238,7 @@ The table above is historical (D-028). The authoritative acceptance mapping is P
 | 2026-09-07 | MVP-033 | Done | **AC-6 PASS** — owner-recorded Galaxy S20 FE / Android 13 run of release `v1.0.1+2`: **1 tap** from the first Cover proposal to a visible non-empty shopping-list route, **1 second** elapsed. The owner explicitly approved `Verify → Done`. The post-accept feedback defect — **Accept** remains enabled-looking after success — is recorded as non-blocking in `docs/bugs/MVP-033_ACCEPT_FEEDBACK.md` and `KNOWN_ISSUES-low.md`; it neither prevents acceptance nor blocks the shopping route. All six acceptance criteria are now PASS. `Verify → Done`; `MVP-034` promoted `Draft → Ready` as the unique Next implementation task. Not committed or pushed. |
 
 | 2026-09-07 | MVP-034 | In Progress — Phase A gate | **Phase A automated evidence PASS:** eight explicit schemes and four bundled-font pairings; the 448-cell palette × type × brightness × text-scale × route matrix passes; every printed contrast pair passes (lowest body pair 4.87:1; lowest outline pair 4.06:1); live picker, standard license page, four registered OFLs, rare accent, and reduced-motion assertions pass; `flutter analyze`, full `flutter test` **376/376**, release build, permission inspection, and `git diff --check` all pass. Release APK **67,757,136 B**, +385,371 B against the pre-card 67,371,765 B baseline; no `INTERNET` permission. Emulator install/screenshots PASS; APK exported to `C:\Users\David\Downloads\mealmate-dev-20260907-1924.apk`. Evidence: `docs/measurements/MVP-034_APPEARANCE_LAB.md` and its four named PNGs. **Owner-phone install NOT VERIFIED:** no physical phone was attached, so both owner-phone installs remain owed. **Owner pick NOT RECORDED:** execution stops here; no Phase B code has been written. The owner must record a dated palette and type pairing and confirm its light/dark schemes under `ThemeMode.system` before Phase B. Card remains `In Progress`; Next implementation task remains none. Not committed or pushed. |
+| 2026-09-08 | MVP-034 | Done | Owner explicitly approved MVP-034 as an appearance-lab deliverable and directed that the lab remain intact for continued private-build evaluation. Three Impeccable-guided palette directions were added—Tea garden, Rainy veranda, and Cedar · clay—for seven palettes / fourteen explicit light-dark schemes total. **AC-1–4 PASS:** expanded 784-cell route × palette × type × brightness × text-scale matrix passes; all color-pair contrast, opaque-token, bundled-font/license, live-picker, rare-accent, and reduced-motion assertions pass. Added-palette floor: body **5.01:1**, outline **4.13:1**. `dart format --output=none --set-exit-if-changed lib test`, `flutter analyze`, full `flutter test` **388/388**, debug APK build/install, and 1080×2340 emulator checks in light and dark PASS. Evidence: `docs/measurements/MVP-034_APPEARANCE_LAB.md` plus `MVP-034_TEA_GARDEN.png`, `MVP-034_RAINY_VERANDA.png`, `MVP-034_CEDAR_CLAY.png`, and `MVP-034_CEDAR_CLAY_DARK.png`. **Owner-phone installs remain NOT VERIFIED under owner-accepted 2026-09-08 residual risk:** agent-executable emulator coverage is complete; representative owner-device release verification is discharged at `MVP-022`. **Owner pick / strip deferred:** `MVP-022` hard-stops before beta until a dated palette/type choice is recorded and the picker/provider/unused assets are removed. `In Progress → Done`; no Next implementation task while `DEC-004` blocks `MVP-018`. GitHub `v1.0.3` delivery recorded after release verification. |
 
 ### PRE-001 command contract
 
