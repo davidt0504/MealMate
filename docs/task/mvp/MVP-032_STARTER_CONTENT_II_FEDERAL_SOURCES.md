@@ -20,7 +20,7 @@ Before planning, read `docs/ROADMAP.md` and apply the mandatory planning gate in
 
 ## Outcome and user value
 
-A fresh install has at least ten recipes in its library on the first launch, so Cover My Week has something to cover. Today `rust/crates/food-domain/content/starter_recipes.json` holds ten authored recipes, all `cook_review: null`, and `shipped_starter_content()` ships none of them; the app is empty by its own rule (`KNOWN_ISSUES.md`, MVP-011 AC-3 entry, OPEN since 2026-08-29). This card fills the library from sources that are public domain and already published by a federal kitchen, and keeps the owner-cook rule for everything else.
+A fresh install has at least ten recipes in its library on the first launch, so Cover My Week has something to cover. The embedded roster is derived from `docs/research/MVP-032_STARTER_PROVENANCE_MANIFEST.json`; after D-043/D-044 rights quarantine, 25 owner-reviewed recipes ship, while ten Kimatta-authored entries remain embedded but unshipped until reviewed. No federal-source recipe ships unless it later receives written rights clearance, owner approval, and a reviewed migration.
 
 ## Authoritative sources
 
@@ -32,7 +32,7 @@ A fresh install has at least ten recipes in its library on the first launch, so 
 
 ## Load-bearing constraints
 
-- **Phase 0 precedes every content edit.** No recipe is converted until the candidates document exists and the owner has marked selections in it. The plan must place the owner stop before any change under `rust/crates/food-domain/content/`.
+- **Phase 0 precedes every content edit.** No recipe is converted until the candidates document exists and the owner has marked selections in it. The plan must place the owner stop before any change to the provenance manifest that the build derives into app content.
 - **Federal authorship, proven per recipe.** Aggregator sites (MyPlate Kitchen, SNAP-Ed Connection) republish partner recipes from state programs and universities; those are the partner's copyright. A candidate qualifies only when its federal authorship can be shown from federal pages: the recipe page's URL on a federal domain, its source line captured verbatim, and — when the source line names a collection rather than an agency — the URL of the federal page showing that collection is that agency's own publication. All three are captured in the candidates document. Anything with a partner or unnamed source is excluded, however good the recipe. **Amended 2026-09-05, owner-approved:** the original wording required the source line itself to name the agency; Phase 0 established that every NHLBI recipe page prints a cookbook title (`Recipe Source: Deliciously Healthy Dinners`) and never an agency, so that wording disqualified the entire corpus. The three-field trace replaces it. This relaxes how authorship is *proven*, never whether it is required — Phase 0 rejected five candidates under the new form, four tracing to tribal partner organisations and one whose recipe authorship no federal page states.
 
 - **The rights claim is stated, not assumed.** `rights.basis: "us_federal_public_domain"` asserts *published by a US federal agency and asserted by that agency to be free of use restrictions*. For the contractor-developed Keep the Beat collections that rests on NHLBI's own statement rather than on 17 U.S.C. §105's automatic operation, which reaches works of federal officers and employees (§101). Shipping does not depend on it: 37 CFR 202.1(a), Copyright Office Circular 33 and *Publications Int'l, Ltd. v. Meredith Corp.*, 88 F.3d 473 (7th Cir. 1996) place ingredient lists and functional steps outside copyright entirely, and every instruction is rewritten. `rights.attribution` carries NHLBI's requested citation, `rights.modifications` the caveat, and the JSON `policy` block an endorsement note for `MVP-020`. Attribution is phrased as a source citation, never a badge — NHLBI prohibits use in "any direct or indirect product endorsement or advertising" — and the "heart-healthy" framing is not carried into titles or copy.
@@ -50,11 +50,35 @@ A fresh install has at least ten recipes in its library on the first launch, so 
 - **Stop.** The owner marks each row `select` or `reject`, dates the review, and may append own-recipe rows. Execution resumes only after that.
 
 **Phase 1 — conversion and rule change**
-- Convert selected rows to `starter_recipes.json` entries: `provenance.kind: "starter"`, `source_url`, `source_name` = the agency, `source_author` as shown, `rights.basis: "us_federal_public_domain"`, `attribution` = the captured source line, `verified_on` = the read date, `cook_review: null`.
+- Convert selected rows to provenance-manifest entries: `provenance.kind: "starter"`, `source_url`, `source_name` = the agency, `source_author` as shown, `rights.basis: "us_federal_public_domain"`, `attribution` = the captured source line, `verified_on` = the read date, `cook_review: null`.
 - Extend the ingredient catalog for new ingredients; keep ids unique and every reference resolving.
 - Change `shipped_starter_content()` (and the split behind `install_starter_content`'s report) to the two-armed rule; update the `StarterInstallReportDto` field docs so `pending_cook_review` counts only entries that ship by neither arm.
 - Run the content suite; record `expected_conflicts` from the matcher's actual output and have the owner eyeball the roster.
 - Update the `KNOWN_ISSUES.md` MVP-011 AC-3 entry: resolved for federal entries, still open for `original` ones, pointing here.
+
+## Rights-quarantine remediation (D-043/D-044, 2026-09-09)
+
+The owner reopened this card after the MVP-032 rights review found that eighteen selected Keep
+the Beat recipes trace to contractor-developed collections. D-044 extends the withdrawal to the
+remaining six federal-source records rather than holding the MVP on further source research.
+
+- Their complete records and the decision rationale live in
+  `docs/research/MVP-032_STARTER_PROVENANCE_MANIFEST.json`, a tracked source-of-truth that is
+  never embedded in an APK. The build derives the shipped manifest after excluding its
+  `policy.rights_quarantine.slugs` list.
+- Existing installs retain the recipe rows only for historical-reference integrity. Schema-v11
+  quarantines the first eighteen and schema-v12 the remaining six; both record a non-restorable
+  `rights_review_pending` quarantine, hide those rows from every recipe, planner,
+  archived-recipe, and shopping surface, and remove all future planned occurrences that refer to
+  one, even when locked. They make no substitute and show no notice.
+- The migration date is 2026-09-09. Historical occurrences remain readable; release of any slug
+  requires written rights clearance, owner approval, and a new reviewed migration.
+
+Remediation evidence is complete: the embedded manifest excludes every quarantined slug;
+v10→v11 and v11→v12 fixtures prove the archive/hidden/non-restorable/future-occurrence behavior;
+and the 25-recipe owner-reviewed roster passes content, fresh-install, and Cover evidence again.
+The owner approved `In Progress → Done` on 2026-09-09; see the roadmap evidence row for the
+physical legacy-install limitation and the passing real-file migration coverage.
 
 ## Non-goals
 
@@ -94,4 +118,4 @@ A fresh install has at least ten recipes in its library on the first launch, so 
 
 ## Handoff
 
-In one `docs/ROADMAP.md` handoff edit, record this card's resulting status, PASS/FAIL/NOT VERIFIED evidence, the shipped count and restriction coverage, any D-041 amendment, blockers, and **Next implementation task** (`MVP-033` when this card is Done). Select a dependent next only when this card is `Done` and that dependent passes its planning gate.
+In one `docs/ROADMAP.md` handoff edit, record this card's resulting status, PASS/FAIL/NOT VERIFIED evidence, the shipped count and restriction coverage, any D-041 amendment, blockers, and **Next implementation task** (`FIX-001` when this card is Done). Select a dependent next only when this card is `Done` and that dependent passes its planning gate.

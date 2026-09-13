@@ -1913,6 +1913,9 @@ impl SseDecode for crate::api::error::KimattaError {
                     message: var_message,
                 };
             }
+            9 => {
+                return crate::api::error::KimattaError::RecipeQuarantined;
+            }
             _ => {
                 unimplemented!("");
             }
@@ -3627,6 +3630,7 @@ impl flutter_rust_bridge::IntoDart for crate::api::error::KimattaError {
             crate::api::error::KimattaError::Shopping { message } => {
                 [8.into_dart(), message.into_into_dart().into_dart()].into_dart()
             }
+            crate::api::error::KimattaError::RecipeQuarantined => [9.into_dart()].into_dart(),
             _ => {
                 unimplemented!("");
             }
@@ -4804,6 +4808,9 @@ impl SseEncode for crate::api::error::KimattaError {
             crate::api::error::KimattaError::Shopping { message } => {
                 <i32>::sse_encode(8, serializer);
                 <String>::sse_encode(message, serializer);
+            }
+            crate::api::error::KimattaError::RecipeQuarantined => {
+                <i32>::sse_encode(9, serializer);
             }
             _ => {
                 unimplemented!("");

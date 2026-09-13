@@ -75,6 +75,8 @@ pub enum StorageError {
     CorruptRights { recipe: String, detail: String },
     #[error("starter recipe {0:?} carries no starter slug")]
     MissingStarterSlug(String),
+    #[error("recipe {0} is quarantined while its source rights are reviewed")]
+    RecipeQuarantined(String),
     #[error("no ingredient {0}")]
     NoSuchIngredient(String),
     #[error(
@@ -495,6 +497,75 @@ const MIGRATION_ARRAY: &[M] = &[
     BEGIN
         SELECT RAISE(ABORT, 'controller_ledger is append-only');
     END;",
+    ),
+    // Rights-quarantine remediation for MVP-032. The source manifest remains outside the APK;
+    // this migration preserves already-installed rows for reference stability while removing
+    // them from every future active surface. It intentionally overrides a future meal lock: the
+    // user lock protects ordinary planner automation, not content withdrawn for rights review.
+    M::up(
+        "CREATE TABLE recipe_quarantine (
+        recipe_id TEXT PRIMARY KEY NOT NULL REFERENCES recipe(id) ON DELETE CASCADE,
+        reason TEXT NOT NULL CHECK (reason = 'rights_review_pending')
+    ) STRICT;
+    INSERT INTO recipe_quarantine (recipe_id, reason)
+    SELECT p.recipe_id, 'rights_review_pending'
+    FROM recipe_provenance p
+    WHERE p.starter_slug IN (
+        'chicken-creole',
+        'steamed-salmon-and-mushrooms',
+        'salmon-with-dill-and-mustard',
+        'cod-with-leeks-and-potatoes',
+        'pink-beans-with-plantain',
+        'chicken-and-mushroom-fricassee',
+        'chicken-picadillo',
+        'cold-fusilli-with-summer-vegetables',
+        'tuna-with-chickpea-and-spinach-salad',
+        'pineapple-chicken-skewers',
+        'chicken-with-angel-hair-pasta',
+        'mushroom-penne',
+        'pita-pizzas',
+        'red-beans-and-rice',
+        'turkey-and-beef-meatballs',
+        'turkey-bolognese-with-shells',
+        'turkey-burgers',
+        'chickpeas-with-tomatoes-and-oregano'
+    );
+    UPDATE recipe SET archived_at = '2026-09-09'
+    WHERE id IN (SELECT recipe_id FROM recipe_quarantine)
+      AND archived_at IS NULL;
+    DELETE FROM planned_meal
+    WHERE date >= '2026-09-09'
+      AND id IN (
+        SELECT c.planned_meal_id
+        FROM meal_component c
+        JOIN recipe_quarantine q ON q.recipe_id = c.recipe_id
+    );",
+    ),
+    // D-044 extends the MVP-032 source-rights withdrawal to the six remaining NHLBI records.
+    // This repeats the v11 semantics for devices that already migrated: source withdrawal wins
+    // over a future user lock, while historical occurrences remain intact.
+    M::up(
+        "INSERT INTO recipe_quarantine (recipe_id, reason)
+    SELECT p.recipe_id, 'rights_review_pending'
+    FROM recipe_provenance p
+    WHERE p.starter_slug IN (
+        'tilapia-with-tomatoes-and-olives',
+        'lentil-soup',
+        'minestrone-soup',
+        'barbecued-chicken',
+        'vegetable-stew',
+        'crumbed-baked-fish'
+    );
+    UPDATE recipe SET archived_at = '2026-09-09'
+    WHERE id IN (SELECT recipe_id FROM recipe_quarantine)
+      AND archived_at IS NULL;
+    DELETE FROM planned_meal
+    WHERE date >= '2026-09-09'
+      AND id IN (
+        SELECT c.planned_meal_id
+        FROM meal_component c
+        JOIN recipe_quarantine q ON q.recipe_id = c.recipe_id
+    );",
     ),
 ];
 pub const MIGRATIONS: Migrations<'static> = Migrations::from_slice(MIGRATION_ARRAY);
@@ -2108,11 +2179,15 @@ pub fn list_recipes(
     let sql = match listing {
         RecipeListing::Active => {
             "SELECT id, title FROM recipe
-             WHERE household_id = ?1 AND archived_at IS NULL ORDER BY title, id"
+             WHERE household_id = ?1 AND archived_at IS NULL
+               AND NOT EXISTS (SELECT 1 FROM recipe_quarantine q WHERE q.recipe_id = recipe.id)
+             ORDER BY title, id"
         }
         RecipeListing::Archived => {
             "SELECT id, title FROM recipe
-             WHERE household_id = ?1 AND archived_at IS NOT NULL ORDER BY title, id"
+             WHERE household_id = ?1 AND archived_at IS NOT NULL
+               AND NOT EXISTS (SELECT 1 FROM recipe_quarantine q WHERE q.recipe_id = recipe.id)
+             ORDER BY title, id"
         }
     };
     let mut stmt = conn.prepare(sql)?;
@@ -2135,6 +2210,7 @@ pub fn list_recipes(
         "SELECT l.recipe_id, l.name FROM recipe_ingredient_line l
          JOIN recipe r ON r.id = l.recipe_id
          WHERE r.household_id = ?1 AND (r.archived_at IS NULL) = ?2
+           AND NOT EXISTS (SELECT 1 FROM recipe_quarantine q WHERE q.recipe_id = r.id)
          ORDER BY l.recipe_id, l.position",
     )?;
     let mut by_recipe: HashMap<String, Vec<String>> = HashMap::new();
@@ -2151,6 +2227,25 @@ pub fn list_recipes(
         }
     }
     Ok(summaries)
+}
+
+/// Whether this exact household recipe has been withdrawn for a pending source-rights review.
+/// Storage keeps the row readable for historical plan references; UI-facing callers use this
+/// predicate to keep it out of recipe-detail routes.
+pub fn recipe_is_quarantined(
+    conn: &Connection,
+    household: &HouseholdId,
+    id: &RecipeId,
+) -> Result<bool, StorageError> {
+    Ok(conn.query_row(
+        "SELECT EXISTS(
+             SELECT 1 FROM recipe_quarantine q
+             JOIN recipe r ON r.id = q.recipe_id
+             WHERE q.recipe_id = ?1 AND r.household_id = ?2
+         )",
+        params![id.as_str(), household.as_str()],
+        |r| r.get(0),
+    )?)
 }
 
 /// Sets `archived_at` to `at` on an active recipe. Idempotent: an already-archived recipe
@@ -2205,6 +2300,18 @@ pub fn restore_recipe_in(
     household: &HouseholdId,
     id: &RecipeId,
 ) -> Result<(), StorageError> {
+    let quarantined: bool = tx.query_row(
+        "SELECT EXISTS(
+             SELECT 1 FROM recipe_quarantine q
+             JOIN recipe r ON r.id = q.recipe_id
+             WHERE q.recipe_id = ?1 AND r.household_id = ?2
+         )",
+        params![id.as_str(), household.as_str()],
+        |r| r.get(0),
+    )?;
+    if quarantined {
+        return Err(StorageError::RecipeQuarantined(id.as_str().to_owned()));
+    }
     set_archive_marker(
         tx,
         household,
@@ -3173,19 +3280,19 @@ mod tests {
         let conn = open(&path).unwrap();
         let dest = dir.path().join("export.db");
         export_database(&conn, &dest).unwrap();
-        assert_eq!(validate_export(&dest).unwrap(), 10);
+        assert_eq!(validate_export(&dest).unwrap(), 12);
 
         Connection::open(&dest)
             .unwrap()
-            .pragma_update(None, "user_version", 11)
+            .pragma_update(None, "user_version", 13)
             .unwrap();
         let err = validate_export(&dest).unwrap_err();
         assert!(
             matches!(
                 err,
                 StorageError::NewerSchema {
-                    found: 11,
-                    supported: 10,
+                    found: 13,
+                    supported: 12,
                 }
             ),
             "want NewerSchema, got {err:?}"
@@ -3251,15 +3358,15 @@ mod tests {
         drop(open(&path).unwrap());
         {
             let conn = Connection::open(&path).unwrap();
-            conn.pragma_update(None, "user_version", 11).unwrap();
+            conn.pragma_update(None, "user_version", 13).unwrap();
         }
         let err = open(&path).unwrap_err();
         assert!(
             matches!(
                 err,
                 StorageError::NewerSchema {
-                    found: 11,
-                    supported: 10,
+                    found: 13,
+                    supported: 12,
                 }
             ),
             "want NewerSchema, got {err:?}"
@@ -3268,8 +3375,8 @@ mod tests {
         // the recovery.
         let text = err.to_string();
         assert!(text.contains("newer version of the app"), "got {text:?}");
-        assert!(text.contains("schema 11"), "got {text:?}");
-        assert!(text.contains("supports 10"), "got {text:?}");
+        assert!(text.contains("schema 13"), "got {text:?}");
+        assert!(text.contains("supports 12"), "got {text:?}");
         assert!(text.contains("Update the app"), "got {text:?}");
     }
 
@@ -3283,7 +3390,7 @@ mod tests {
         let path = dir.path().join("does-not-exist-yet.db");
         let conn = open(&path).unwrap();
         // Hard-coded, not derived from MIGRATIONS: a new migration must consciously bump it.
-        assert_eq!(schema_version(&conn).unwrap(), 10);
+        assert_eq!(schema_version(&conn).unwrap(), 12);
         assert_eq!(count(&conn, "household"), 0);
     }
 
@@ -3431,7 +3538,7 @@ mod tests {
     /// on-device v1→v2 migration (PRD §12: tested from representative prior versions); since
     /// v4 it proves v1→latest end to end.
     #[test]
-    fn an_existing_v1_database_migrates_to_v10_without_losing_data() {
+    fn an_existing_v1_database_migrates_to_v12_without_losing_data() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("kimatta.db");
         {
@@ -3446,7 +3553,7 @@ mod tests {
             .unwrap();
         }
         let conn = open(&path).unwrap();
-        assert_eq!(schema_version(&conn).unwrap(), 10);
+        assert_eq!(schema_version(&conn).unwrap(), 12);
         assert_eq!(count(&conn, "household"), 1);
         assert_eq!(count(&conn, "household_member"), 2);
         assert_eq!(count(&conn, "planning_cycle"), 0);
@@ -3660,16 +3767,16 @@ mod tests {
     }
 
     #[test]
-    fn empty_db_migrates_to_v10() {
+    fn empty_db_migrates_to_v12() {
         let conn = open(":memory:").unwrap();
-        assert_eq!(schema_version(&conn).unwrap(), 10);
+        assert_eq!(schema_version(&conn).unwrap(), 12);
     }
 
     // --- Step 4: schema v3 -----------------------------------------------------------------
 
     /// Test-level stand-in for the on-device v2→v3 migration, as the v1 test is for v1→v2.
     #[test]
-    fn an_existing_v2_database_migrates_to_v10_without_losing_data() {
+    fn an_existing_v2_database_migrates_to_v12_without_losing_data() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("kimatta.db");
         {
@@ -3690,7 +3797,7 @@ mod tests {
             .unwrap();
         }
         let conn = open(&path).unwrap();
-        assert_eq!(schema_version(&conn).unwrap(), 10);
+        assert_eq!(schema_version(&conn).unwrap(), 12);
         assert_eq!(count(&conn, "household"), 1);
         assert_eq!(count(&conn, "planning_cycle"), 1);
         assert_eq!(count(&conn, "planning_meal_slot"), 2);
@@ -3703,7 +3810,7 @@ mod tests {
     /// theirs. A recipe is saved at v3 so the migration is proved not to disturb the tables
     /// migration 3 introduced, not merely the household one it alters.
     #[test]
-    fn an_existing_v3_database_migrates_to_v10_without_losing_data() {
+    fn an_existing_v3_database_migrates_to_v12_without_losing_data() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("kimatta.db");
         {
@@ -3715,7 +3822,7 @@ mod tests {
             insert_pre_v6_recipe(&raw, "h", "r");
         }
         let conn = open(&path).unwrap();
-        assert_eq!(schema_version(&conn).unwrap(), 10);
+        assert_eq!(schema_version(&conn).unwrap(), 12);
         assert_eq!(count(&conn, "household"), 1);
         assert_eq!(count(&conn, "household_member"), 1);
         assert_eq!(count(&conn, "recipe"), 1);
@@ -3729,7 +3836,7 @@ mod tests {
     /// test: a recipe saved at v4 must survive the `ALTER TABLE`s that add `archived_at` (v5)
     /// and `prep_minutes`/the rights columns (v6).
     #[test]
-    fn an_existing_v4_database_migrates_to_v10_without_losing_data() {
+    fn an_existing_v4_database_migrates_to_v12_without_losing_data() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("kimatta.db");
         {
@@ -3741,7 +3848,7 @@ mod tests {
             insert_pre_v6_recipe(&raw, "h", "r");
         }
         let conn = open(&path).unwrap();
-        assert_eq!(schema_version(&conn).unwrap(), 10);
+        assert_eq!(schema_version(&conn).unwrap(), 12);
         assert_eq!(count(&conn, "household"), 1);
         assert_eq!(count(&conn, "recipe"), 1);
         assert_eq!(count(&conn, "household_restriction"), 0);
@@ -5091,7 +5198,7 @@ mod tests {
             insert_household(&mut conn, &household("h"), &[member("m", "h")]).unwrap();
         }
         let conn = open(&path).unwrap();
-        assert_eq!(schema_version(&conn).unwrap(), 10);
+        assert_eq!(schema_version(&conn).unwrap(), 12);
         assert_eq!(count(&conn, "household"), 1);
         assert_eq!(count(&conn, "household_member"), 1);
         let on: i32 = conn
@@ -5809,7 +5916,7 @@ mod tests {
     }
 
     #[test]
-    fn an_existing_v5_database_migrates_to_v10_without_losing_data() {
+    fn an_existing_v5_database_migrates_to_v12_without_losing_data() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("kimatta.db");
         {
@@ -5821,7 +5928,7 @@ mod tests {
             insert_pre_v6_recipe(&raw, "h", "r");
         }
         let conn = open(&path).unwrap();
-        assert_eq!(schema_version(&conn).unwrap(), 10);
+        assert_eq!(schema_version(&conn).unwrap(), 12);
         assert_eq!(count(&conn, "household"), 1);
         assert_eq!(count(&conn, "recipe"), 1);
         assert_eq!(load(&conn, "h", "r").unwrap().title(), "Recipe r");
@@ -5848,7 +5955,7 @@ mod tests {
     /// predecessors: a recipe saved at v6 must survive the two new tables, which touch nothing
     /// that exists.
     #[test]
-    fn an_existing_v6_database_migrates_to_v10_without_losing_data() {
+    fn an_existing_v6_database_migrates_to_v12_without_losing_data() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("kimatta.db");
         {
@@ -5860,7 +5967,7 @@ mod tests {
             save_recipe(&mut raw, &recipe("h", "r", vec![])).unwrap();
         }
         let conn = open(&path).unwrap();
-        assert_eq!(schema_version(&conn).unwrap(), 10);
+        assert_eq!(schema_version(&conn).unwrap(), 12);
         assert_eq!(count(&conn, "household"), 1);
         assert_eq!(count(&conn, "recipe"), 1);
         assert_eq!(load(&conn, "h", "r").unwrap().title(), "Recipe r");
@@ -7336,7 +7443,7 @@ mod tests {
     /// Test-level stand-in for the on-device v7→v8 migration, in the pattern of its
     /// predecessors: everything saved at v7 must survive a migration that only adds a table.
     #[test]
-    fn an_existing_v7_database_migrates_to_v10_without_losing_data() {
+    fn an_existing_v7_database_migrates_to_v12_without_losing_data() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("kimatta.db");
         {
@@ -7348,7 +7455,7 @@ mod tests {
             save_recipe(&mut raw, &recipe("h", "r", vec![])).unwrap();
         }
         let conn = open(&path).unwrap();
-        assert_eq!(schema_version(&conn).unwrap(), 10);
+        assert_eq!(schema_version(&conn).unwrap(), 12);
         assert_eq!(count(&conn, "household"), 1);
         assert_eq!(count(&conn, "recipe"), 1);
         assert_eq!(load(&conn, "h", "r").unwrap().title(), "Recipe r");
@@ -7729,7 +7836,7 @@ mod tests {
     /// Test-level stand-in for the on-device v8→v9 migration, in the pattern of its
     /// predecessors: everything saved at v8 must survive a migration that only adds tables.
     #[test]
-    fn an_existing_v8_database_migrates_to_v10_without_losing_data() {
+    fn an_existing_v8_database_migrates_to_v12_without_losing_data() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("kimatta.db");
         {
@@ -7741,17 +7848,17 @@ mod tests {
             set_pantry_mark(&mut raw, &hid("h"), &catalog_ref("flour"), true).unwrap();
         }
         let conn = open(&path).unwrap();
-        assert_eq!(schema_version(&conn).unwrap(), 10);
+        assert_eq!(schema_version(&conn).unwrap(), 12);
         assert_eq!(count(&conn, "household"), 1);
         assert_eq!(count(&conn, "pantry_item"), 1);
         assert_eq!(count(&conn, "shopping_line_state"), 0);
         assert_eq!(count(&conn, "shopping_manual_item"), 0);
     }
 
-    /// Test-level stand-in for the on-device v9→v10 migration (MVP-023): everything saved at
+    /// Test-level stand-in for the on-device v9→v12 migration: everything saved at
     /// v9 — a shopping overlay row included — survives a migration that only adds tables.
     #[test]
-    fn an_existing_v9_database_migrates_to_v10_without_losing_data() {
+    fn an_existing_v9_database_migrates_to_v12_without_losing_data() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("kimatta.db");
         {
@@ -7768,12 +7875,121 @@ mod tests {
             .unwrap();
         }
         let conn = open(&path).unwrap();
-        assert_eq!(schema_version(&conn).unwrap(), 10);
+        assert_eq!(schema_version(&conn).unwrap(), 12);
         assert_eq!(count(&conn, "household"), 1);
         assert_eq!(count(&conn, "pantry_item"), 1);
         assert_eq!(count(&conn, "shopping_line_state"), 1);
         assert_eq!(count(&conn, "policy"), 0);
         assert_eq!(count(&conn, "controller_ledger"), 0);
+    }
+
+    #[test]
+    fn v10_rights_quarantine_hides_recipes_and_removes_future_locked_occurrences() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("kimatta.db");
+        {
+            let mut raw = Connection::open(&path).unwrap();
+            MIGRATIONS.to_version(&mut raw, 10).unwrap();
+            seed_for_meals(&mut raw, "h");
+            upsert_ingredient(&mut raw, &ingredient("olive", "olive oil", &[])).unwrap();
+            save_recipe(
+                &mut raw,
+                &starter_recipe("h", "quarantined", "chicken-creole", "olive"),
+            )
+            .unwrap();
+            let historical = occurrence(
+                "h",
+                "historical",
+                "2026-09-08",
+                MealSlot::Dinner,
+                vec![MealComponent::recipe(rid("quarantined"), None)],
+            );
+            let future = occurrence(
+                "h",
+                "future",
+                "2026-09-09",
+                MealSlot::Dinner,
+                vec![MealComponent::recipe(rid("quarantined"), None)],
+            );
+            user_save(&mut raw, &historical).unwrap();
+            user_save(&mut raw, &future).unwrap();
+            lock(&mut raw, "h", "future", true, WriteSource::User).unwrap();
+        }
+
+        let mut conn = open(&path).unwrap();
+        let household = hid("h");
+        let recipe = rid("quarantined");
+        assert!(recipe_is_quarantined(&conn, &household, &recipe).unwrap());
+        assert_eq!(
+            load_record(&conn, "h", "quarantined").unwrap().archived_at,
+            Some(parse_civil_date("2026-09-09").unwrap())
+        );
+        assert!(!active_ids(&conn, "h").contains(&"quarantined".to_owned()));
+        assert!(!archived_ids(&conn, "h").contains(&"quarantined".to_owned()));
+        assert!(matches!(
+            restore_recipe(&mut conn, &household, &recipe),
+            Err(StorageError::RecipeQuarantined(id)) if id == "quarantined"
+        ));
+        assert!(load_meal(&conn, "h", "historical").is_some());
+        assert_eq!(load_meal(&conn, "h", "future"), None);
+    }
+
+    #[test]
+    fn v11_rights_quarantine_hides_the_remaining_federal_recipes_and_removes_locked_future_occurrences(
+    ) {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("kimatta.db");
+        {
+            let mut raw = Connection::open(&path).unwrap();
+            MIGRATIONS.to_version(&mut raw, 11).unwrap();
+            seed_for_meals(&mut raw, "h");
+            upsert_ingredient(&mut raw, &ingredient("olive", "olive oil", &[])).unwrap();
+            save_recipe(
+                &mut raw,
+                &starter_recipe("h", "quarantined", "lentil-soup", "olive"),
+            )
+            .unwrap();
+            user_save(
+                &mut raw,
+                &occurrence(
+                    "h",
+                    "historical",
+                    "2026-09-08",
+                    MealSlot::Dinner,
+                    vec![MealComponent::recipe(rid("quarantined"), None)],
+                ),
+            )
+            .unwrap();
+            user_save(
+                &mut raw,
+                &occurrence(
+                    "h",
+                    "future",
+                    "2026-09-09",
+                    MealSlot::Dinner,
+                    vec![MealComponent::recipe(rid("quarantined"), None)],
+                ),
+            )
+            .unwrap();
+            lock(&mut raw, "h", "future", true, WriteSource::User).unwrap();
+        }
+
+        let mut conn = open(&path).unwrap();
+        let household = hid("h");
+        let recipe = rid("quarantined");
+        assert!(recipe_is_quarantined(&conn, &household, &recipe).unwrap());
+        assert_eq!(
+            load_record(&conn, "h", "quarantined").unwrap().archived_at,
+            Some(parse_civil_date("2026-09-09").unwrap())
+        );
+        assert!(!active_ids(&conn, "h").contains(&"quarantined".to_owned()));
+        assert!(!archived_ids(&conn, "h").contains(&"quarantined".to_owned()));
+        assert!(matches!(
+            restore_recipe(&mut conn, &household, &recipe),
+            Err(StorageError::RecipeQuarantined(id)) if id == "quarantined"
+        ));
+        assert!(load_meal(&conn, "h", "historical").is_some());
+        assert_eq!(load_meal(&conn, "h", "future"), None);
     }
 
     /// Adversarial: an all-false row is a row that says nothing, and storage deletes rather

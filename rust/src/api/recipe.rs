@@ -477,6 +477,9 @@ fn load_recipe_in(
     // absent household (the under-warn fix), while an unknown recipe/household here keeps its
     // documented "reads as not found" contract. A found row implies the household exists (FK),
     // so the annotation load below cannot spuriously reject.
+    if kimatta_storage::recipe_is_quarantined(conn, &household, &id)? {
+        return Ok(None);
+    }
     let record = kimatta_storage::load_recipe(conn, &household, &id)?;
     let Some(record) = record else {
         return Ok(None);

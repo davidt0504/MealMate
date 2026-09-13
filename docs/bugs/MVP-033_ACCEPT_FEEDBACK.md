@@ -8,6 +8,7 @@
 | Device | Samsung Galaxy S20 FE, Android 13 |
 | Owner observation | 2026-09-07 |
 | Affected surface | `Cover My Week` after **Accept** |
+| Routed to | `docs/task/fix/FIX-001_BETA_FEEDBACK_FIXES_I.md` item 4 (2026-09-08) |
 
 ## Reproduction
 

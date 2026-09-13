@@ -1,5 +1,6 @@
-//! Curated starter content (MVP-011). One JSON file is both the shipped data and the
-//! reviewable provenance manifest, so the two cannot drift apart.
+//! Curated starter content (MVP-011). The build script derives the embedded roster from the
+//! reviewable provenance manifest, excluding any explicitly quarantined records before they can
+//! enter the APK.
 //!
 //! The JSON never deserializes into a domain type directly: `Ingredient`, `IngredientLine`,
 //! `RecipeProvenance` and `Rational` all have private fields and no `serde` derive, and a
@@ -17,7 +18,7 @@ use crate::recipe::{
 use crate::restriction::RestrictionKind;
 use crate::{parse_civil_date, CivilDate};
 
-const CONTENT: &str = include_str!("../content/starter_recipes.json");
+const CONTENT: &str = include_str!(concat!(env!("OUT_DIR"), "/starter_recipes.json"));
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum StarterError {
@@ -520,6 +521,46 @@ mod tests {
     }
 
     #[test]
+    fn rights_quarantined_source_records_never_reach_the_embedded_manifest() {
+        let content = all_starter_content().unwrap();
+        let quarantined = [
+            "chicken-creole",
+            "steamed-salmon-and-mushrooms",
+            "salmon-with-dill-and-mustard",
+            "cod-with-leeks-and-potatoes",
+            "pink-beans-with-plantain",
+            "chicken-and-mushroom-fricassee",
+            "chicken-picadillo",
+            "cold-fusilli-with-summer-vegetables",
+            "tuna-with-chickpea-and-spinach-salad",
+            "pineapple-chicken-skewers",
+            "chicken-with-angel-hair-pasta",
+            "mushroom-penne",
+            "pita-pizzas",
+            "red-beans-and-rice",
+            "turkey-and-beef-meatballs",
+            "turkey-bolognese-with-shells",
+            "turkey-burgers",
+            "chickpeas-with-tomatoes-and-oregano",
+            "tilapia-with-tomatoes-and-olives",
+            "lentil-soup",
+            "minestrone-soup",
+            "barbecued-chicken",
+            "vegetable-stew",
+            "crumbed-baked-fish",
+        ];
+        assert_eq!(content.recipes.len(), 35);
+        assert_eq!(content.catalog.len(), 106);
+        assert_eq!(shipped_starter_content().unwrap().recipes.len(), 25);
+        for slug in quarantined {
+            assert!(
+                content.recipes.iter().all(|recipe| recipe.slug != slug),
+                "quarantined {slug} reached the embedded manifest"
+            );
+        }
+    }
+
+    #[test]
     fn every_rights_basis_is_in_the_allowed_set() {
         // Hard-coded, not read off `RightsBasis::ALL`: a basis added without a rights review
         // must break this test rather than be mirrored by it.
@@ -808,7 +849,7 @@ mod tests {
     }
 
     #[test]
-    fn every_federal_entry_names_its_agency_and_url() {
+    fn all_federal_entries_are_quarantined_from_the_embedded_manifest() {
         // AC-2's automated half: the rights arm ships on a checkable claim, so both halves of
         // that claim must actually be present on every entry that uses it.
         let content = all_starter_content().unwrap();
@@ -849,7 +890,10 @@ mod tests {
                 recipe.slug
             );
         }
-        assert!(federal > 0, "no federal entry to check");
+        assert_eq!(
+            federal, 0,
+            "D-044 keeps every federal-source recipe outside the embedded manifest"
+        );
     }
 
     #[test]
@@ -939,11 +983,8 @@ mod tests {
     #[test]
     fn every_catalog_id_is_referenced_by_some_entry() {
         // The reverse of `every_catalog_reference_resolves`, which only checks that every
-        // reference resolves. Four ids outlived the recipes that used them when two federal
-        // entries were dropped at the 2026-09-06 roster review, and nothing caught it: the
-        // catalog is installed unfiltered, so an unreferenced id becomes a permanently unusable
-        // Pantry row on every device. `all_starter_content` is deliberate -- against the shipped
-        // subset this would fail on the ids the ten unshipped entries legitimately hold.
+        // reference resolves. The build-derived catalog carries only ingredients used by the
+        // embedded roster, so a quarantined recipe cannot leave an unusable Pantry row behind.
         let content = all_starter_content().unwrap();
         let mut referenced: Vec<&str> = Vec::new();
         for recipe in &content.recipes {
@@ -1006,13 +1047,10 @@ mod tests {
         const RECORDED_RULE_V1_MISSES: &[(&str, &str, RestrictionKind)] = &[
             ("peanut-noodle-bowl", "soy sauce", Gluten),
             ("vegetable-fried-rice", "soy sauce", Gluten),
-            ("steamed-salmon-and-mushrooms", "soy sauce", Gluten),
-            ("pineapple-chicken-skewers", "soy sauce", Gluten),
             ("egg-roll-in-a-bowl", "soy sauce", Gluten),
             ("crockpot-barbecue-chicken", "ranch", Dairy),
             ("crockpot-chicken-tacos", "ranch", Dairy),
             ("ravioli-bake", "ravioli", Gluten),
-            ("barbecued-chicken", "worcestershire", Fish),
             ("easy-shepherds-pie", "worcestershire", Fish),
             (
                 "crockpot-sausage-and-hashbrown-casserole",

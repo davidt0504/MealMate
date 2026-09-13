@@ -2018,6 +2018,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         return KimattaError_PlannedMeal(message: dco_decode_String(raw[1]));
       case 8:
         return KimattaError_Shopping(message: dco_decode_String(raw[1]));
+      case 9:
+        return KimattaError_RecipeQuarantined();
       default:
         throw Exception("unreachable");
     }
@@ -3150,6 +3152,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       case 8:
         var var_message = sse_decode_String(deserializer);
         return KimattaError_Shopping(message: var_message);
+      case 9:
+        return KimattaError_RecipeQuarantined();
       default:
         throw UnimplementedError('');
     }
@@ -4536,6 +4540,8 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       case KimattaError_Shopping(message: final message):
         sse_encode_i_32(8, serializer);
         sse_encode_String(message, serializer);
+      case KimattaError_RecipeQuarantined():
+        sse_encode_i_32(9, serializer);
     }
   }
 

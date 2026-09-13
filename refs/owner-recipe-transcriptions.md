@@ -2,7 +2,7 @@
 
 Verbatim transcription of the thirty cards photographed into `refs/images/` (gitignored), made
 2026-09-06. This is the provenance record for the twenty-five owner entries in
-`rust/crates/food-domain/content/starter_recipes.json` and the five in
+`docs/research/MVP-032_STARTER_PROVENANCE_MANIFEST.json` and the five in
 `refs/recipes-pending.json` — the check a later reader runs a shipped entry against, the way
 `docs/research/starter-candidates.md` serves the federal entries.
 

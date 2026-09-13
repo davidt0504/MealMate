@@ -1,6 +1,8 @@
 # OPT-003 — Staples: keep-stocked items that reach the list without a planned meal
 
 > Optional planning input, not an MVP dependency or approved execution plan. Recommended workflows do not invoke or authorize themselves.
+>
+> **2026-09-08:** the list-interaction model below (unmark triggers restock) is reopened as `OPT-006` decision gate 1; storage, bridge and derivation shape remain the reference. Disposition of this card is `OPT-006` gate 6.
 
 | Field | Value |
 |---|---|

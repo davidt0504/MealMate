@@ -1,0 +1,3395 @@
+{
+  "version": 1,
+  "repository": "/home/davidlinux/projects/personal/meal_mate",
+  "tracked_file_count": 240,
+  "classification_counts": {
+    "binary": 15,
+    "text": 225
+  },
+  "python_parse_failures": [],
+  "pages": {
+    "system-overview.md": {
+      "purpose": "System shape, package manifests, and repository-level configuration",
+      "files": [
+        {
+          "path": ".gitattributes",
+          "git_mode": "100644",
+          "git_object": "f6a525dbc588fd08b3a85512f7bcb73552645959",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 59,
+          "sha256": "489fb811f97deb0befb181e8eda6330bd155b6e1a3d7cc4b717391c31cf870f0",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": ".gitignore",
+          "git_mode": "100644",
+          "git_object": "c5771f1ea064ff65e2d86952170fb9d923f6d51f",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 1010,
+          "sha256": "92ff58c518262564770e1f41b42a7a83e917195e153dac4f3b29eb0006746ea3",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": ".metadata",
+          "git_mode": "100644",
+          "git_object": "952556d995c34677adbe22e0263097eb542645e1",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 968,
+          "sha256": "221089654256d3677313bfd87cb4fd119dde9df2122f144d217659ea1a953214",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "LICENSE",
+          "git_mode": "100644",
+          "git_object": "261eeb9e9f8b2b4b0d119366dda99c6fd7d35c64",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 11357,
+          "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "README.md",
+          "git_mode": "100644",
+          "git_object": "67550508c3956491104c253852723b0318567866",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 9611,
+          "sha256": "2960eb3f6fc8f62f3b58f42678d847b089d4629acd0c574ac686a6add3b5fa83",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "analysis_options.yaml",
+          "git_mode": "100644",
+          "git_object": "cedcc10f57b0f665b94ca9e90b75802c54b3a024",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 1547,
+          "sha256": "d6702eea40def1dc7143adfcf5a3fdf59b8f83ac2ca298857c502775830813a7",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "flutter_rust_bridge.yaml",
+          "git_mode": "100644",
+          "git_object": "e15ed9167d9a9d638884c2970a1b448057f13730",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 65,
+          "sha256": "5be7b17af5839791d5dea6c63809f0d5d43495f96186d8520b414ee44703ef45",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "pubspec.lock",
+          "git_mode": "100644",
+          "git_object": "f16ea37b36158485d53d98169dba08b3c586319b",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 25095,
+          "sha256": "c4e869967f744176aa8096a268c95faa65caa82cb8da2674d4418b261bc8d772",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "pubspec.yaml",
+          "git_mode": "100644",
+          "git_object": "a602fa51e0fa5bd449d96750af48f5a72e202254",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 4137,
+          "sha256": "83161ee1bae5c123ad78197bb1c5ed3b530ae1925ca0a807eda53d3596432bff",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "rust/.gitignore",
+          "git_mode": "100644",
+          "git_object": "ea8c4bf7f35f6f77f75d92ad8ce8349f6e81ddba",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 8,
+          "sha256": "44c92e3a70ad3307b7056871c2bdb096d8bfa9373f5bf06a79bb6324a20ff2fb",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "rust/Cargo.lock",
+          "git_mode": "100644",
+          "git_object": "69797ff25ff7d69fd8fb4139630187b778d577d5",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 31761,
+          "sha256": "6e401c309b3e46561de6359e8a0d58992792ba41eff172cd8e982a035bf7ec08",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "rust/Cargo.toml",
+          "git_mode": "100644",
+          "git_object": "d24aa620aa882c2bee476d44b7ffc9b5f511fc43",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 492,
+          "sha256": "e8cfdf96af1656ef553e279b930de7d1ce629ed6a86d14b22e74f0a256db9360",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "rust/rust-toolchain.toml",
+          "git_mode": "100644",
+          "git_object": "b9b2596b95f3a6a8702d2e3484a895388f76e8d7",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 157,
+          "sha256": "bedbb9fe087cf347a14f887ea6e906ab8a7f101f4228a9422acb97372f6c0b61",
+          "symbols": [],
+          "parse_failure": null
+        }
+      ]
+    },
+    "flutter-shell.md": {
+      "purpose": "Flutter entry point, app shell, navigation, and native build hook",
+      "files": [
+        {
+          "path": "hook/build.dart",
+          "git_mode": "100644",
+          "git_object": "3b9abe5e065802239e558ebf97891db796b83a0f",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 281,
+          "sha256": "39bd4a9006a83a28ebf19756aead214ceb009e886f759eeb8937eb5d916b0eb9",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "lib/app/app.dart",
+          "git_mode": "100644",
+          "git_object": "74b3613f1ddab4dfd25c1a3aef3c3012704333bc",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 7264,
+          "sha256": "007ab916d177ecedec10a41d89ed9b249f07b658dd34ca7572d6153fc5307637",
+          "symbols": [
+            "App",
+            "_AppState"
+          ],
+          "parse_failure": null
+        },
+        {
+          "path": "lib/app/placeholder_screen.dart",
+          "git_mode": "100644",
+          "git_object": "6932a08c35e427d7e74875dbae00efce00aa0361",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 837,
+          "sha256": "1d73001027ff8d8cb8a14d3d71d825e8bbf30cff53a4a5a7a93bd6108ba90407",
+          "symbols": [
+            "PlaceholderScreen"
+          ],
+          "parse_failure": null
+        },
+        {
+          "path": "lib/app/router.dart",
+          "git_mode": "100644",
+          "git_object": "b6eba9b10b6621477ee3db398f1d47569b9c9a10",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 5751,
+          "sha256": "29b51e01a992140f76483ea688d00f00268f7c0f9ce40881152cdd0705cc0111",
+          "symbols": [
+            "_NotFoundScreen"
+          ],
+          "parse_failure": null
+        },
+        {
+          "path": "lib/app/shell.dart",
+          "git_mode": "100644",
+          "git_object": "8dad62f3df450ffe59564a0256f5003b7e70f986",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 1281,
+          "sha256": "e1462e291c8151329add3c5d16469b339db6ae858751cf95f84b3ea49474af35",
+          "symbols": [
+            "AppShell"
+          ],
+          "parse_failure": null
+        },
+        {
+          "path": "lib/app/theme.dart",
+          "git_mode": "100644",
+          "git_object": "2cda77c7099afc30b04cc93d9972e62a76e34a0b",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 327,
+          "sha256": "adaaa8f15167f5e6bd375d6a5d457a5a75bffcec08c4dfa1fd6038ea102c03e1",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "lib/main.dart",
+          "git_mode": "100644",
+          "git_object": "bb5de35c4d54554e41631abd90f44ae5fd8a6726",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 562,
+          "sha256": "0ecd5035c7b8b670af14d80ab2f9e33b7972cb24efbbfbeb9523c0b0019a848b",
+          "symbols": [],
+          "parse_failure": null
+        }
+      ]
+    },
+    "flutter-features.md": {
+      "purpose": "Feature screens, Riverpod state, presentation helpers, and workflows",
+      "files": [
+        {
+          "path": "lib/features/household/household_provider.dart",
+          "git_mode": "100644",
+          "git_object": "0b44c3c0e561eb25f68e6709f6ff7b24e8a41a41",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 1751,
+          "sha256": "1202955f69bb5c51881328c63c385f2695222ebb4626ba902f3803461ab02dde",
+          "symbols": [
+            "HouseholdNotifier"
+          ],
+          "parse_failure": null
+        },
+        {
+          "path": "lib/features/household/household_screen.dart",
+          "git_mode": "100644",
+          "git_object": "928dcbbf202d13d684b7aeda97306592c9fca261",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 6266,
+          "sha256": "3524f5bb2dc3f635b01a3a46e944109eb9f618874a8440d09eb95f65ec49fdb5",
+          "symbols": [
+            "HouseholdScreen",
+            "_HouseholdScreenState"
+          ],
+          "parse_failure": null
+        },
+        {
+          "path": "lib/features/onboarding/welcome_screen.dart",
+          "git_mode": "100644",
+          "git_object": "3a85c0e851b126edcff4d20c0fc75d03eff16af8",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 4518,
+          "sha256": "4b14c1ceb195fe264383b2cf18e37aaacaad86fd435f317fc7dcef5735fff2e7",
+          "symbols": [
+            "WelcomeScreen",
+            "_WelcomeScreenState"
+          ],
+          "parse_failure": null
+        },
+        {
+          "path": "lib/features/pantry/pantry_copy.dart",
+          "git_mode": "100644",
+          "git_object": "04f60c3cbd549e10a1d8ad8cab81c0c90ac6addf",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 1490,
+          "sha256": "78454f3506e02661a7b410333c0f4cfb58f97335bc3e9056cdf540388fa6c26e",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "lib/features/pantry/pantry_provider.dart",
+          "git_mode": "100644",
+          "git_object": "d17bf4410037195d105b6935ee5c951b7dd8d88b",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 4441,
+          "sha256": "0a7a0184675f3886c3fe2d5baf2a22cfb73c5fb52a2960bc44d6eb265551014f",
+          "symbols": [
+            "PantryNotifier"
+          ],
+          "parse_failure": null
+        },
+        {
+          "path": "lib/features/pantry/pantry_screen.dart",
+          "git_mode": "100644",
+          "git_object": "3901598b6df2dc546deadb53551167727895fa3e",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 6589,
+          "sha256": "014305eabace5175aed22dd2788e3685e802902ab1d3d196fbc4d6ada7fb1427",
+          "symbols": [
+            "PantryScreen",
+            "_PantryScreenState"
+          ],
+          "parse_failure": null
+        },
+        {
+          "path": "lib/features/planning/cover_copy.dart",
+          "git_mode": "100644",
+          "git_object": "c56fc988057669a1a113d1a056124c2440a2e01f",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 6968,
+          "sha256": "91287ca113dc96ae163b32814f3cf1329325f4c398af318d71090da1a40b6355",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "lib/features/planning/cover_provider.dart",
+          "git_mode": "100644",
+          "git_object": "099b44c4c6029cbd5dd9189080a6e54c59eabfd5",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 4178,
+          "sha256": "dc7649b5b80574ab68ff1e84bcbe12f4528813856b7002099552fd96b8f3cd35",
+          "symbols": [
+            "CoverView",
+            "CoverNotifier"
+          ],
+          "parse_failure": null
+        },
+        {
+          "path": "lib/features/planning/cover_screen.dart",
+          "git_mode": "100644",
+          "git_object": "70ec6d9a02f064753d99ddb8d9691853ba982a12",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 17909,
+          "sha256": "159455c416c9c2817897f1ac802a98e7d26a2e9ec367626846eebabfa0f80c98",
+          "symbols": [
+            "CoverScreen",
+            "_CoverScreenState"
+          ],
+          "parse_failure": null
+        },
+        {
+          "path": "lib/features/planning/cycle_editor_screen.dart",
+          "git_mode": "100644",
+          "git_object": "346f3971dc2e541d067e379c0bc48e86acce4a86",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 4916,
+          "sha256": "48370a956c7ab59fa733e98ce29f7796746072e98c4396815b3f98cfcaf38a21",
+          "symbols": [
+            "CycleEditorScreen",
+            "_CycleEditorScreenState"
+          ],
+          "parse_failure": null
+        },
+        {
+          "path": "lib/features/planning/planner_copy.dart",
+          "git_mode": "100644",
+          "git_object": "24ed8c8341f511db0df2faf2e103538fdfb86d4f",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 4165,
+          "sha256": "7a90b34d93540f643513c4b12ef0f0fad668d071a30f93a4b38dbfa623528108",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "lib/features/planning/planner_provider.dart",
+          "git_mode": "100644",
+          "git_object": "834be2a5c179087294b94d48f261e3b12c73ce9c",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 9282,
+          "sha256": "80b1eb8cb99d9b58dca9c6c29e5450ec2ec2cd19e8ef1022ee667c9b4d64e0cb",
+          "symbols": [
+            "PlannerView",
+            "PlannerAnchor",
+            "PlannerNotifier"
+          ],
+          "parse_failure": null
+        },
+        {
+          "path": "lib/features/planning/planner_screen.dart",
+          "git_mode": "100644",
+          "git_object": "4ed57b31eff685a5a8af02f9c1d40295e44457e5",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 20216,
+          "sha256": "6b48911a173aa7f5f069299a21b5592057c6725a8ec5d05d79c13d0c81307575",
+          "symbols": [
+            "_ComponentAction",
+            "PlannerScreen",
+            "_PlannerScreenState",
+            "_PlannedRecipe",
+            "_ComponentPicker",
+            "_ComponentPickerState",
+            "_MoveSheet",
+            "_ScaleSheet"
+          ],
+          "parse_failure": null
+        },
+        {
+          "path": "lib/features/planning/planning_cycle.dart",
+          "git_mode": "100644",
+          "git_object": "c518eca6333624102ca8b22a3b85f63f6d3fcadd",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 1209,
+          "sha256": "a8285f07560af92a996d7131255a5eeccba9e6c4413e1e6557021863aca0f698",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "lib/features/planning/planning_provider.dart",
+          "git_mode": "100644",
+          "git_object": "84db0ff3a440226e9a69b7c2f65fbfe2578e81bb",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 1876,
+          "sha256": "b3db5395029bb6ad918f7eb2a0bb356c7004827af344e7e3b2afa925433c80bf",
+          "symbols": [
+            "PlanningCycleNotifier"
+          ],
+          "parse_failure": null
+        },
+        {
+          "path": "lib/features/recipes/recipe_detail_screen.dart",
+          "git_mode": "100644",
+          "git_object": "993166c1e0ec0346f89a0a76131fb61288cfa0e4",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 8472,
+          "sha256": "e9181cf15b096d933b3b731b3a58b82dc0dbcdb48b6e219709226c7166628b14",
+          "symbols": [
+            "RecipeDetailScreen",
+            "_RecipeDetailScreenState"
+          ],
+          "parse_failure": null
+        },
+        {
+          "path": "lib/features/recipes/recipe_fields.dart",
+          "git_mode": "100644",
+          "git_object": "e2ef5c6e65e43779eea8a4a55dd0a28d5c3752d0",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 5120,
+          "sha256": "a6a9c28976f49bd07ca6002d0b88c5314511d5d9730b6e6d731c5e263bc1f2c6",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "lib/features/recipes/recipe_form_screen.dart",
+          "git_mode": "100644",
+          "git_object": "4a175c36ab564b484a30617b17dce61aa620f14a",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 21745,
+          "sha256": "304bb1c725e6a185fb85b61bdccee6db2131254f9fafdcb523437ee5c624f868",
+          "symbols": [
+            "RecipeFormScreen",
+            "_LineDraft",
+            "_RecipeFormScreenState"
+          ],
+          "parse_failure": null
+        },
+        {
+          "path": "lib/features/recipes/recipe_list_screen.dart",
+          "git_mode": "100644",
+          "git_object": "d58524063e390e2c168f35076fedec326bfd5f6e",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 6063,
+          "sha256": "ce7b009c17e8a3bf38b87207f8dc69681764fab65d05fd63507a5b5c7bdd2f65",
+          "symbols": [
+            "RecipeListScreen",
+            "_RecipeListScreenState",
+            "ArchivedRecipesScreen",
+            "_ArchivedRecipesScreenState"
+          ],
+          "parse_failure": null
+        },
+        {
+          "path": "lib/features/recipes/recipes_provider.dart",
+          "git_mode": "100644",
+          "git_object": "d658491f2d2d97daf46bb84c9c888ac688f8a6a4",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 5716,
+          "sha256": "86e755b8052b227177a914526803dc7a9a505c0505e7cedef17e8535af2c1fe8",
+          "symbols": [
+            "RecipeLibraryNotifier",
+            "ArchivedRecipesNotifier"
+          ],
+          "parse_failure": null
+        },
+        {
+          "path": "lib/features/recipes/restriction_warnings.dart",
+          "git_mode": "100644",
+          "git_object": "69a27561077b3f5ad4b9166b47ff3cf129a4b1cc",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 1944,
+          "sha256": "5e95dadb2b12ae288a9592815b4e2d5bbef512d5e566cec6d69b9cee3d08390d",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "lib/features/recipes/starter_provider.dart",
+          "git_mode": "100644",
+          "git_object": "563b066e70066da5a22f65c96129cf787492d72b",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 877,
+          "sha256": "55994fb8d541091e955e588820dbc80839106fe779fcfa159015a04fea4dc79b",
+          "symbols": [
+            "StarterInstall"
+          ],
+          "parse_failure": null
+        },
+        {
+          "path": "lib/features/restrictions/restriction_copy.dart",
+          "git_mode": "100644",
+          "git_object": "722439f613befef92c216bd4666f2fa561bb73da",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 1893,
+          "sha256": "8971cf623e0a65bd02d6d55c00f9f8f5d3018839a79f3d49d3aadf36d8311416",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "lib/features/restrictions/restrictions_provider.dart",
+          "git_mode": "100644",
+          "git_object": "144f06e5d0aea51b40383a69fe95b5fc29382429",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 1901,
+          "sha256": "94da411a165a2cc3b4982a629dbc26c4293efde8b6baaee007f3e1310171b23b",
+          "symbols": [
+            "RestrictionsNotifier"
+          ],
+          "parse_failure": null
+        },
+        {
+          "path": "lib/features/restrictions/restrictions_screen.dart",
+          "git_mode": "100644",
+          "git_object": "e7c5ed0910ffc9a7ded4944810671ea777d54df9",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 8097,
+          "sha256": "8e949fd7f5f3363f6ccefeb1fcf10348d40a7677b86f90e4fc03c1adea8419c7",
+          "symbols": [
+            "RestrictionsScreen",
+            "_RestrictionsScreenState"
+          ],
+          "parse_failure": null
+        },
+        {
+          "path": "lib/features/settings/backup_copy.dart",
+          "git_mode": "100644",
+          "git_object": "a2e719533f80b4b10fbb3302686e64b61287b1df",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 2192,
+          "sha256": "22d48c2709403b31d778299dd7f86cabca40ecc7d6a32031dde4cf8ad4ba0bec",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "lib/features/settings/backup_provider.dart",
+          "git_mode": "100644",
+          "git_object": "9167b405ee2199ec2b45386c72c6dca125f5bbf9",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 4496,
+          "sha256": "5edcee6e4fd44a67d8a1be0a89d24c98541867e383ad25be81f84aa77c0674c2",
+          "symbols": [
+            "BackupActions",
+            "BackupBusy"
+          ],
+          "parse_failure": null
+        },
+        {
+          "path": "lib/features/settings/health_provider.dart",
+          "git_mode": "100644",
+          "git_object": "4736bb5c41373ad5e58fb2bd871ff3e3b7dd71c8",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 991,
+          "sha256": "281c731840ca7f2b0eb1b276fd8fe58b55f61769a602c7eadaec40b962187ed2",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "lib/features/settings/settings_screen.dart",
+          "git_mode": "100644",
+          "git_object": "c3a5527e223187b8585b411f10c9758d45e5dee3",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 9455,
+          "sha256": "4d87203523c5274d08a07ba50341151cbd556d4588a71de161da17942c074017",
+          "symbols": [
+            "SettingsScreen"
+          ],
+          "parse_failure": null
+        },
+        {
+          "path": "lib/features/shopping/shopping_copy.dart",
+          "git_mode": "100644",
+          "git_object": "4717ca9164ab68ac4cf8340053ac70ba8586b824",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 8250,
+          "sha256": "955b78fb31ce15da1ae461bd416cde7575aae91094f17943ca541af5465d9dc7",
+          "symbols": [
+            "Section"
+          ],
+          "parse_failure": null
+        },
+        {
+          "path": "lib/features/shopping/shopping_provider.dart",
+          "git_mode": "100644",
+          "git_object": "9a38ba748d055a51f55cd8a91da5bb0dc09b3e72",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 9959,
+          "sha256": "aa3d3e8b7288eb91499b87e4aca6e97362d6395e449ea04c2656803df987c93b",
+          "symbols": [
+            "ShoppingView",
+            "ShoppingNotifier"
+          ],
+          "parse_failure": null
+        },
+        {
+          "path": "lib/features/shopping/shopping_screen.dart",
+          "git_mode": "100644",
+          "git_object": "2317f0a6cb700d1749385e0c55609d832635b3ac",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 21235,
+          "sha256": "9be5f93bc2c04aa024ec2a691388e4521fca26df64ebb8f7bf5dafa047dc0f16",
+          "symbols": [
+            "ShoppingScreen",
+            "_ManualItemResult",
+            "_ManualItemSave",
+            "_ManualItemDelete",
+            "_ManualItemDialog",
+            "_ManualItemDialogState",
+            "_ShoppingScreenState"
+          ],
+          "parse_failure": null
+        }
+      ]
+    },
+    "bridge-and-storage.md": {
+      "purpose": "Generated FRB bindings, hand-written bridge API, connection owner, and SQLite adapter",
+      "files": [
+        {
+          "path": "lib/src/rust/api/decisions.dart",
+          "git_mode": "100644",
+          "git_object": "18debe304aa154593ebc7b774e8d347519ab0f58",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 3556,
+          "sha256": "0fd19f75365b3a86351305ab0c59d4b11b5770a2b855a206d8a4c266437e57fc",
+          "symbols": [
+            "PlanDecisionDto",
+            "PlanDecisionOutcomeDto",
+            "PlanDecisionRequestDto"
+          ],
+          "parse_failure": null
+        },
+        {
+          "path": "lib/src/rust/api/decisions.freezed.dart",
+          "git_mode": "100644",
+          "git_object": "5d39a3653e8e4adfce23157e7f60136d8a21ac44",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 11913,
+          "sha256": "199832f19ce9d54289fbab7de55d2345b9cc54681db6e342344a6945c744b48e",
+          "symbols": [
+            "_",
+            "PlanDecisionDtoPatterns",
+            "PlanDecisionDto_Swap",
+            "class",
+            "_",
+            "PlanDecisionDto_Veto",
+            "class",
+            "_",
+            "PlanDecisionDto_RestrictionsReviewed"
+          ],
+          "parse_failure": null
+        },
+        {
+          "path": "lib/src/rust/api/error.dart",
+          "git_mode": "100644",
+          "git_object": "5aa88a65b97512c6c2d9ce21b07026ffbd66290d",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 1856,
+          "sha256": "d49796e56079284e127b905550749b0d3b3666d70ad71d2853312f724b5220db",
+          "symbols": [
+            "KimattaError"
+          ],
+          "parse_failure": null
+        },
+        {
+          "path": "lib/src/rust/api/error.freezed.dart",
+          "git_mode": "100644",
+          "git_object": "330132cd373afc6fe18e4fb538506b2d1625caac",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 23669,
+          "sha256": "0f3b4c8a5014269ce28182179e31f74c43f2eed01ecd2daf166e81533edb8391",
+          "symbols": [
+            "_",
+            "KimattaErrorPatterns",
+            "KimattaError_InvalidPath",
+            "KimattaError_NotOpen",
+            "KimattaError_Storage",
+            "class",
+            "_",
+            "KimattaError_Corrupt",
+            "class",
+            "_",
+            "KimattaError_Planning",
+            "class",
+            "_",
+            "KimattaError_Recipe",
+            "class",
+            "_",
+            "KimattaError_Restriction",
+            "class",
+            "_",
+            "KimattaError_PlannedMeal",
+            "class",
+            "_",
+            "KimattaError_Shopping",
+            "class",
+            "_"
+          ],
+          "parse_failure": null
+        },
+        {
+          "path": "lib/src/rust/api/health.dart",
+          "git_mode": "100644",
+          "git_object": "0163da5ed3485a005901063420ba642b51635a7c",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 4406,
+          "sha256": "24a6ff23c68c3489763e42ff5bcbeb9273da745c6519d1e3b72e1df577dff26d",
+          "symbols": [
+            "ExportReport",
+            "HealthReport"
+          ],
+          "parse_failure": null
+        },
+        {
+          "path": "lib/src/rust/api/household.dart",
+          "git_mode": "100644",
+          "git_object": "1d109b3bbaa8fb6512260ce278f408d2a8c96923",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 2590,
+          "sha256": "d2f26ae35575a475c94d6a60ea5c38e0fe05b75a45035b431d5fc0d7c3539a60",
+          "symbols": [
+            "HouseholdDto",
+            "MemberDto"
+          ],
+          "parse_failure": null
+        },
+        {
+          "path": "lib/src/rust/api/pantry.dart",
+          "git_mode": "100644",
+          "git_object": "1799a0ffe787bc8e8eebf0a5f94def7d73599d05",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 3138,
+          "sha256": "c875f1a416c63810377417d8c2b052da850d77ca364f044c34db96751b24b96c",
+          "symbols": [
+            "PantryEntryDto"
+          ],
+          "parse_failure": null
+        },
+        {
+          "path": "lib/src/rust/api/planned_meals.dart",
+          "git_mode": "100644",
+          "git_object": "22df5cbc44505bae21fc814588d62818b40b711e",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 5156,
+          "sha256": "3b25b4dbc9f3bb2a3ec8cd77634b1b1476379a28903aceb4718722f15cb957b8",
+          "symbols": [
+            "MealComponentDto",
+            "PlannedMealDto",
+            "ScaleDto"
+          ],
+          "parse_failure": null
+        },
+        {
+          "path": "lib/src/rust/api/planner.dart",
+          "git_mode": "100644",
+          "git_object": "e12033e8828c7a10ea7e97093a864374e042e371",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 13007,
+          "sha256": "506814a591091a9da3cc513a5346af145756bc3b47f98ab880f9e1d29939a8c3",
+          "symbols": [
+            "ActionProposalDto",
+            "AttentionRequestDto",
+            "BandDto",
+            "CandidateSourceDto",
+            "ConfidenceDto",
+            "CoverCycleOutcomeDto",
+            "CoverCycleRequestDto",
+            "CoverageStateDto",
+            "OutcomeStatusDto",
+            "PlanningResultDto",
+            "ProposedMealDto",
+            "RejectionDto",
+            "RequiredAuthorityDto",
+            "ReversibilityDto",
+            "SearchTraceDto",
+            "SlotCoverageDto",
+            "UrgencyDto"
+          ],
+          "parse_failure": null
+        },
+        {
+          "path": "lib/src/rust/api/planning.dart",
+          "git_mode": "100644",
+          "git_object": "65b7ddf2058524184f45e29b11dee3f52a6c5b8f",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 3261,
+          "sha256": "ce951155c527dbcc38b3e29325d2b256a829d89c2244a66eec9ee1bd9bba049f",
+          "symbols": [
+            "MealSlotDto",
+            "PlanningCycleDto"
+          ],
+          "parse_failure": null
+        },
+        {
+          "path": "lib/src/rust/api/recipe.dart",
+          "git_mode": "100644",
+          "git_object": "10584ace6c8fd4babcc5027bfb1efe83b6e56897",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 13473,
+          "sha256": "ebb83475c022e2c5e9ec63bc64d73abafb35aa0109f8b5e57bffee65b071b150",
+          "symbols": [
+            "ConflictDto",
+            "CustomIngredientDto",
+            "IngredientLineDto",
+            "IngredientRefDto",
+            "QuantityDto",
+            "RecipeDto",
+            "RecipeProvenanceDto",
+            "RecipeSummaryDto",
+            "RestrictionAssessmentDto",
+            "UnitDto"
+          ],
+          "parse_failure": null
+        },
+        {
+          "path": "lib/src/rust/api/recipe.freezed.dart",
+          "git_mode": "100644",
+          "git_object": "e590fa0d3a0a57298d6d71d58e5854fff61d0aec",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 27891,
+          "sha256": "a9d9191a3d1254a4c1c37337d5db6f88738bcba06512ededc99584cab020df8f",
+          "symbols": [
+            "_",
+            "class",
+            "_",
+            "IngredientRefDtoPatterns",
+            "IngredientRefDto_Catalog",
+            "class",
+            "_",
+            "IngredientRefDto_Custom",
+            "class",
+            "_",
+            "_",
+            "QuantityDtoPatterns",
+            "QuantityDto_Unknown",
+            "QuantityDto_Exact",
+            "class",
+            "_",
+            "QuantityDto_Range",
+            "class",
+            "_",
+            "_",
+            "UnitDtoPatterns",
+            "UnitDto_None",
+            "UnitDto_Known",
+            "class",
+            "_",
+            "UnitDto_Other",
+            "class",
+            "_"
+          ],
+          "parse_failure": null
+        },
+        {
+          "path": "lib/src/rust/api/restrictions.dart",
+          "git_mode": "100644",
+          "git_object": "cf1a69e0fa4dcdd4fafe8f335464a7b1d79d2c63",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 1978,
+          "sha256": "18647fccf441148cf7f74aee338273d3af4a1cc652d6832b1d35fe98acf47ae1",
+          "symbols": [
+            "RestrictionDto"
+          ],
+          "parse_failure": null
+        },
+        {
+          "path": "lib/src/rust/api/restrictions.freezed.dart",
+          "git_mode": "100644",
+          "git_object": "250cebe5ebf059a2a3403734b7e84e39264f7bbd",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 8515,
+          "sha256": "cbf25fe46995aa745521fc482c6609f03339680a29635373b86813907930ab59",
+          "symbols": [
+            "_",
+            "RestrictionDtoPatterns",
+            "RestrictionDto_Known",
+            "class",
+            "_",
+            "RestrictionDto_Other",
+            "class",
+            "_"
+          ],
+          "parse_failure": null
+        },
+        {
+          "path": "lib/src/rust/api/shopping.dart",
+          "git_mode": "100644",
+          "git_object": "7f03c4a98f88f43dfd8fae39208e89a1b8e60839",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 11920,
+          "sha256": "e3fa2ceeade7abf215f512861436c25005178ff13712573ba3e7efc9501084df",
+          "symbols": [
+            "ContributionDto",
+            "SeparateReasonDto",
+            "ShoppingGroupDto",
+            "ShoppingLineDto",
+            "ShoppingLineStateDto",
+            "ShoppingLineStatusDto",
+            "ShoppingListDto",
+            "ShoppingManualItemDto",
+            "ShoppingViewDto"
+          ],
+          "parse_failure": null
+        },
+        {
+          "path": "lib/src/rust/api/starter.dart",
+          "git_mode": "100644",
+          "git_object": "03f022bd147a2baa210ef59a101f8bbf41a077f4",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 2463,
+          "sha256": "4ea78d084362aaa8736c3307fb6a9d83f2a86dbdf43c39807d6b3ef082b47259",
+          "symbols": [
+            "StarterInstallReportDto"
+          ],
+          "parse_failure": null
+        },
+        {
+          "path": "lib/src/rust/frb_generated.dart",
+          "git_mode": "100644",
+          "git_object": "5a468a6caa4e25b15f2b06cd61f1a870644e7386",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 176094,
+          "sha256": "07b308293da311ac35ae82c02451cfe3da20139be519e747d75c9d782452eadd",
+          "symbols": [
+            "RustLib",
+            "RustLibApi",
+            "RustLibApiImpl"
+          ],
+          "parse_failure": null
+        },
+        {
+          "path": "lib/src/rust/frb_generated.io.dart",
+          "git_mode": "100644",
+          "git_object": "90b7182b0ba80e37d82c33b23d700cb706823dea",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 32262,
+          "sha256": "6e8f8e406fd814feb746f08644380d998d552281559f45eeec51b0359b62d51b",
+          "symbols": [
+            "RustLibApiImplPlatform",
+            "RustLibWire"
+          ],
+          "parse_failure": null
+        },
+        {
+          "path": "lib/src/rust/frb_generated.web.dart",
+          "git_mode": "100644",
+          "git_object": "dab5cba677a8373225e5bc3e2953e6f7d4c116db",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 32182,
+          "sha256": "6cebcc8ed50d1a524c68653c6ed3d766a7bc23f08f102d34816db840ac7a8d06",
+          "symbols": [
+            "RustLibApiImplPlatform",
+            "RustLibWire",
+            "type"
+          ],
+          "parse_failure": null
+        },
+        {
+          "path": "rust/crates/kimatta-storage/Cargo.toml",
+          "git_mode": "100644",
+          "git_object": "0321b798be8273ec870b111188fad80a614e97e1",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 308,
+          "sha256": "fbe98cfef97ab46b9b655ea69bf48712e779498d5e57228af7fe639f4c60b279",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "rust/crates/kimatta-storage/src/controller.rs",
+          "git_mode": "100644",
+          "git_object": "cb6b33404c2834e77678c30a4cfe94acfdf30831",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 71285,
+          "sha256": "b3f1db421ed1c8fc7ea4879e62185ba480a53b40ce9014591fd1eb9bf09eebdc",
+          "symbols": [
+            "save_policy",
+            "save_policy_in",
+            "disable_policies_of_type_in",
+            "list_policies",
+            "append_ledger_entry_in",
+            "max_ledger_seq_in",
+            "append_ledger_entry",
+            "list_ledger_entries",
+            "apply_plan_and_record",
+            "load_planning_snapshot",
+            "load_planning_snapshot_in"
+          ],
+          "parse_failure": null
+        },
+        {
+          "path": "rust/crates/kimatta-storage/src/lib.rs",
+          "git_mode": "100644",
+          "git_object": "ac51552d32688c6322698c148de3270905614b3e",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 347916,
+          "sha256": "c194b6f7b4cc566d2b35263189ca00df3749b69dc6d707f3136f5cbeeba7f716",
+          "symbols": [
+            "controller",
+            "StorageError",
+            "MIGRATIONS",
+            "open",
+            "schema_version",
+            "export_database",
+            "validate_export",
+            "insert_household",
+            "HouseholdRecord",
+            "load_household",
+            "load_household_by_id",
+            "ensure_household",
+            "rename_household",
+            "mark_onboarded",
+            "ensure_planning_cycle",
+            "save_planning_cycle",
+            "load_planning_cycle",
+            "save_restrictions",
+            "load_restrictions",
+            "save_member_preferences",
+            "load_member_preferences",
+            "upsert_ingredient",
+            "load_ingredient",
+            "upsert_custom_ingredient",
+            "list_custom_ingredients",
+            "PantryEntry",
+            "list_pantry_entries",
+            "list_marked_pantry_refs",
+            "set_pantry_mark",
+            "set_pantry_marks",
+            "RecipeSummary",
+            "RecipeRecord",
+            "RecipeListing",
+            "save_recipe",
+            "save_recipe_in",
+            "StarterInstallReport",
+            "install_starter_content",
+            "load_recipe",
+            "list_recipes",
+            "archive_recipe",
+            "archive_recipe_in",
+            "restore_recipe",
+            "restore_recipe_in",
+            "save_planned_meal",
+            "save_planned_meal_in",
+            "set_planned_meal_lock",
+            "set_planned_meal_lock_in",
+            "delete_planned_meal",
+            "delete_planned_meal_in",
+            "load_planned_meal",
+            "list_planned_meals",
+            "load_shopping_input",
+            "load_shopping_list",
+            "ShoppingLineState",
+            "list_shopping_line_states",
+            "set_shopping_line_state",
+            "ShoppingManualItem",
+            "list_shopping_manual_items",
+            "save_shopping_manual_item",
+            "delete_shopping_manual_item",
+            "reset_shopping_list"
+          ],
+          "parse_failure": null
+        },
+        {
+          "path": "rust/src/api/decisions.rs",
+          "git_mode": "100644",
+          "git_object": "ee4d4375a76e4b315494bba7caf4515f19bd496b",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 16800,
+          "sha256": "2492259c7302f64b0b5af568b27c36f6fe4e7214f4aeae59ba6807a1b8d0460f",
+          "symbols": [
+            "PlanDecisionDto",
+            "PlanDecisionRequestDto",
+            "PlanDecisionOutcomeDto",
+            "record_plan_decision",
+            "record_in"
+          ],
+          "parse_failure": null
+        },
+        {
+          "path": "rust/src/api/error.rs",
+          "git_mode": "100644",
+          "git_object": "2d0ddcedb6b63f39c401e05852d536183a8450fa",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 7654,
+          "sha256": "7d1a41abe9bfccc171326cffa3f462f80d1edf903f94adb7a714e245fe41cfd6",
+          "symbols": [
+            "KimattaError"
+          ],
+          "parse_failure": null
+        },
+        {
+          "path": "rust/src/api/health.rs",
+          "git_mode": "100644",
+          "git_object": "c1d8a82e763322be890965f8086c7f099904518c",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 40442,
+          "sha256": "59158f6e5a484737d99e34c613d8ecafa7bd9a9c6ea24c46e3603edfd57630cf",
+          "symbols": [
+            "HealthReport",
+            "core_version",
+            "open_database",
+            "ExportReport",
+            "export_database",
+            "restore_database",
+            "reset_database",
+            "init_app"
+          ],
+          "parse_failure": null
+        },
+        {
+          "path": "rust/src/api/household.rs",
+          "git_mode": "100644",
+          "git_object": "5297ff2312621cde6851363e7e7097e8b668bfd7",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 9528,
+          "sha256": "221face5a53fa90444c0e16f8d97cdf15022fb388100784c464dad2982493499",
+          "symbols": [
+            "MemberDto",
+            "HouseholdDto",
+            "bootstrap_household",
+            "rename_household",
+            "complete_onboarding"
+          ],
+          "parse_failure": null
+        },
+        {
+          "path": "rust/src/api/mod.rs",
+          "git_mode": "100644",
+          "git_object": "3bb67377706c2deb74de79be63c869546633f540",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 216,
+          "sha256": "be7f3a60f6f8fcd0e1d7692fd49787104898222a1a4214a58cb5f4857f4edeec",
+          "symbols": [
+            "decisions",
+            "error",
+            "health",
+            "household",
+            "pantry",
+            "planned_meals",
+            "planner",
+            "planning",
+            "recipe",
+            "restrictions",
+            "shopping",
+            "starter"
+          ],
+          "parse_failure": null
+        },
+        {
+          "path": "rust/src/api/pantry.rs",
+          "git_mode": "100644",
+          "git_object": "782edc0cf404637c3dd9f1b4b68ec320be770d82",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 8752,
+          "sha256": "2e9628c379c344eba435ebaf8b5e51fa0e41d8e9cde9fdff54f8373d3161973b",
+          "symbols": [
+            "PantryEntryDto",
+            "list_pantry",
+            "set_pantry_mark",
+            "set_pantry_marks",
+            "set_many_in"
+          ],
+          "parse_failure": null
+        },
+        {
+          "path": "rust/src/api/planned_meals.rs",
+          "git_mode": "100644",
+          "git_object": "2644409088b2250712cd73cb455ef1afdadd8eb8",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 16267,
+          "sha256": "cead336e9bb4635b5f5ebf9af2f2470e2bf5369fb81a38b0e66baca389524724",
+          "symbols": [
+            "ScaleDto",
+            "MealComponentDto",
+            "PlannedMealDto",
+            "save_planned_meal",
+            "load_planned_meal",
+            "list_planned_meals",
+            "set_planned_meal_lock",
+            "delete_planned_meal",
+            "known_meal_component_kinds",
+            "component_to_domain",
+            "component_from_domain",
+            "save_in"
+          ],
+          "parse_failure": null
+        },
+        {
+          "path": "rust/src/api/planner.rs",
+          "git_mode": "100644",
+          "git_object": "e131a4eccac58eb99660df9b35c81c2be471a46c",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 36243,
+          "sha256": "ab4cb7300878a3cc5fe2bdfee57a1045682151a6ad42aafd9c56de4baa4a0408",
+          "symbols": [
+            "CoverCycleRequestDto",
+            "OutcomeStatusDto",
+            "CoverageStateDto",
+            "CandidateSourceDto",
+            "BandDto",
+            "ConfidenceDto",
+            "UrgencyDto",
+            "ReversibilityDto",
+            "RequiredAuthorityDto",
+            "SlotCoverageDto",
+            "ProposedMealDto",
+            "RejectionDto",
+            "ActionProposalDto",
+            "AttentionRequestDto",
+            "SearchTraceDto",
+            "PlanningResultDto",
+            "CoverCycleOutcomeDto",
+            "cover_cycle",
+            "status_from_domain",
+            "MAX_OFFSET_CYCLES",
+            "OFFSET_OUT_OF_RANGE",
+            "cover_in"
+          ],
+          "parse_failure": null
+        },
+        {
+          "path": "rust/src/api/planning.rs",
+          "git_mode": "100644",
+          "git_object": "c538e69928dba270b2ed92936baa3a5bb587dccb",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 10529,
+          "sha256": "7317e64554e04c1a98f9d008a5107ef9c4708fa1d3d633c58d69462277782179",
+          "symbols": [
+            "MealSlotDto",
+            "PlanningCycleDto",
+            "slot_to_domain",
+            "slot_from_domain",
+            "ensure_planning_cycle",
+            "save_planning_cycle",
+            "planning_cycle_window"
+          ],
+          "parse_failure": null
+        },
+        {
+          "path": "rust/src/api/recipe.rs",
+          "git_mode": "100644",
+          "git_object": "78220e4765304dc849879499723305a1a1b9ef83",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 58346,
+          "sha256": "7e681a79f6a2aee0796de9505a5dd5e2f84bca1570e2689674359e3770c05b9e",
+          "symbols": [
+            "QuantityDto",
+            "UnitDto",
+            "IngredientRefDto",
+            "IngredientLineDto",
+            "RecipeProvenanceDto",
+            "ConflictDto",
+            "RestrictionAssessmentDto",
+            "RecipeDto",
+            "RecipeSummaryDto",
+            "CustomIngredientDto",
+            "save_recipe",
+            "load_recipe",
+            "list_recipes",
+            "list_archived_recipes",
+            "archive_recipe",
+            "restore_recipe",
+            "known_unit_kinds",
+            "add_custom_ingredient",
+            "list_custom_ingredients",
+            "id_or_minted",
+            "quantity_from_domain",
+            "unit_from_domain",
+            "ref_to_domain",
+            "ref_from_domain",
+            "save_recipe_in"
+          ],
+          "parse_failure": null
+        },
+        {
+          "path": "rust/src/api/restrictions.rs",
+          "git_mode": "100644",
+          "git_object": "99aae7b9af4fd714aee219fdca003bd6affd633b",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 8665,
+          "sha256": "0370a06a6676011be7b6aecee56cb2562074b9ffa424c8271c461102f3ab0c77",
+          "symbols": [
+            "RestrictionDto",
+            "known_restriction_kinds",
+            "load_restrictions",
+            "save_restrictions",
+            "from_domain",
+            "save_in"
+          ],
+          "parse_failure": null
+        },
+        {
+          "path": "rust/src/api/shopping.rs",
+          "git_mode": "100644",
+          "git_object": "857ab1cfe3759d07e46e5b55ae7d6f7ac5b79e41",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 40604,
+          "sha256": "6a403cc9c47b175da2dcf28b6f9035e81ee9724afbce6cc4c0f9a51b19f5286d",
+          "symbols": [
+            "ShoppingLineStateDto",
+            "ShoppingManualItemDto",
+            "ShoppingViewDto",
+            "load_shopping_view",
+            "set_shopping_line_state",
+            "save_shopping_manual_item",
+            "delete_shopping_manual_item",
+            "reset_shopping_list",
+            "ContributionDto",
+            "SeparateReasonDto",
+            "ShoppingLineStatusDto",
+            "ShoppingLineDto",
+            "ShoppingGroupDto",
+            "ShoppingListDto",
+            "derive_shopping_list"
+          ],
+          "parse_failure": null
+        },
+        {
+          "path": "rust/src/api/starter.rs",
+          "git_mode": "100644",
+          "git_object": "9da9c86e596ca9cf90004a93d6c03df38935afad",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 7926,
+          "sha256": "d071608f0fe24d6b418a11b34e40704500aff0bd74b47d276db1391bd11bbadc",
+          "symbols": [
+            "StarterInstallReportDto",
+            "install_starter_content"
+          ],
+          "parse_failure": null
+        },
+        {
+          "path": "rust/src/db.rs",
+          "git_mode": "100644",
+          "git_object": "4c140e42b27bc62da15ff63f0002149c13e95ca3",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 2445,
+          "sha256": "5e26d355ee2fc52be8f045f9931f724b5062b71ef121f28c67423a557c073369",
+          "symbols": [
+            "install",
+            "with",
+            "swap",
+            "TEST_DB_LOCK"
+          ],
+          "parse_failure": null
+        },
+        {
+          "path": "rust/src/frb_generated.rs",
+          "git_mode": "100644",
+          "git_object": "1a926f5b6317dcfa083a0152aa0308c50f91cb6c",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 234676,
+          "sha256": "ba113e1877442b5ef2032bcf3c29a58b91f2a39963863607831e411acef40ab7",
+          "symbols": [
+            "FLUTTER_RUST_BRIDGE_CODEGEN_VERSION",
+            "FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH"
+          ],
+          "parse_failure": null
+        },
+        {
+          "path": "rust/src/lib.rs",
+          "git_mode": "100644",
+          "git_object": "19e3c563c993776e92bf1921384d6e205459c51e",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 40,
+          "sha256": "092a4ad47fb920eadad9543be59d071e660e8b7c73254b991689c2db7eee01f9",
+          "symbols": [
+            "api"
+          ],
+          "parse_failure": null
+        }
+      ]
+    },
+    "rust-domain-and-planner.md": {
+      "purpose": "Household kernel, food model, controller application service, and planner",
+      "files": [
+        {
+          "path": "rust/crates/food-domain/Cargo.toml",
+          "git_mode": "100644",
+          "git_object": "7d8289329287522830ddb4ab99e92d749b225e99",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 525,
+          "sha256": "ae8a1976a828e73d085563f554e86598a96e63c13a80489f717fed279ead3012",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "rust/crates/food-domain/content/starter_recipes.json",
+          "git_mode": "100644",
+          "git_object": "2ce08d69fcf967afc84357ed039e6c8411b8e31b",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 296831,
+          "sha256": "7f2d2e5726d705162ce99094929a8f0499dfa070172119f9034b741d3db8681b",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "rust/crates/food-domain/examples/beam_width.rs",
+          "git_mode": "100644",
+          "git_object": "d2f9f26cd6b118ef1e1b34f71666f801a3f56866",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 7944,
+          "sha256": "b758499ee4a9c2ebd5e4245fc95b4728b9e67272d7953605f43b45210673d968",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "rust/crates/food-domain/src/lib.rs",
+          "git_mode": "100644",
+          "git_object": "f111dfe101af6729fdf00e2f4ac044610f45dd1b",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 23794,
+          "sha256": "fccc2918ef214e5840469bf9d3e356d8a0659b93d19ac30e88948d6b127a128c",
+          "symbols": [
+            "planned_meal",
+            "planner",
+            "preference",
+            "recipe",
+            "restriction",
+            "shopping",
+            "starter",
+            "DEFAULT_CYCLE_DAYS",
+            "MIN_CYCLE_DAYS",
+            "MAX_CYCLE_DAYS",
+            "PlanningError",
+            "MealSlot",
+            "MealScope",
+            "parse_civil_date",
+            "format_civil_date",
+            "PlanningCycle"
+          ],
+          "parse_failure": null
+        },
+        {
+          "path": "rust/crates/food-domain/src/planned_meal.rs",
+          "git_mode": "100644",
+          "git_object": "11e45be3f5e3c0c894ff4cef57f5020098672127",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 20159,
+          "sha256": "b97fa83608142cb7a5ce02abcece3399864c86be4b17954167c7ffcf955ffb76",
+          "symbols": [
+            "PlannedMealError",
+            "WriteSource",
+            "MealComponent",
+            "PlannedMeal"
+          ],
+          "parse_failure": null
+        },
+        {
+          "path": "rust/crates/food-domain/src/planner/attention.rs",
+          "git_mode": "100644",
+          "git_object": "728011c5269ef5edc02899f3a93e4410182a1f2e",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 4440,
+          "sha256": "5c5e5b89261cbfbe87f8fcc76501dc7e788b00041690650b7a6aa0cfd963370b",
+          "symbols": [
+            "APPLY_PLAN",
+            "requests",
+            "proposals"
+          ],
+          "parse_failure": null
+        },
+        {
+          "path": "rust/crates/food-domain/src/planner/beam.rs",
+          "git_mode": "100644",
+          "git_object": "5f79e70b3dbcc744d5169b9ad785c330f6fe4dc3",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 4874,
+          "sha256": "29e5d24ecb3df16a0efd50499334bbe8519b3bc1051392efc34c0886fea458b6",
+          "symbols": [
+            "SearchTrace",
+            "SearchOutcome",
+            "plan_text",
+            "search"
+          ],
+          "parse_failure": null
+        },
+        {
+          "path": "rust/crates/food-domain/src/planner/candidates.rs",
+          "git_mode": "100644",
+          "git_object": "b7274eabd3d79ee22151263af2ecd85a5d16de6d",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 17700,
+          "sha256": "bc86dd41c2f0ea65ee0ead8e20ef31ddcb294dcf57fcd616ba2cac0dc8ae8b61",
+          "symbols": [
+            "CandidateSource",
+            "RecipeView",
+            "Candidate",
+            "SlotCandidates",
+            "is_resolved",
+            "STARTER_NOTE_PREFIX",
+            "recipe_views_of",
+            "is_unverifiable_dish",
+            "leftovers_sourced_from_stored",
+            "generate"
+          ],
+          "parse_failure": null
+        },
+        {
+          "path": "rust/crates/food-domain/src/planner/coverage.rs",
+          "git_mode": "100644",
+          "git_object": "bb24903d7dcf60e6d1387398b66ac1d2ff0d4054",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 14778,
+          "sha256": "81c26d7a73a53af3ecc924ee3dd857e7425ce5a63e7bf6b1829b5be94586c125",
+          "symbols": [
+            "NO_PREP_TIME_ESTIMATES",
+            "PANTRY_INCOMPLETE",
+            "RESTRICTIONS_NOT_CONFIGURED",
+            "PREFERENCES_SPARSE",
+            "CONSERVATIVE_DEFAULT",
+            "PLAN_INFEASIBLE",
+            "HARD_CONSTRAINT_UNRESOLVED",
+            "UNKNOWN_POLICY_TYPE",
+            "LOCK_HELD_OVER",
+            "FALLBACK_PLACEHOLDER_CHOSEN",
+            "FREEFORM_DISH_UNVERIFIED",
+            "CLAIM_BLOCKING",
+            "ISSUE_TEXT",
+            "issue_text",
+            "CoverageState",
+            "SlotCoverage",
+            "SlotFallbacks",
+            "slot_coverage",
+            "sufficiency",
+            "cycle_status"
+          ],
+          "parse_failure": null
+        },
+        {
+          "path": "rust/crates/food-domain/src/planner/fixtures/README.md",
+          "git_mode": "100644",
+          "git_object": "0452e5ae8bd4d5ef86964cb8b3ebe53cb32f0d32",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 7401,
+          "sha256": "a78d0df244a64e202cd7337d0fbddc835f9967a985c297b5e819b25abce61d1c",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "rust/crates/food-domain/src/planner/fixtures/mod.rs",
+          "git_mode": "100644",
+          "git_object": "4ebb8ae4f5213e0148a303a096f42373d1a954f4",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 31840,
+          "sha256": "afa8da0b71c55eb8a256a30c907aa614c6f81c18eab379f4b5810f7593e59b2d",
+          "symbols": [
+            "FixtureSource",
+            "PlannerFixture",
+            "all",
+            "by_name",
+            "candidate_info_of",
+            "restrictions_skipped_variant",
+            "shopping_input_of"
+          ],
+          "parse_failure": null
+        },
+        {
+          "path": "rust/crates/food-domain/src/planner/invariant_tests.rs",
+          "git_mode": "100644",
+          "git_object": "537909ea47d44ce1377399e1f4708262b9d0c4e5",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 30659,
+          "sha256": "d695ad24f17898cebfe5e35872223343820c53644d14346b98e9b930e675b422",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "rust/crates/food-domain/src/planner/mod.rs",
+          "git_mode": "100644",
+          "git_object": "d940eef595a6842e46e4e9547412db46e312e277",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 18301,
+          "sha256": "372803e408ed0dfaf5544d59e011fee590d69b7e6dfd6692833620a9f07ca68e",
+          "symbols": [
+            "attention",
+            "beam",
+            "candidates",
+            "coverage",
+            "score",
+            "snapshot",
+            "tier0",
+            "fixtures",
+            "PLANNER_ALGORITHM_VERSION",
+            "CONTROLLER_ID",
+            "reason",
+            "ProposedMeal",
+            "PlanningResult",
+            "cover_cycle",
+            "FoodController",
+            "assess_existing"
+          ],
+          "parse_failure": null
+        },
+        {
+          "path": "rust/crates/food-domain/src/planner/score.rs",
+          "git_mode": "100644",
+          "git_object": "efb984c544d118d17668ec4f3e94165a4d309d8c",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 13574,
+          "sha256": "0a73d60cd5b174c3d160f0fff0ae081d4f521dd61232470f3155c7b33c7d6a49",
+          "symbols": [
+            "SLOT_COVERED",
+            "SLOT_OPEN",
+            "LEFTOVER_SOURCE_MISSING",
+            "PREP_FEASIBLE_UNKNOWN",
+            "MEMBER_LIKE",
+            "MEMBER_DISLIKE",
+            "CONTRADICTORY_PREFERENCE",
+            "REPEATED_SACRIFICE",
+            "CHURN_PENALTY",
+            "NEAR_TERM_CHURN",
+            "SLACK_FRAGILE",
+            "SLACK_GOOD",
+            "STUB_NEEDS_DECISION",
+            "FALLBACK_PLACEHOLDER",
+            "REPEAT_IN_CYCLE",
+            "RECENTLY_EATEN",
+            "INGREDIENT_OVERLAP",
+            "PANTRY_FIT",
+            "LEFTOVER_UTILITY",
+            "LEFTOVER_ASSUMED",
+            "NO_COST_DATA",
+            "NO_NUTRITION_DATA",
+            "Score",
+            "Term",
+            "PlanScore",
+            "score_plan"
+          ],
+          "parse_failure": null
+        },
+        {
+          "path": "rust/crates/food-domain/src/planner/snapshot.rs",
+          "git_mode": "100644",
+          "git_object": "ccd85a3802852e808a97a2a972746d78567c4724",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 14225,
+          "sha256": "ed1b83ddcb147e951d8a3cb9a60ed331f358d20e5237de23201211335c9e3efe",
+          "symbols": [
+            "SearchParams",
+            "FoodPolicies",
+            "RecipeCandidateInfo",
+            "PlanningSnapshot",
+            "fnv1a_64",
+            "ref_text",
+            "component_text",
+            "components_text"
+          ],
+          "parse_failure": null
+        },
+        {
+          "path": "rust/crates/food-domain/src/planner/tests.rs",
+          "git_mode": "100644",
+          "git_object": "92d18f1571f8fd29da5613b7d1b15fb19f6a3561",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 99241,
+          "sha256": "b565035620c847c50e5efb002b02eebb17305835d0f4ea44797d2eb34fcc34fe",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "rust/crates/food-domain/src/planner/tier0.rs",
+          "git_mode": "100644",
+          "git_object": "ba2916b8da7dee49a30e78877b2f2044f0ecd0fa",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 6452,
+          "sha256": "4e55d35e27b5d47b80070b53662b9eda7a11a167f2598a70c0872de30d080718",
+          "symbols": [
+            "RESTRICTION_CONFLICT",
+            "HARD_VETO",
+            "PREP_WINDOW_IMPOSSIBLE",
+            "LOCK_CONFLICT",
+            "LOCK_HELD_OVER",
+            "RESTRICTION_WORDING_UNVERIFIED",
+            "NON_RECIPE_COMPONENT_UNVERIFIED",
+            "Rejection",
+            "Feasible",
+            "restriction_conflict_code",
+            "prep_minutes",
+            "filter"
+          ],
+          "parse_failure": null
+        },
+        {
+          "path": "rust/crates/food-domain/src/preference.rs",
+          "git_mode": "100644",
+          "git_object": "d642ade5586d7f92eb94682cdc58eff2def0f8ef",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 5670,
+          "sha256": "b0b83d9d76ca71aa0853f72e6e72bf68f4d0e3359c60f4388e6b1cb2451f02d2",
+          "symbols": [
+            "PreferenceError",
+            "Sentiment",
+            "MemberPreference",
+            "MemberPreferences"
+          ],
+          "parse_failure": null
+        },
+        {
+          "path": "rust/crates/food-domain/src/recipe.rs",
+          "git_mode": "100644",
+          "git_object": "6985984bb80fd09452b8a57f060dc6eae0a81f60",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 45464,
+          "sha256": "b2dc52a003cbbf23dfb9455d00416fa7fb0c88e617dc0bd1c8a90c74da1ca341",
+          "symbols": [
+            "RecipeError",
+            "Ingredient",
+            "CustomIngredient",
+            "ProvenanceKind",
+            "RecipeProvenance",
+            "RightsBasis",
+            "RecipeRights",
+            "Rational",
+            "QuantityRange",
+            "Quantity",
+            "UnitKind",
+            "Unit",
+            "IngredientRef",
+            "IngredientLine",
+            "Recipe"
+          ],
+          "parse_failure": null
+        },
+        {
+          "path": "rust/crates/food-domain/src/restriction.rs",
+          "git_mode": "100644",
+          "git_object": "1bd0e03030cc1b05b67b122d0e92b2fddc40153d",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 29537,
+          "sha256": "d0b4f6f45170d315f9ded648069c4ab36b5214adabde3519fbea0e178cd741ab",
+          "symbols": [
+            "RestrictionError",
+            "RestrictionKind",
+            "Restriction",
+            "HouseholdRestrictions",
+            "RULE_VERSION",
+            "tokens",
+            "is_vetoable",
+            "contains_phrase",
+            "Conflict",
+            "RestrictionAssessment",
+            "assess"
+          ],
+          "parse_failure": null
+        },
+        {
+          "path": "rust/crates/food-domain/src/shopping.rs",
+          "git_mode": "100644",
+          "git_object": "eae92f4203304724ecbe88d9592dd496ee842b92",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 76316,
+          "sha256": "e3d15c250d7587b4e1d231f9642763cc14aad5ba3fcba4276673939b8e60a6f3",
+          "symbols": [
+            "SHOPPING_ALGORITHM_VERSION",
+            "ShoppingError",
+            "quantity_token",
+            "UnitFamily",
+            "base_factor",
+            "Contribution",
+            "SeparateReason",
+            "LineStatus",
+            "ShoppingLine",
+            "ShoppingGroup",
+            "ShoppingList",
+            "IdentityInfo",
+            "ShoppingInput",
+            "derive_shopping_list"
+          ],
+          "parse_failure": null
+        },
+        {
+          "path": "rust/crates/food-domain/src/starter.rs",
+          "git_mode": "100644",
+          "git_object": "0dc41ee546288bc2c3e76f1b740d8ed40415d390",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 40505,
+          "sha256": "0fb2f8ba20b94b4e87dc3e148a4e1c8d5b1bfa98f0fdc4d0a512f600f8a5345c",
+          "symbols": [
+            "StarterError",
+            "CookReview",
+            "StarterRecipe",
+            "StarterContent",
+            "all_starter_content",
+            "shipped_starter_content"
+          ],
+          "parse_failure": null
+        },
+        {
+          "path": "rust/crates/household-core/Cargo.toml",
+          "git_mode": "100644",
+          "git_object": "ef2a9103d16b2de71fcada421f673d40fedbf402",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 101,
+          "sha256": "1990ddb275d96c3354ca67981a1b022549683a52fb797166d259003648cfc24c",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "rust/crates/household-core/src/kernel.rs",
+          "git_mode": "100644",
+          "git_object": "c89fdb7f393101d0161e0601a614f57213b69745",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 10037,
+          "sha256": "34da3e211544c4465afe96d6d8238156d7b03556062c57290bc336bafc5671a8",
+          "symbols": [
+            "KernelError",
+            "EvidenceSource",
+            "Confidence",
+            "Band",
+            "Urgency",
+            "Reversibility",
+            "RequiredAuthority",
+            "OutcomeStatus",
+            "ReasonCode",
+            "Horizon",
+            "Policy",
+            "OutcomeAssessment",
+            "ActionProposal",
+            "AttentionRequest",
+            "LedgerEntry",
+            "HouseholdController"
+          ],
+          "parse_failure": null
+        },
+        {
+          "path": "rust/crates/household-core/src/lib.rs",
+          "git_mode": "100644",
+          "git_object": "81cad29a9c39946b158f7f38c76f7dc875c7cc9b",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 9441,
+          "sha256": "58c267ae997e4776aaf030096e9361d87cafbc707ca8b50c4e1c712dd0e3984b",
+          "symbols": [
+            "kernel",
+            "IdError",
+            "Household",
+            "HouseholdMember"
+          ],
+          "parse_failure": null
+        },
+        {
+          "path": "rust/crates/kimatta-application/Cargo.toml",
+          "git_mode": "100644",
+          "git_object": "87d34a2c5e96848fbafa82e4b14cec3ed6ce0d55",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 281,
+          "sha256": "65612520f54fc849139a58641bab6156f39e4394f011ff879a2a8ecf6b17a175",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "rust/crates/kimatta-application/src/lib.rs",
+          "git_mode": "100644",
+          "git_object": "9dd1f15fc792b46ecdb0dc02e59f9bd1a17b14a6",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 57491,
+          "sha256": "6178b144f970aeaff1c6f8a093ec9f576d8a0e034c3d350654b29bb68a14d2d1",
+          "symbols": [
+            "ApplicationError",
+            "CoverCycleRequest",
+            "CoverCycleOutcome",
+            "ACTION_APPLY",
+            "ACTION_PROPOSE",
+            "ACTION_DECLINED",
+            "ACTION_CORRECT",
+            "cover_cycle",
+            "PlanDecision",
+            "PlanDecisionRequest",
+            "PlanDecisionOutcome",
+            "record_decision"
+          ],
+          "parse_failure": null
+        }
+      ]
+    },
+    "tests-platform-and-tools.md": {
+      "purpose": "Tests, Android host/packaging, automation, hooks, and developer tools",
+      "files": [
+        {
+          "path": ".githooks/pre-commit",
+          "git_mode": "100755",
+          "git_object": "96eb063d5f832440e628e75fcf304333287b919f",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 817,
+          "sha256": "e8f0b7d340c710d56ec86e4bef91fef589820660043d9673987092bb1bfc47ab",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": ".github/workflows/release-apk.yml",
+          "git_mode": "100644",
+          "git_object": "5638831dcb5f5c7e8cd8fbfde940f37b169ba6df",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 2144,
+          "sha256": "de47835d8f5d57cc83fbe5e82fb7a8ffcbf0b2337374a40ae24fd0ffc5be9bda",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "android/.gitignore",
+          "git_mode": "100644",
+          "git_object": "a32122b542c50a1423e99bac0380430601dd7885",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 262,
+          "sha256": "2213e9ac0e695c53901b07f1b7aa5ead6c09210231adb6b76cc8dbeab192948a",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "android/app/build.gradle.kts",
+          "git_mode": "100644",
+          "git_object": "0ff65b917a4c470fe57a8c3da2df4f1f4ccf87ee",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 1972,
+          "sha256": "37b4665e2ff81a8cad3e3ee05ab9b4ff513ef05f21a9b40859e85f7d5ac83dc4",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "android/app/src/debug/AndroidManifest.xml",
+          "git_mode": "100644",
+          "git_object": "399f6981d5d35475eb18e6068ae67cdd7c731978",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 378,
+          "sha256": "30b0832ed8b92dfbd6ae2abfa939ccf26333d37600056b1572bd4a397a18a74b",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "android/app/src/main/AndroidManifest.xml",
+          "git_mode": "100644",
+          "git_object": "e5bc1989335aa653741108c18cf0240f468ea233",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 2640,
+          "sha256": "34e401ea749aa312a19022896456791eee143378027417f7c7e18a3aa19a1bea",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "android/app/src/main/kotlin/dev/mealmate/temp/MainActivity.kt",
+          "git_mode": "100644",
+          "git_object": "5b05b7934f1a1d6e12c411372e9f46004518b41c",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 119,
+          "sha256": "53dd0881a992ef8b68f0400407a8f4d06df1a2fd9fc1079d1492ccb84059a61c",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "android/app/src/main/res/drawable-v21/launch_background.xml",
+          "git_mode": "100644",
+          "git_object": "f74085f3f6a2b995f8ad1f9ff7b2c46dc118a9e0",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 438,
+          "sha256": "7ca6d5cec2169c5a98661a119db23a6f3399c8fef2256ff04f3a642831282478",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "android/app/src/main/res/drawable/launch_background.xml",
+          "git_mode": "100644",
+          "git_object": "304732f8842013497e14bd02f67a55f2614fb8f7",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 434,
+          "sha256": "94433756fe10005ddd6fc55cc5c0b1e9f3c10b66a08ceac795ece6713d34e28a",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "android/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml",
+          "git_mode": "100644",
+          "git_object": "be438580f7f9f25a62c9e3e448de0338b63a8e18",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 268,
+          "sha256": "5056b7226b3f58e65a61739e8ab6f5c52099fccee3ae9aad0e8856f31709e3fa",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "android/app/src/main/res/mipmap-hdpi/ic_launcher.png",
+          "git_mode": "100644",
+          "git_object": "6c510debaed457969018cb9032f1d1a0e56471b2",
+          "stage": 0,
+          "kind": "binary",
+          "bytes": 6791,
+          "sha256": "6c19d78772fd840197e0efb0a5d9b00976d0b0e23bdc0a4850f899dbb7279f12",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "android/app/src/main/res/mipmap-hdpi/ic_launcher_foreground.png",
+          "git_mode": "100644",
+          "git_object": "f57c4ff7a1f0e4d72914229ec639d1b4ec6a947c",
+          "stage": 0,
+          "kind": "binary",
+          "bytes": 21775,
+          "sha256": "72d6c0849a2591e3d47bf979afb33aaf4179e7a83974403cf80ad31298e54095",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "android/app/src/main/res/mipmap-mdpi/ic_launcher.png",
+          "git_mode": "100644",
+          "git_object": "b58c64cae5362bd1d33b265f132f608c24ca6409",
+          "stage": 0,
+          "kind": "binary",
+          "bytes": 3826,
+          "sha256": "b3862d2e0dd21dfab2838848f3bba4fa7880dfab22e92adcd26d4b64f8a67440",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "android/app/src/main/res/mipmap-mdpi/ic_launcher_foreground.png",
+          "git_mode": "100644",
+          "git_object": "be42d0be1562dbb041e3bfabe6693b3e9f30e222",
+          "stage": 0,
+          "kind": "binary",
+          "bytes": 10912,
+          "sha256": "8964df75b1d650bb60b36a8cba6d99d5d51e73dc7f509b4cbcc84ce39e68458f",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "android/app/src/main/res/mipmap-xhdpi/ic_launcher.png",
+          "git_mode": "100644",
+          "git_object": "6bd3491a5b3e535bbc5e60bc965a27e711d99d9b",
+          "stage": 0,
+          "kind": "binary",
+          "bytes": 10483,
+          "sha256": "55fbff42e615dc3683efdedba717e3be529badcc7717604acdd909a95818db0e",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "android/app/src/main/res/mipmap-xhdpi/ic_launcher_foreground.png",
+          "git_mode": "100644",
+          "git_object": "c36e7cd676d379245396151fdca0b034cf7ea200",
+          "stage": 0,
+          "kind": "binary",
+          "bytes": 36690,
+          "sha256": "4d003222003ae82fe98a31c7d33337bac55b25bbc42fbe0381415b5bf81e2c45",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "android/app/src/main/res/mipmap-xxhdpi/ic_launcher.png",
+          "git_mode": "100644",
+          "git_object": "b7f18899ab21f8ecb63ab8749c68610e649bcdb7",
+          "stage": 0,
+          "kind": "binary",
+          "bytes": 21107,
+          "sha256": "41a9ff95c2d2025e2027d199b0809739558b10e1aa4be5f10412f3dbd2c6fbe5",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "android/app/src/main/res/mipmap-xxhdpi/ic_launcher_foreground.png",
+          "git_mode": "100644",
+          "git_object": "6b45b872e71e20405eb37a91531756cee3ba51dd",
+          "stage": 0,
+          "kind": "binary",
+          "bytes": 82540,
+          "sha256": "2e322f3c399043630fc28698fd7a32622f30da0989f05883bd142556f5b1028e",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png",
+          "git_mode": "100644",
+          "git_object": "c6eee74cd06eb06210680df9793abe8ba131dff1",
+          "stage": 0,
+          "kind": "binary",
+          "bytes": 35640,
+          "sha256": "662ab8aa5f697a4e6a64b785d49b5c30b257c2fb581e0c7ef687b784f936d42a",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "android/app/src/main/res/mipmap-xxxhdpi/ic_launcher_foreground.png",
+          "git_mode": "100644",
+          "git_object": "c46be4976d7f12c8e0e69d07bc326fa004c7077f",
+          "stage": 0,
+          "kind": "binary",
+          "bytes": 147860,
+          "sha256": "873549d4aa6e81a3b38cfbbec0709639c702105e3173a340dc01619e131a5c38",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "android/app/src/main/res/values-night/styles.xml",
+          "git_mode": "100644",
+          "git_object": "06952be745f9fa6fa75196e830d9578eb2ee631d",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 995,
+          "sha256": "8c5bad5152f217e837519f9c15211d19f39bd45f5f67faf6dd81cb4b299e518f",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "android/app/src/main/res/values/ic_launcher_background.xml",
+          "git_mode": "100644",
+          "git_object": "5fccb0048f40207c9af2b13b00d9d2234548057e",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 121,
+          "sha256": "ef8f9808d9c11b5a9b289d326d24aaf481ff7cfe41391eda7b61994de00b5e10",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "android/app/src/main/res/values/styles.xml",
+          "git_mode": "100644",
+          "git_object": "cb1ef88056edd1caf99a935e434e7ff6943a0ef6",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 996,
+          "sha256": "937d7c82f539c72eb94fd3a3773f29b3d3fef1997213c92cb632298cedf4bda9",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "android/app/src/main/res/xml/data_extraction_rules.xml",
+          "git_mode": "100644",
+          "git_object": "8ae55368e6a806e64578efb890f3aef10978f4f3",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 873,
+          "sha256": "ac281d7724512fa7e756b176fb5645eaa2f32ff67e722139c7752c307562e961",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "android/app/src/profile/AndroidManifest.xml",
+          "git_mode": "100644",
+          "git_object": "399f6981d5d35475eb18e6068ae67cdd7c731978",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 378,
+          "sha256": "30b0832ed8b92dfbd6ae2abfa939ccf26333d37600056b1572bd4a397a18a74b",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "android/build.gradle.kts",
+          "git_mode": "100644",
+          "git_object": "dbee657bb5b9158516486b3a1b47ef8b6fc72a2a",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 537,
+          "sha256": "6a26dba2cb8dfba1e74f540b0d17a89d96c1301d3c3bfda14348bed257fddcba",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "android/gradle.properties",
+          "git_mode": "100644",
+          "git_object": "e96108cfe4c4d200adab58b532e95774c88e485b",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 300,
+          "sha256": "0f82b18017fba6bb5ce3aa4b2d1a00c9382fc8aae7b1d9326e44b18abd66d80b",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "android/gradle/wrapper/gradle-wrapper.properties",
+          "git_mode": "100644",
+          "git_object": "a20f2c46d22ec5ccde3c08951676fda38a72949f",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 202,
+          "sha256": "b690d26223576fe4e63889fad9a00df81945cb870b9476cc5a563152a1a88a74",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "android/settings.gradle.kts",
+          "git_mode": "100644",
+          "git_object": "b28021a9101801eb907b881a293d4cf9bbf84456",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 770,
+          "sha256": "016759283e88ade6eba92910583feeef88b962839b957aa414296afd2952d122",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "test/app_test.dart",
+          "git_mode": "100644",
+          "git_object": "445c802722df96e4c77a25019256419fbcefe031",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 275525,
+          "sha256": "f15dc6ef7393167aa175aafc84836c3d73b53ec7d6bc98fef24482b7c47e90c8",
+          "symbols": [
+            "_FakeHouseholdNotifier",
+            "_FakePlanningCycleNotifier",
+            "_FakeRestrictionsNotifier",
+            "_FakeRecipeLibraryNotifier",
+            "_SeamedRecipeLibraryNotifier",
+            "_FakeArchivedRecipesNotifier",
+            "_SeamedArchivedRecipesNotifier",
+            "_FakePantryNotifier",
+            "_FakePlannerNotifier",
+            "_FakeShoppingNotifier",
+            "_FakeCoverNotifier",
+            "_FakeBackupActions"
+          ],
+          "parse_failure": null
+        },
+        {
+          "path": "test/backup_copy_test.dart",
+          "git_mode": "100644",
+          "git_object": "db5939c310c52082ae5beb886df54ff4a3d76fa1",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 1260,
+          "sha256": "cb7dfc182bf6089fd63986b686f8a231fc4c8bfae71f34dc8061684e60348c5f",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "test/bridge_native_test.dart",
+          "git_mode": "100644",
+          "git_object": "32427a13c5cbd6a6a7084415dddd7cd29ab5c073",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 45535,
+          "sha256": "a086eb404c8578888667cac9ad39168bf68d100db4683cf06b2e77828f614d65",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "test/cover_copy_test.dart",
+          "git_mode": "100644",
+          "git_object": "f4b295b4b7427ec8cf265702a2e20ea9e3999fc9",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 7323,
+          "sha256": "7c63d1345316a90f060bca27c949f30d56b80dce332ed8dd565ae5198935977e",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "test/planner_copy_test.dart",
+          "git_mode": "100644",
+          "git_object": "2c43d1f721b40f7e7242cc70d6f3ae68c36cf44b",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 5089,
+          "sha256": "5ba1cb5aadf3b2c30c618e90a9b3fe7d892435d54b76dc84df26ad1ede753dff",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "test/planning_cycle_test.dart",
+          "git_mode": "100644",
+          "git_object": "cca37959f09a6bf0b16d5dea61d4690c6a7f6251",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 2331,
+          "sha256": "1cdc16eb59ba761c60ce454850f463bdba697579840ab26938641b7c58772990",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "test/recipe_fields_test.dart",
+          "git_mode": "100644",
+          "git_object": "7476f3e2a24cae06099dee09c3429bf48ebe4c0e",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 4689,
+          "sha256": "69d5617aeb4a6e37d9c8e4e2bc994abca1ced72b9eae2cd1e4efc0185e7f6f11",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "test/restriction_warnings_test.dart",
+          "git_mode": "100644",
+          "git_object": "403c389e28ac8950793691e45325c23c7c6725ca",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 3772,
+          "sha256": "8cb0fec896a93df4eb8d6f9c17feceb5e1307d85528dd45a207b8df151cb2606",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "test/shopping_copy_test.dart",
+          "git_mode": "100644",
+          "git_object": "f555d89f4c74d0b6b01fadbc4062d6a77351bcc2",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 7598,
+          "sha256": "9181a0feaa463e1c5b8526e2ca7ea84646ba23ea9bc3ac5f75fc31a33844e203",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "tools/device.sh",
+          "git_mode": "100755",
+          "git_object": "b699fc541a7f2891634632a076756c58f90dad28",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 10378,
+          "sha256": "563242ce0117665155108ad20b249dc0ccd001765d2bd03d703879c182f01b80",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "tools/emulator.sh",
+          "git_mode": "100755",
+          "git_object": "130b56ae9b95c3367ee5734623bcc6b1b0f30029",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 12862,
+          "sha256": "dba251c6414846187b002e29b74ceda8a7973d5fd510f2908a707db4362c04a9",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "tools/make_icons.py",
+          "git_mode": "100755",
+          "git_object": "e6b1194969e99d2a03865e06d5a300d62a4a4d11",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 6229,
+          "sha256": "1bb9cb6ec14ad2ac526bcec5565dac9ac8f1040077e1cde32c476a44e332eead",
+          "symbols": [
+            "FunctionDef:is_navy",
+            "FunctionDef:cut_out_tile",
+            "FunctionDef:glyph_bbox",
+            "FunctionDef:write",
+            "FunctionDef:main"
+          ],
+          "parse_failure": null
+        },
+        {
+          "path": "tools/windows/setup-adb-bridge.ps1",
+          "git_mode": "100644",
+          "git_object": "17ad8787d35a73e63ac8e2fe39e8647d8d65ce14",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 8137,
+          "sha256": "6c3d7bc88fb7a0d948b81c2d0d44b493fc50c710ae00a3c8557650828e6482b8",
+          "symbols": [],
+          "parse_failure": null
+        }
+      ]
+    },
+    "product-and-governance.md": {
+      "purpose": "Product requirements, roadmap, task system, research, reviews, and reference data",
+      "files": [
+        {
+          "path": ".impeccable.md",
+          "git_mode": "100644",
+          "git_object": "751096e9819b3fae9a292bc607372f298cf9e1f7",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 2795,
+          "sha256": "78234016bdbec9072687f914765beb39cb427189da8b8652805f4ad74c066bb6",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "KNOWN_ISSUES-audit.md",
+          "git_mode": "100644",
+          "git_object": "a9a280afcde858c6aa0f43f5f925466f7afdf446",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 8151,
+          "sha256": "c217536a480366829140882f7f71074630b4514c6642ddf335bd6f0d0d5545c2",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "KNOWN_ISSUES-low.md",
+          "git_mode": "100644",
+          "git_object": "766d373c1b311a7fa5154c29931448ed2b6f2a9d",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 170358,
+          "sha256": "59d3fbc449576d04e2072c2aea497097fe05848407e4ac0149866ad4d5c9c353",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "KNOWN_ISSUES.archive.md",
+          "git_mode": "100644",
+          "git_object": "4b936305b854f15eb98af0a6852193c4bb252b32",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 3673,
+          "sha256": "a64dcd6f491ceb00cbf881d5eed3b6aa7fec3c3c980de2e5b6ec2e4f0806f6a4",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "KNOWN_ISSUES.md",
+          "git_mode": "100644",
+          "git_object": "b26fce21855cc48a131724a1e7c20f37eccd02fa",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 51096,
+          "sha256": "07fdebcae55969026c7ac23094c74aa1345c0c397563114f299d1d4bf013a65c",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "docs/CODEX_CLAUDE_PIVOT_PROMPT.md",
+          "git_mode": "100644",
+          "git_object": "02c2dcf3168e1e4d82878a4c6157559d39918d38",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 14425,
+          "sha256": "fdf77bf38328f935ecb6a8de04955e6434214f67b203109a11f04829c53a080b",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "docs/DEC-004_TRADEMARK_SEARCH.md",
+          "git_mode": "100644",
+          "git_object": "72054d419f54c7e35d1c1bed41e1d7a5c17bcee4",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 12940,
+          "sha256": "96057dd70a29c0fac12df6d75ceb3b7238106091243d13e6eb6870fb277ab821",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "docs/HOUSEHOLD_CONTROL_PRINCIPLES.md",
+          "git_mode": "100644",
+          "git_object": "3264abec9815bbcb395670d8f318ce2aef002e42",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 23130,
+          "sha256": "d6ad3e93dea30deedfbbd7e7083b1e85979e8ddccf07824a815b7009ab4f31ed",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "docs/PRD.md",
+          "git_mode": "100644",
+          "git_object": "8463452e49e74323e443b99989e410b7b4d86877",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 12131,
+          "sha256": "6ac8550adf09fc7de77f5af85c243686ecf9b7880c92342b3a97ba6e9d250d01",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "docs/PRD_v2.md",
+          "git_mode": "100644",
+          "git_object": "9595121d0596a08564dfd68c79392aeed70f02a9",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 53381,
+          "sha256": "128f9ddac13fe445ed83c7ff42e7d626ba985afb3fb538c87e12544277177208",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "docs/PRD_v3.md",
+          "git_mode": "100644",
+          "git_object": "3abdbca5081321bf56e44d7662b62f7acc0bbdce",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 41923,
+          "sha256": "4547315cc37b74d118f1ac9c797709495c7783824418f42c5dc32edac2080940",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "docs/ROADMAP.md",
+          "git_mode": "100644",
+          "git_object": "f2c40959beeb67e21a412a7fe452fbf5cfc7e028",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 218976,
+          "sha256": "f3eeca41210000459fc4883af18104dd3de944cc4c1c97d5320a272b32c644bb",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "docs/V3_IMPLEMENTATION_STATUS.md",
+          "git_mode": "100644",
+          "git_object": "b8cff8d04474129b7a5442602b99c9a49476fb07",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 8508,
+          "sha256": "c9f6b2da3a474cfed0421044cc5c021aa81bb4340b8ad4f49e09976fb428edab",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "docs/V3_MIGRATION_PLAN.md",
+          "git_mode": "100644",
+          "git_object": "a40dce6dc66a2557a1fac753aea4915227bb5c45",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 8215,
+          "sha256": "00cbafc34ed84ff5b266302c04b849e781eb6e2fa9374b05a355e88b711213ee",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "docs/brand/kimatta-app-icon.png",
+          "git_mode": "100644",
+          "git_object": "a65a6fa0837aac7c14fb4bc35c3a05419c17fb78",
+          "stage": 0,
+          "kind": "binary",
+          "bytes": 1037807,
+          "sha256": "bed576140334ff086dd2b3643650e9d3d78292d6d09a1ff1f45f21128ea6dce1",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "docs/brand/kimatta-lockup-dark.png",
+          "git_mode": "100644",
+          "git_object": "6f938e307e4ea9ef8ee72449f5a53a0ca6688be4",
+          "stage": 0,
+          "kind": "binary",
+          "bytes": 1445773,
+          "sha256": "7d9b5224dfcf4b19a8e0698615047a2ee33f6e7694efb08494a0a31270469676",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "docs/brand/kimatta-lockup-light.png",
+          "git_mode": "100644",
+          "git_object": "6cfe43812bca876bf7b501ef0b86a1887f3f6383",
+          "stage": 0,
+          "kind": "binary",
+          "bytes": 1026625,
+          "sha256": "754dded45cbd9822b6a2b8f147342aa0a6fbaae7b7e6c215548ed1226245053c",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "docs/measurements/MVP-024_AC1_offline_cover.png",
+          "git_mode": "100644",
+          "git_object": "62cf27a97a9c28b6fe20fdcbff50a7cd58a1c207",
+          "stage": 0,
+          "kind": "binary",
+          "bytes": 215164,
+          "sha256": "85d31f42ed487f1e6d32d98daa358665c66b7dfb2d2eecef7255b6b32e5672f3",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "docs/measurements/MVP-024_AC7_textscale2_cover.png",
+          "git_mode": "100644",
+          "git_object": "00a0d2d39c105acff2f8f8bd792781665daa7159",
+          "stage": 0,
+          "kind": "binary",
+          "bytes": 223404,
+          "sha256": "5bac4adf15b7fadbe9478a0e56d668613f662bc717797e542719f0cf26861369",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "docs/measurements/MVP-024_AC8_ATTENTION.md",
+          "git_mode": "100644",
+          "git_object": "0b8d99bed89b4cf8cf4be1b243fed2b67ee2f187",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 3955,
+          "sha256": "2085ff14590f63d1f9263603e65bb983be80ae67776b2ee00d0fae0a6f07cba4",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "docs/research/deep-research-report.md",
+          "git_mode": "100644",
+          "git_object": "81e0f93a575a882a4bbbc85d3de8745800468d77",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 22822,
+          "sha256": "ca88cc584b70f0e15f332050a366d64f4cceffbf639585420daf9984e3a3234f",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "docs/research/kimatta-trademark-screening-plan.md",
+          "git_mode": "100644",
+          "git_object": "87dc2e7fca85062e745021b431a5344495f6fe57",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 17743,
+          "sha256": "809195f2aadefe55debe85a3f72d95c2e1aa7bc184b36697c7045abe23a47dce",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "docs/research/mvp-032-verifier-prompt.txt",
+          "git_mode": "100644",
+          "git_object": "f2e2047df12b083dca79aa18a1956a6cc0236992",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 19886,
+          "sha256": "7f4acf2c18b364b0920034c36457f575357e397f05bc07360ff2ae2d7314ec52",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "docs/research/starter-candidates.md",
+          "git_mode": "100644",
+          "git_object": "f5ed6319aca9f94c42a1b3d2dffbf3719e20f7ba",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 37664,
+          "sha256": "a29b3316221c966c452c546421ddd6595d2ca2060635603f5a1e2c8d6ad95ad9",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "docs/reviews/WORKFLOW_STATUS_REVIEW_2026-08-26.md",
+          "git_mode": "100644",
+          "git_object": "0d90fbf7c6c3a63ac5478d6965cbad8af32caad2",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 6557,
+          "sha256": "196b80cf7dd0440659199293c36b4dc21c6d1ee10b4b77ca13ba9981cc1dc0a9",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "docs/reviews/review-arch-meal-mate-2026-08-30T083350-0500.md",
+          "git_mode": "100644",
+          "git_object": "0ed1239e52eef782edfe6d26284f5ad2338a66c1",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 23948,
+          "sha256": "677b2fb01607927f4435c1d3a36e9112e80e4735efcea4c4b1301030749dd2cc",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "docs/task/MVP_INVARIANTS.md",
+          "git_mode": "100644",
+          "git_object": "cb0d0e760640cffdda4d24be6b4ba8c19b8f5f63",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 2913,
+          "sha256": "b532913622748503921f328995383f1138e3ba7ee50b7b7dcc4dc42fd11bad4e",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "docs/task/README.md",
+          "git_mode": "100644",
+          "git_object": "29e7e0020cf811d907d7b75178c6ea01fdd70515",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 8774,
+          "sha256": "78a77e44972e6418d6ae1bd39e71299c72cc1442800d0867ccd2d2b423f5cc10",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "docs/task/SEQUENCE.txt",
+          "git_mode": "100644",
+          "git_object": "3000c5207fa9bea6d30ad99896ab6a42d5ad242c",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 20819,
+          "sha256": "07f6a624e85505a295f9ed141ba7d391130263a1471d424f2ec2fa8c2d643106",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "docs/task/TASK_TEMPLATE.md",
+          "git_mode": "100644",
+          "git_object": "e498656c4649fad68473ef3511c4e2b70439aecd",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 2565,
+          "sha256": "756738aa46ea44945beeee107483be37c98781d7721f5aca42c2e9587e1b0db0",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "docs/task/decision/DEC-001_PRODUCT_PLATFORM_IDENTITY_DECISION.md",
+          "git_mode": "100644",
+          "git_object": "73caca4d9254d5e61ac27bb89e442e593fe34085",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 6759,
+          "sha256": "547e696e2dfa6f681123b3634ed74fdf9d45ad01cc319f0f25913f607a68d8fb",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "docs/task/decision/DEC-002_ENGINEERING_EXPERIENCE_FOUNDATION_DECISION.md",
+          "git_mode": "100644",
+          "git_object": "92453795cdecaa6149af687a3ea3dbd8d65236b5",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 10599,
+          "sha256": "9acf46c5eeeea79722b17d5dc44fdbc8cbaacc45cc532e482c50acd69df61365",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "docs/task/decision/DEC-003_CLOUD_SHARING_RELEASE_DECISION.md",
+          "git_mode": "100644",
+          "git_object": "addca1828ae78b9f7418f5eec19ff7af62dbdb18",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 19541,
+          "sha256": "19c8b9b7b76286dafb5cd6f4b209310a496373c4b47d530c199eb5377157a7a5",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "docs/task/decision/DEC-004_NAMING_CLEARANCE_DECISION.md",
+          "git_mode": "100644",
+          "git_object": "1f52363ff4714fb10b31fc88106e62e144260184",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 24855,
+          "sha256": "4546917d82b41ebf6fc6d45a70a4095ef01b2ed9463c1a529345169352de7821",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "docs/task/decision/DEC-005_BRIDGE_BACKEND_AND_CORE_COMMITMENT.md",
+          "git_mode": "100644",
+          "git_object": "4ba38964f635c163e4b19271869578fee1e7abc8",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 8014,
+          "sha256": "34c62099cc246228324663e4f442f9b67fcb9ad5114d101b53ea52d4c0fdc7da",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "docs/task/decision/DEC-006_MONETIZATION_MODEL_DECISION.md",
+          "git_mode": "100644",
+          "git_object": "dc9748815a608ab0ff0cd4b36b7da32c87389a53",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 8264,
+          "sha256": "abd8ed92fa7487f18f047a51583b7863ea4583187c03d23934f9b613ae7231f1",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "docs/task/decision/DEC-007_LEGAL_COMPLIANCE_POSTURE_DECISION.md",
+          "git_mode": "100644",
+          "git_object": "d35f68a7811a1c12a7aa38a97fc4652bd38af68c",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 7471,
+          "sha256": "e8289b22d9ebca5e7567778eef2cfd0d7d613440864338072c422171d33671f9",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "docs/task/decision/DEC-008_PRODUCTION_ACTIVATION_DECISION.md",
+          "git_mode": "100644",
+          "git_object": "23546a4c571408a4f1ef55b027834389ceba93e0",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 8092,
+          "sha256": "eafd53f44f0432e92f56f19288882106d9418afd08966c1ea1fafd6be4956369",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "docs/task/mvp/MVP-001_CLEAN_ROOM_SCAFFOLD.md",
+          "git_mode": "100644",
+          "git_object": "587a62a10b03eb310b090c043c289189c9ae8180",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 6479,
+          "sha256": "a4d666de60e2bcf064d81b7f4de0270bc923970de81ea5722f4dd050ef58a32d",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "docs/task/mvp/MVP-002_ENGINEERING_FOUNDATION_DOMAIN_SPINE.md",
+          "git_mode": "100644",
+          "git_object": "9d4ccca69abb13dd29d00074b6e8ba4f59ea5123",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 12767,
+          "sha256": "9682f76632623b654af0035df4208de9f431c5da3ef2cce6201490ad5e574cc6",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "docs/task/mvp/MVP-003_ANDROID_APP_SHELL_NAVIGATION.md",
+          "git_mode": "100644",
+          "git_object": "b62a5fe3581b32e19fa8e51a166b58f608248cf1",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 5280,
+          "sha256": "2fb383b9d856384fc55e029bd61672a375fb23028044e547e467705dd95cdebc",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "docs/task/mvp/MVP-004_EMULATOR_AUTH_HOUSEHOLD_PERSISTENCE.md",
+          "git_mode": "100644",
+          "git_object": "7560e998c2360f7919a545b6f72eae9f1d435b7b",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 9289,
+          "sha256": "22ad9c4beb458a02fabb35f969eb2e2ed49a8f1f55ef7306a6e07d652f63f778",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "docs/task/mvp/MVP-005_PLANNING_CYCLE_MEAL_SCOPE.md",
+          "git_mode": "100644",
+          "git_object": "48e450d090edc2fce4b06b652bee127c70abe3c0",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 3273,
+          "sha256": "61e283fd2ef04472ea128f0a81434e64ee4608cc4baec56d25a53e65173b4a11",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "docs/task/mvp/MVP-006_MINIMAL_ONBOARDING_PREFERENCES.md",
+          "git_mode": "100644",
+          "git_object": "d8ad6ed6f9d95049d3a7807382c369924f99ef5d",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 4458,
+          "sha256": "727f595e6407fd3aeaa102477213f479db7f8e82d062c3f319822b2c4c711156",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "docs/task/mvp/MVP-007_INGREDIENT_RECIPE_DATA_FOUNDATION.md",
+          "git_mode": "100644",
+          "git_object": "2aeacc158b69e45729a90e811ebed3f13ff8f690",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 3875,
+          "sha256": "0734a727785baf13ddd8407bb3fe2ebc06681a5205e7d345b4ee3a1c4b912645",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "docs/task/mvp/MVP-008_MANUAL_RECIPE_CRUD.md",
+          "git_mode": "100644",
+          "git_object": "146036d049fbf7206f8194eaefe40d213ac5e01b",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 3838,
+          "sha256": "f05125e3b95c2c0d365d11d6a3d7abae681aca64541a8e6690673a534956566c",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "docs/task/mvp/MVP-009_RESTRICTION_WARNINGS_FILTERING.md",
+          "git_mode": "100644",
+          "git_object": "69459cb8230bf6d1cf82fa2dc97c0bfd97f623fe",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 3433,
+          "sha256": "32e910231381551fc00efefb2cd0a4427e8fc537f5606280dd8ba8739bae8afd",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "docs/task/mvp/MVP-010_RECIPE_PHOTO_SUPPORT.md",
+          "git_mode": "100644",
+          "git_object": "40f02839b25b6d6bcd27b841c10094662e9f6721",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 3427,
+          "sha256": "5a0c6f70d73557308490ef1468e652482283d66c8c8beaf16f669a42425f871b",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "docs/task/mvp/MVP-011_STARTER_CONTENT_READINESS.md",
+          "git_mode": "100644",
+          "git_object": "95e85d6ec3c880ce3458ae63d21d917d1d6cc1df",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 4613,
+          "sha256": "a9b6a1d7ec09c89b14b9e2a5752ad4844265dc3732ad6a1836f3e1bbb7a5eb2b",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "docs/task/mvp/MVP-012_PLANNED_MEALS_COMPONENTS.md",
+          "git_mode": "100644",
+          "git_object": "89479d14ade15e34ef76697defa2f8658cbfdf8d",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 3893,
+          "sha256": "5d39634000ee65039e25feca75798d723ea27547aad469689195d1ba7debe806",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "docs/task/mvp/MVP-013_PLANNER_EXPERIENCE.md",
+          "git_mode": "100644",
+          "git_object": "8b75fcb536b09ca491cc4800fe668fedaa87a745",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 3122,
+          "sha256": "d8a26fc1f02a59b1f51b34f4f79e513b2464ed805b860df332a243f6159db9c7",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "docs/task/mvp/MVP-014_PANTRY.md",
+          "git_mode": "100644",
+          "git_object": "3b819a8b430330552504b8ca779b9478d8c47cd0",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 3101,
+          "sha256": "1b3b57ebfae7753e438ce2c672facedf22fc9c37f4e4e6b83028fdb6b9e5f29d",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "docs/task/mvp/MVP-015_SHOPPING_AGGREGATION_ENGINE.md",
+          "git_mode": "100644",
+          "git_object": "0a6ce334685181aa56db2f1b78f8058a3dc907d1",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 3565,
+          "sha256": "6c40383bac24e3bb3c8a6af0f7a44014554cf26e2b7bdb8ebd5f192c37462636",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "docs/task/mvp/MVP-016_SHOPPING_LIST_EXPERIENCE.md",
+          "git_mode": "100644",
+          "git_object": "1e8aa3bc160fe5a5799b789627cf478091195c05",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 3832,
+          "sha256": "f7a0d7cb1e6373b79282e3853d782130984e81e024a0fff289e4879aa874c62b",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "docs/task/mvp/MVP-017_OFFLINE_CACHE_RECOVERY.md",
+          "git_mode": "100644",
+          "git_object": "a26484caf24b21502c7253b73b225ea67deca3f5",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 5272,
+          "sha256": "b4b170207cfb5b2ae4953c566a372c1e525d4ee1a9b38ed42393d37e4058dfea",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "docs/task/mvp/MVP-018_REAL_DEV_BACKEND_DURABLE_AUTH.md",
+          "git_mode": "100644",
+          "git_object": "c5e3d71751469584e50419a14a9dcf19ccd79c37",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 4892,
+          "sha256": "59ee467ab48578dd7b85df2243129752a1e38ccf0066d2a2b6c2406b06ad963d",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "docs/task/mvp/MVP-019_OBSERVABILITY_FOUNDATION.md",
+          "git_mode": "100644",
+          "git_object": "ad900c4b598cbac3e30c097431de7fc51f52ae62",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 5554,
+          "sha256": "a7ce10f6a08fa2fa6820b5fceab4a66ccb826ab182a173e038bed8ec21468228",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "docs/task/mvp/MVP-020_SHARE_PUBLICATION_WEB_PREVIEW.md",
+          "git_mode": "100644",
+          "git_object": "412d4a1a110911e2801dbdac0a24a99bf486231b",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 3966,
+          "sha256": "7c6ac46e260f7b021f52a092cd87305205f6bd3b7534fe6462096cc05bc3d2af",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "docs/task/mvp/MVP-021_ANDROID_APP_LINKS_RECIPIENT_FLOW.md",
+          "git_mode": "100644",
+          "git_object": "9c751f59577229e56d92ec7291267fb8884e66b1",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 3751,
+          "sha256": "4332c401ae435ba0d87dbfeb932c71da60ff2a7816fe7567d0ec43edb8bf850b",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "docs/task/mvp/MVP-022_ANDROID_BETA_READINESS.md",
+          "git_mode": "100644",
+          "git_object": "c0c38f5d2c523ca8b8ff4b3f2fa7885c78c9ff95",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 6833,
+          "sha256": "46b285fd2ccc69e3c83e53b702d63b558fba403379fcfaabdc4057ea7a21035f",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "docs/task/mvp/MVP-023_FOOD_CONTROLLER_PLANNER_CORE.md",
+          "git_mode": "100644",
+          "git_object": "7e820fde0568077877e4afdbea5bcc19e4ced0bb",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 10926,
+          "sha256": "d9eca86a123cd60115b50e89a5b8c7b9e383a89645fd10c51871fc75da84ff04",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "docs/task/mvp/MVP-024_COVER_MY_WEEK_EXPERIENCE.md",
+          "git_mode": "100644",
+          "git_object": "c0a21216f5e14e8063b127aaa5306c1befc52493",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 7602,
+          "sha256": "7d04764031a296c4c20ee0d074b20263b220f8af507beb2dd35f38646a6b6fc1",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "docs/task/mvp/MVP-025_PLANNER_FIXTURES_AND_INVARIANT_TESTS.md",
+          "git_mode": "100644",
+          "git_object": "5a4f700ae8e53147d9c86e8fadb6c1b07b21f2b3",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 5856,
+          "sha256": "2c7aa39eea0b5ae219c6d0c4a0c6ed3ed484bad5d121466c775b559ff4912f92",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "docs/task/mvp/MVP-026_ACCOUNT_DELETION_AND_EXPORT.md",
+          "git_mode": "100644",
+          "git_object": "37de5ca2d0d00d903cf5073e6c0500847eafc734",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 7327,
+          "sha256": "b955fbd1f3fb7c90b1825bf2bf21c414d307c7cb341de20ff23a534fca51e637",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "docs/task/mvp/MVP-027_HOUSEHOLD_ENTITLEMENT_MODEL.md",
+          "git_mode": "100644",
+          "git_object": "1dd7a3878fac6b88f58df797a829c41dbac2a6a2",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 7734,
+          "sha256": "c69e55db1cc3ad2ecfbf504709b8d453eb4107b99cadfaa0ccac8f3c4de3c37b",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "docs/task/mvp/MVP-028_PAYWALL_SURFACE_AND_GATING.md",
+          "git_mode": "100644",
+          "git_object": "6530ea8dd16c6bff78615f2c9e01aeea03314d81",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 6970,
+          "sha256": "e96d6738d4bc1c22bc9133649bae56466df7233541e212acbd11612d445305fd",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "docs/task/mvp/MVP-029_PLAY_BILLING_PURCHASE_FLOW.md",
+          "git_mode": "100644",
+          "git_object": "ef7283e7c25d8529f7eee2714cf8bc60f38f1c4d",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 7516,
+          "sha256": "881795131a14fdc67e7886c88c3766bf5497371d1a97eacc7e9a297244231153",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "docs/task/mvp/MVP-030_LEGAL_DOCUMENTS_PUBLISHED.md",
+          "git_mode": "100644",
+          "git_object": "9211f7899ac2f993b7fc69507fc56f24ef7f9416",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 6647,
+          "sha256": "a4b5e0fac7dda336fcb40f19cf9d67e44b8954bd5ec5a9065b4e65427e77e519",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "docs/task/mvp/MVP-031_PRODUCTION_ACTIVATION_AND_SUBMISSION.md",
+          "git_mode": "100644",
+          "git_object": "64118b34e26b75519619eaa62c2939b42e9e6f42",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 8245,
+          "sha256": "67619b4b1bf90d12bdd5d8d0f347a6d0695bb04ee6afb261d40cecd6ad2d319f",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "docs/task/mvp/MVP-032_STARTER_CONTENT_II_FEDERAL_SOURCES.md",
+          "git_mode": "100644",
+          "git_object": "63ea4c5461e0ae81f0f6d9e63ea3cc2dd7848328",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 12006,
+          "sha256": "2fa8a718e7489a36d845795e2bd423ac0cb62fbfc1b48ff92b7c6b9e03436c87",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "docs/task/mvp/MVP-033_FIRST_RUN_COVERED_WEEK.md",
+          "git_mode": "100644",
+          "git_object": "e989324d55924ae9a178bf1a0f50dabeaf2e253e",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 8258,
+          "sha256": "7a3b33864cd82479f01a199ea9b853820fae1dccfdd15b690ef88552b69a3683",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "docs/task/mvp/MVP-034_VISUAL_IDENTITY_APPEARANCE_LAB.md",
+          "git_mode": "100644",
+          "git_object": "4754fe112deb0a27ad99623c467f54a6b7a177d7",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 7356,
+          "sha256": "70c053df8907ab06aad8508d39e6cbf61ae92d9a00bbf3ba9fad06ee1e69eeb0",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "docs/task/optional/OPT-001_STRUCTURED_URL_RECIPE_IMPORT.md",
+          "git_mode": "100644",
+          "git_object": "4a1abe8b0eb124c7b6dc33f659b1d43b8cb86935",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 4205,
+          "sha256": "63ee99b00e1b060093d8237a74e463dd430c9eb9d42e3937774284faf82eae1a",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "docs/task/optional/OPT-002_MESSY_RECIPE_IMPORT.md",
+          "git_mode": "100644",
+          "git_object": "6b06f1a2443c1b8c44243adc3086a25eb210e292",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 8230,
+          "sha256": "87b1e3eb7682baf32d5b6f027872f26533c7adeb2d7bd50ebfed2f9d70ad9a13",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "docs/task/optional/OPT-003_STAPLES.md",
+          "git_mode": "100644",
+          "git_object": "7e1e022aca88e4ff3a1971ec784d75d6f0a1b375",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 10485,
+          "sha256": "7b04ab320d0cfbeb8cdd3c2d058e3daaba937b11875f9395a11ad1be27a6eb50",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "docs/task/optional/OPT-004_BREAKFAST_AND_LUNCH_PLANNING.md",
+          "git_mode": "100644",
+          "git_object": "fd8826a1621ad35f4319826efa26934707625a12",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 8216,
+          "sha256": "1832755f05d1a3094416b6760e4b43f184eee008511e9eb4863e08ba40fb8cb2",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "docs/task/readiness/PRE-001_ANDROID_TOOLCHAIN_READINESS.md",
+          "git_mode": "100644",
+          "git_object": "d8dbe1b36a376d75daa30cb8ade63c42ad2c94b8",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 4134,
+          "sha256": "879318dc859a47614d9c0b46147c88b423d41cc7a8c19642115dd5d767eee0e6",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "docs/task/readiness/PRE-002_RUST_FRB_BRIDGE_SPIKE.md",
+          "git_mode": "100644",
+          "git_object": "3a7a5ba8a619ff7faca95164e57131e5230f246d",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 10601,
+          "sha256": "09064d0a8860f7d5cace0e6f96adbf5f6f1d34520e21b942bde38af241e77114",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "docs/task/readiness/PRE-003_IOS_TOOLCHAIN_READINESS.md",
+          "git_mode": "100644",
+          "git_object": "87fe76f62924bb30a1f3cfa8720ae47bf4563a1a",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 6529,
+          "sha256": "163b25c3065b68875e9e5b0dcbd989885a11798ad55c06975d170dfb8fe71c38",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "refs/owner-recipe-transcriptions.md",
+          "git_mode": "100644",
+          "git_object": "264e7e9fb123bfcd65cdadad3e0713c6baeb3206",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 15670,
+          "sha256": "279b0e400286f8042d176823a1341073964a47d6611e8b792caea1f22936773d",
+          "symbols": [],
+          "parse_failure": null
+        },
+        {
+          "path": "refs/recipes-pending.json",
+          "git_mode": "100644",
+          "git_object": "e704bd1e878261d3e00b6cd3bac2f20d02c4a044",
+          "stage": 0,
+          "kind": "text",
+          "bytes": 17422,
+          "sha256": "d722d794c52058770c8b5f37834c13488a2fa8283987428833005ee7bae3f7bc",
+          "symbols": [],
+          "parse_failure": null
+        }
+      ]
+    }
+  },
+  "complement_check": {
+    "uncovered": [],
+    "duplicates": [],
+    "passed": true
+  }
+}

@@ -1,0 +1,56 @@
+{
+  "version": 1,
+  "repository": "/home/davidlinux/projects/personal/meal_mate",
+  "repo_id": "meal_mate",
+  "initialized_at": "2026-09-07T11:29:02-05:00",
+  "last_run": {
+    "timestamp": "2026-09-07T11:19:04-05:00",
+    "commit": "c834724eee35997c7481a92a652d6414ec2aecdd",
+    "branch": "master",
+    "mode": "init"
+  },
+  "working_tree": {
+    "fingerprint_sha256": "7321ad769e8d6ff54bdc361ead8fbfdd52a23092479cd722e903e9741ddf4d8c",
+    "status": [
+      " M docs/ROADMAP.md"
+    ],
+    "architecture_claims_from_wip": []
+  },
+  "pages": [
+    {"path": "wiki/system-overview.md", "status": "complete"},
+    {"path": "wiki/flutter-shell.md", "status": "complete"},
+    {"path": "wiki/flutter-features.md", "status": "complete"},
+    {"path": "wiki/bridge-and-storage.md", "status": "complete"},
+    {"path": "wiki/rust-domain-and-planner.md", "status": "complete"},
+    {"path": "wiki/tests-platform-and-tools.md", "status": "complete"},
+    {"path": "wiki/product-and-governance.md", "status": "complete"}
+  ],
+  "failed_pages": [],
+  "deferred_pages": [],
+  "pending_pages": [],
+  "omissions": [],
+  "coverage": {
+    "tracked_files": 240,
+    "text_files": 225,
+    "binary_files": 15,
+    "symlinks": 0,
+    "submodules": 0,
+    "python_parse_failures": 0,
+    "uncovered": 0,
+    "duplicates": 0,
+    "complement_passed": true,
+    "manifest": "coverage-manifest.json",
+    "manifest_sha256": "45dd416053c6e9b20c93c56ad9988a66f5522a2450b692f95708092feb96bbd2"
+  },
+  "import_graph": {
+    "path": "import-graph.md",
+    "sha256": "896218873bb7ef549072934617eb719db42f287a0c6c525b7c7cfe6500abfd2e",
+    "files": 1,
+    "modules": 1,
+    "cycles": 0,
+    "parse_failures": 0,
+    "note": "The required analyzer is Python-specific; Dart and Rust are covered by the manifest and subsystem analysis."
+  },
+  "latest_brief": "briefs/2026-09-07-initial-architecture-map.md",
+  "viewer": "viewer.html"
+}

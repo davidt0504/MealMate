@@ -1201,7 +1201,7 @@ Full review: /home/davidlinux/.claude/reviews/redteam-mvp032-owner-recipes-2026-
 
 ### LOW
 
-- **Four orphan catalog ids left by the two dropped federal recipes still seed every device** (`rust/crates/food-domain/content/starter_recipes.json:322`, `:624`, `:632`, `:745`) -- `ing-turkey`, `ing-marjoram`, `ing-tarragon` and `ing-red-beans` are referenced by no authored entry; they trace to Homemade Turkey Soup and New Orleans Red Beans, dropped at the 2026-09-06 roster review. The catalog is never filtered, so all four install and sit as unusable rows on the eager Pantry list. `every_catalog_reference_resolves` only checks the forward direction. Fix: delete the four entries and add the reverse assertion beside it, so the next content drop cannot leave the same residue.
+- **Four orphan catalog ids left by the two dropped federal recipes still seed every device** (`docs/research/MVP-032_STARTER_PROVENANCE_MANIFEST.json`) -- `ing-turkey`, `ing-marjoram`, `ing-tarragon` and `ing-red-beans` are referenced by no authored entry; they trace to Homemade Turkey Soup and New Orleans Red Beans, dropped at the 2026-09-06 roster review. The catalog is never filtered, so all four install and sit as unusable rows on the eager Pantry list. `every_catalog_reference_resolves` only checks the forward direction. Fix: delete the four entries and add the reverse assertion beside it, so the next content drop cannot leave the same residue.
   Full review: /home/davidlinux/.claude/reviews/redteam-mvp032-owner-recipes-2026-09-06T1653-4415.md
   **Status:** RESOLVED 2026-09-06 -- the four entries are deleted (catalog 164 -> 160) and the
   reverse assertion `every_catalog_id_is_referenced_by_some_entry` is in `starter.rs` beside
@@ -1213,6 +1213,8 @@ Full review: /home/davidlinux/.claude/reviews/redteam-mvp032-owner-recipes-2026-
   Full review: /home/davidlinux/.claude/reviews/redteam-mvp032-owner-recipes-2026-09-06T1653-4415.md
   **Status:** RESOLVED 2026-09-06 -- fixture set to 49 / 160 / 49 / 10 and both docstrings rewritten
   to say what the numbers are, including the `models 26` claim at `test/app_test.dart:5378`.
+  **Revised 2026-09-09 (D-043):** rights quarantine leaves a 31 / 125 / 31 / 10 first-install
+  fixture (six cleared federal + 25 owner recipes); the test fixture and its prose were updated.
 
 ---
 ## master -- 2026-09-07
@@ -1226,7 +1228,7 @@ Full review: /home/davidlinux/.claude/reviews/redteam-mvp-032-generalized-2026-0
   Full review: /home/davidlinux/.claude/reviews/redteam-mvp-032-generalized-2026-09-07T0957-70a3.md
   **Status:** OPEN
 
-- **`cooked_on` and `corrections` carry values their own field docs contradict on all 25 owner entries** (`rust/crates/food-domain/content/starter_recipes.json:6309`, `rust/crates/food-domain/src/starter.rs:53`) -- every owner entry records `cooked_on: 2026-09-06`, a date on which nothing was cooked, and puts the attestation caveat in `corrections`, documented as the log of "actionable corrections resolved". A real correction would have to be appended to a caveat sentence, and a later freshness check keyed on `cooked_on` reads a false date. Not user-visible: `cook_review` crosses no bridge surface. Fix: one line in `policy.cook_review` recording the convention, or an `attested_on` field if `cook_review` ever gains a consumer.
+- **`cooked_on` and `corrections` carry values their own field docs contradict on all 25 owner entries** (`docs/research/MVP-032_STARTER_PROVENANCE_MANIFEST.json`, `rust/crates/food-domain/src/starter.rs:53`) -- every owner entry records `cooked_on: 2026-09-06`, a date on which nothing was cooked, and puts the attestation caveat in `corrections`, documented as the log of "actionable corrections resolved". A real correction would have to be appended to a caveat sentence, and a later freshness check keyed on `cooked_on` reads a false date. Not user-visible: `cook_review` crosses no bridge surface. Fix: one line in `policy.cook_review` recording the convention, or an `attested_on` field if `cook_review` ever gains a consumer.
   Full review: /home/davidlinux/.claude/reviews/redteam-mvp-032-generalized-2026-09-07T0957-70a3.md
   **Status:** OPEN
 

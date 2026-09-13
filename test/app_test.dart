@@ -47,16 +47,17 @@ import 'package:meal_mate/src/rust/api/shopping.dart';
 
 const okReport = HealthReport(dbPath: '/x/kimatta.db', schemaVersion: 5);
 
-/// A *first* install as it now returns: the 160-entry catalog seeds and all 49 shipping recipes
-/// install — 24 federal on D-041's rights arm and 25 owner household entries on the cook arm.
+/// A *first* install as it now returns: the 106-entry catalog seeds and all 25 shipping recipes
+/// install — every currently shippable recipe is owner-reviewed. D-043/D-044 quarantine all
+/// federal records outside the APK.
 /// The ten Kimatta-authored entries stay pending; they ship by neither arm until someone cooks
 /// them. The widget logic reads these fields only as `> 0`, so nothing asserts on the values —
 /// which is exactly why they had drifted three rosters behind before 2026-09-06.
 const okStarterReport = StarterInstallReportDto(
-  installed: 49,
+  installed: 25,
   skipped: 0,
-  catalogInstalled: 160,
-  available: 49,
+  catalogInstalled: 106,
+  available: 25,
   pendingCookReview: 10,
 );
 
@@ -66,14 +67,14 @@ const okStarterReport = StarterInstallReportDto(
 ///
 /// The short-circuit writes nothing, so `installed` and `catalogInstalled` are 0 while `skipped`
 /// is the whole shipping roster: `install_starter_content` returns `skipped: recipes.len()` on
-/// that path, and `available` is `shipped_starter_content().recipes.len()` — both 49, the same
+/// that path, and `available` is `shipped_starter_content().recipes.len()` — both 25, the same
 /// roster `okStarterReport` above installs. These had drifted to the 24-entry federal-only roster
 /// and nothing caught it, because the widget logic reads every field only as `> 0`.
 const noCatalogStarterReport = StarterInstallReportDto(
   installed: 0,
-  skipped: 49,
+  skipped: 25,
   catalogInstalled: 0,
-  available: 49,
+  available: 25,
   pendingCookReview: 10,
 );
 
@@ -4196,8 +4197,8 @@ void main() {
   // The owner's 2026-09-03 audit (HIGH): the same Risk 11 shape as the prep time above, one
   // level down. `IngredientLineDto.ingredient` is an optional named parameter, so `_LineDraft`
   // could drop it and `_validate` emit a line without it and still compile. It was reachable on
-  // every starter recipe — all 68 seeded lines carry a catalog ref
-  // (`food-domain/content/starter_recipes.json`), Edit is offered unconditionally
+  // every starter recipe — all seeded lines carry a catalog ref
+  // (`docs/research/MVP-032_STARTER_PROVENANCE_MANIFEST.json`), Edit is offered unconditionally
   // (`recipe_detail_screen.dart`'s only guard is `recipe != null`), and the write deletes and
   // re-inserts every line row (`kimatta-storage`), so the null was committed rather than
   // merged away. Downstream that is not cosmetic: `derive_shopping_list` sends a ref-less line
@@ -5795,7 +5796,7 @@ void main() {
   });
 
   /// MVP-032 step 14: the recipe half of the same hazard. The install now writes recipes —
-  /// `okStarterReport` models 49 — and `RecipeLibraryNotifier.build` depends only on the
+  /// `okStarterReport` models 25 — and `RecipeLibraryNotifier.build` depends only on the
   /// household and its restrictions, so nothing else re-reads it. Without the launch invalidate
   /// a Recipes tab opened before the unawaited install lands keeps its empty first read, which
   /// is exactly the fresh-install case AC-5 asks to see filled.

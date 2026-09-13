@@ -52,5 +52,8 @@ app.*.map.json
 # Widget Preview related
 .widget_preview/
 
+# Generated architecture wiki viewer
+docs/wiki/viewer.html
+
 # Owner recipe-card photos: working material, ~26 MB, not diffable
 refs/images/

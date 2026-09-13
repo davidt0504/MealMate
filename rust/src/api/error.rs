@@ -25,6 +25,8 @@ pub enum KimattaError {
     PlannedMeal { message: String },
     #[error("invalid shopping input: {message}")]
     Shopping { message: String },
+    #[error("this recipe is unavailable while its source rights are reviewed")]
+    RecipeQuarantined,
 }
 
 /// The application layer's storage failures stay `Storage`, exactly as they would arriving
@@ -117,6 +119,7 @@ impl From<kimatta_storage::StorageError> for KimattaError {
             kimatta_storage::StorageError::CorruptDatabase { .. } => KimattaError::Corrupt {
                 message: e.to_string(),
             },
+            kimatta_storage::StorageError::RecipeQuarantined(_) => KimattaError::RecipeQuarantined,
             other => KimattaError::Storage {
                 message: other.to_string(),
             },
@@ -158,6 +161,13 @@ mod tests {
             matches!(err, KimattaError::Corrupt { .. }),
             "want Corrupt, got {err:?}"
         );
+    }
+
+    #[test]
+    fn a_rights_quarantine_maps_to_its_typed_bridge_error() {
+        let err: KimattaError =
+            kimatta_storage::StorageError::RecipeQuarantined("chicken-creole".to_owned()).into();
+        assert!(matches!(err, KimattaError::RecipeQuarantined));
     }
 
     /// Expected-to-pass pin: `NewerSchema` stays `Storage` — its recovery is "update the

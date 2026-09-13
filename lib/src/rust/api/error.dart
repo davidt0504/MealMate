@@ -36,4 +36,6 @@ sealed class KimattaError with _$KimattaError implements FrbException {
       KimattaError_PlannedMeal;
   const factory KimattaError.shopping({required String message}) =
       KimattaError_Shopping;
+  const factory KimattaError.recipeQuarantined() =
+      KimattaError_RecipeQuarantined;
 }

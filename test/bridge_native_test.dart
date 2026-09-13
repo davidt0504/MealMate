@@ -46,9 +46,9 @@ void main() {
     );
   });
 
-  test('open_database migrates a real database to schema v10', () async {
+  test('open_database migrates a real database to schema v12', () async {
     final report = await openDatabase(dbPath: await tempDb());
-    expect(report.schemaVersion, 10);
+    expect(report.schemaVersion, 12);
   });
 
   test('storage failure surfaces as KimattaError_Storage', () async {
@@ -92,11 +92,11 @@ void main() {
         '${Platform.pathSeparator}kimatta-export.db';
     final report = await exportDatabase(destPath: dest);
     expect(report.path, dest);
-    expect(report.schemaVersion, 10);
+    expect(report.schemaVersion, 12);
     // Opening the export as the live database proves it is the database's own
     // format, not a write-only artifact.
     final opened = await openDatabase(dbPath: dest);
-    expect(opened.schemaVersion, 10);
+    expect(opened.schemaVersion, 12);
     expect((await bootstrapHousehold()).id, h.id);
   });
 
