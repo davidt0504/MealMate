@@ -29,6 +29,8 @@ class _ManualItemDelete extends _ManualItemResult {
   final String id;
 }
 
+enum _LineAction { alreadyHave, backToPantry, skip, explain }
+
 /// Add/edit form for one manual item. Pops a [_ManualItemResult] (or `null` on cancel);
 /// the screen does the writing so the dialog holds no notifier.
 class _ManualItemDialog extends StatefulWidget {
@@ -121,12 +123,15 @@ class _ShoppingScreenState extends ConsumerState<ShoppingScreen> {
   }
 
   /// Runs one keyed write; failures land in the snackbar and the row, rendered from
-  /// provider state, stays at its stored value.
-  Future<void> _write(String key, Future<void> Function() action) async {
+  /// provider state, stays at its stored value. Returns whether the write landed, so a caller
+  /// that confirms it (a skip's Undo) never confirms a failure.
+  Future<bool> _write(String key, Future<void> Function() action) async {
     final startedAt = _offset;
     setState(() => _writing.add(key));
+    var landed = false;
     try {
       await action();
+      landed = true;
     } catch (e) {
       _report(e);
     } finally {
@@ -136,6 +141,7 @@ class _ShoppingScreenState extends ConsumerState<ShoppingScreen> {
         setState(() => _writing.remove(key));
       }
     }
+    return landed;
   }
 
   /// The check exactly as a row renders it: a check made against an amount that has since
@@ -143,7 +149,7 @@ class _ShoppingScreenState extends ConsumerState<ShoppingScreen> {
   static bool _renderedCheck(ShoppingLineStateDto? state) =>
       (state?.checked ?? false) && !(state?.changed ?? false);
 
-  Future<void> _setLine(
+  Future<bool> _setLine(
     ShoppingLineDto line, {
     required bool checked,
     required bool hidden,
@@ -181,12 +187,63 @@ class _ShoppingScreenState extends ConsumerState<ShoppingScreen> {
   Future<void> _addToPantry(ShoppingView view) async {
     final refs = _eligible(view);
     if (refs.isEmpty) return;
+    await _markInPantry(refs, (changed) => addedToPantryCopy(changed.length));
+  }
+
+  /// Hides the line for this cycle's list only: recipes, the plan and the pantry are untouched,
+  /// and the next cycle derives it afresh. Undo is the same write as "Put back".
+  Future<void> _skip(ShoppingLineDto line, ShoppingLineStateDto? state) async {
+    // Removing is a move, not an edit: the check comes back with "Put back".
+    final checked = _renderedCheck(state);
+    final restored = state?.restored ?? false;
+    final landed = await _setLine(
+      line,
+      checked: checked,
+      hidden: true,
+      restored: restored,
+    );
+    if (landed && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(skippedCopy(line.name)),
+          action: SnackBarAction(
+            label: 'Undo',
+            onPressed: () => _setLine(
+              line,
+              checked: checked,
+              hidden: false,
+              restored: restored,
+            ),
+          ),
+        ),
+      );
+    }
+  }
+
+  Future<void> _backToPantry(
+    ShoppingLineDto line,
+    ShoppingLineStateDto? state,
+  ) => _setLine(
+    line,
+    // The fourth arm of the same move: sending a line back under Already
+    // have does not edit it, so the check comes with it.
+    checked: _renderedCheck(state),
+    hidden: false,
+    restored: false,
+  );
+
+  /// One explicit pantry-mark write with its Undo, shared by the bulk action and a row's
+  /// "Already have it".
+  Future<void> _markInPantry(
+    List<IngredientRefDto> refs,
+    String Function(List<IngredientRefDto> changed) message,
+  ) async {
     try {
       final changed = await _notifier.addCheckedToPantry(refs);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(addedToPantryCopy(changed.length)),
+          content: Text(message(changed)),
           action: SnackBarAction(
             label: 'Undo',
             // Exactly the returned set, so a mark that predated this action survives.
@@ -474,35 +531,93 @@ class _ShoppingScreenState extends ConsumerState<ShoppingScreen> {
       if (changed)
         changedCopy(describeCheckedAgainst(state?.checkedAgainst ?? '')),
     ].join(' · ');
+    final addedAnyway =
+        line.status == ShoppingLineStatusDto.omittedPantryMarked &&
+        (state?.restored ?? false);
     // The label goes *inside* the tile, for the reason the pantry row gives: the tile's
-    // merged node is the tappable one. The explain button sits outside the tile so it is
-    // its own labelled node rather than being merged into the checkbox's.
-    return Row(
-      children: [
-        Expanded(
-          child: CheckboxListTile(
-            title: Semantics(
-              label: lineLabel(line.name, checked),
-              child: ExcludeSemantics(child: Text(line.name)),
-            ),
-            subtitle: ExcludeSemantics(child: Text(subtitle)),
-            value: checked,
-            onChanged: busy
-                ? null
-                : (value) => _setLine(
-                    line,
-                    checked: value ?? false,
-                    hidden: false,
-                    restored: state?.restored ?? false,
-                  ),
+    // merged node is the tappable one. The menu sits outside the tile so it is its own
+    // labelled node rather than being merged into the checkbox's.
+    return Dismissible(
+      key: ValueKey('skip:${line.key}'),
+      direction: DismissDirection.endToStart,
+      // Always `false`: the skip moves the row by rebuilding the list from provider state, so
+      // a dismissal would leave a dismissed widget in the tree while the write is in flight.
+      // A swipe never marks the pantry — that stays the menu's explicit "Already have it".
+      confirmDismiss: (_) async {
+        if (!busy) await _skip(line, state);
+        return false;
+      },
+      background: ColoredBox(
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+        child: const Align(
+          alignment: Alignment.centerRight,
+          child: Padding(
+            padding: EdgeInsets.symmetric(horizontal: 16),
+            child: Icon(Icons.remove_shopping_cart_outlined),
           ),
         ),
-        IconButton(
-          tooltip: 'Why is this here?',
-          icon: const Icon(Icons.info_outline),
-          onPressed: () => _explain(line, state),
-        ),
-      ],
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: CheckboxListTile(
+              title: Semantics(
+                label: lineLabel(line.name, checked),
+                child: ExcludeSemantics(child: Text(line.name)),
+              ),
+              subtitle: ExcludeSemantics(child: Text(subtitle)),
+              value: checked,
+              onChanged: busy
+                  ? null
+                  : (value) => _setLine(
+                      line,
+                      checked: value ?? false,
+                      hidden: false,
+                      restored: state?.restored ?? false,
+                    ),
+            ),
+          ),
+          PopupMenuButton<_LineAction>(
+            tooltip: lineOptionsTooltip,
+            onSelected: (action) {
+              switch (action) {
+                case _LineAction.alreadyHave:
+                  _markInPantry([
+                    line.ingredient!,
+                  ], (_) => alreadyHaveItCopy(line.name));
+                case _LineAction.backToPantry:
+                  _backToPantry(line, state);
+                case _LineAction.skip:
+                  _skip(line, state);
+                case _LineAction.explain:
+                  _explain(line, state);
+              }
+            },
+            itemBuilder: (_) => [
+              // A line added anyway over a mark goes back to it; marking again would change
+              // nothing. An unresolved line has no identity to mark.
+              if (addedAnyway)
+                const PopupMenuItem(
+                  value: _LineAction.backToPantry,
+                  child: Text('Back to pantry'),
+                )
+              else if (line.ingredient != null)
+                const PopupMenuItem(
+                  value: _LineAction.alreadyHave,
+                  child: Text('Already have it'),
+                ),
+              const PopupMenuItem(
+                value: _LineAction.skip,
+                child: Text('Skip this time'),
+              ),
+              const PopupMenuItem(
+                value: _LineAction.explain,
+                child: Text('Why is this here?'),
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 
@@ -510,6 +625,9 @@ class _ShoppingScreenState extends ConsumerState<ShoppingScreen> {
     final canReturnToPantry =
         line.status == ShoppingLineStatusDto.omittedPantryMarked &&
         (state?.restored ?? false);
+    // A skip's or a mark's Undo snackbar would otherwise sit over the sheet's buttons; the
+    // same moves stay reachable from the list (Put back, Pantry).
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
     showModalBottomSheet<void>(
       context: context,
       builder: (context) => SafeArea(
@@ -533,28 +651,15 @@ class _ShoppingScreenState extends ConsumerState<ShoppingScreen> {
             TextButton(
               onPressed: () {
                 Navigator.pop(context);
-                _setLine(
-                  line,
-                  // Removing is a move, not an edit: the check comes back with "Put back".
-                  checked: _renderedCheck(state),
-                  hidden: true,
-                  restored: state?.restored ?? false,
-                );
+                _skip(line, state);
               },
-              child: const Text('Remove from list'),
+              child: const Text('Skip this time'),
             ),
             if (canReturnToPantry)
               TextButton(
                 onPressed: () {
                   Navigator.pop(context);
-                  _setLine(
-                    line,
-                    // The fourth arm of the same move: sending a line back under Already
-                    // have does not edit it, so the check comes with it.
-                    checked: _renderedCheck(state),
-                    hidden: false,
-                    restored: false,
-                  );
+                  _backToPantry(line, state);
                 },
                 child: const Text('Back to pantry'),
               ),

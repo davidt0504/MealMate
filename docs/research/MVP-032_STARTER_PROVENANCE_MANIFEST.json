@@ -244,6 +244,14 @@
       "store_category": "pantry"
     },
     {
+      "id": "ing-diced-tomatoes",
+      "canonical_name": "diced tomatoes",
+      "aliases": [
+        "canned diced tomatoes"
+      ],
+      "store_category": "pantry"
+    },
+    {
       "id": "ing-coconut-milk",
       "canonical_name": "coconut milk",
       "aliases": [],
@@ -815,7 +823,8 @@
       "canonical_name": "small pasta",
       "aliases": [
         "elbow macaroni",
-        "pastina"
+        "pastina",
+        "elbow macaroni pasta"
       ],
       "store_category": "pantry"
     },
@@ -1166,7 +1175,9 @@
     {
       "id": "ing-orzo",
       "canonical_name": "orzo",
-      "aliases": [],
+      "aliases": [
+        "orzo pasta"
+      ],
       "store_category": "pantry"
     },
     {
@@ -6408,7 +6419,7 @@
         {
           "original_text": "1 can (15 oz) diced tomatoes",
           "name": "diced tomatoes",
-          "catalog_id": "ing-canned-tomatoes",
+          "catalog_id": "ing-diced-tomatoes",
           "quantity": {
             "kind": "exact",
             "numer": 425,
@@ -6568,7 +6579,7 @@
         {
           "original_text": "2 cans diced tomatoes, undrained",
           "name": "diced tomatoes",
-          "catalog_id": "ing-canned-tomatoes",
+          "catalog_id": "ing-diced-tomatoes",
           "quantity": {
             "kind": "exact",
             "numer": 850,
@@ -9264,7 +9275,7 @@
         {
           "original_text": "14 1/2 oz diced tomatoes, undrained",
           "name": "diced tomatoes",
-          "catalog_id": "ing-canned-tomatoes",
+          "catalog_id": "ing-diced-tomatoes",
           "quantity": {
             "kind": "exact",
             "numer": 410,
@@ -9424,7 +9435,7 @@
         {
           "original_text": "1 can diced tomatoes, undrained",
           "name": "diced tomatoes",
-          "catalog_id": "ing-canned-tomatoes",
+          "catalog_id": "ing-diced-tomatoes",
           "quantity": {
             "kind": "exact",
             "numer": 425,
@@ -9520,7 +9531,7 @@
         {
           "original_text": "1 can petite diced tomatoes",
           "name": "diced tomatoes",
-          "catalog_id": "ing-canned-tomatoes",
+          "catalog_id": "ing-diced-tomatoes",
           "quantity": {
             "kind": "exact",
             "numer": 425,

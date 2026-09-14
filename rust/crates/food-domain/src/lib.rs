@@ -21,9 +21,9 @@ pub use restriction::*;
 // Explicit, not a glob: a bare `food_domain::derive` at the crate root would read as the
 // attribute at every call site, so the function keeps its full name here.
 pub use shopping::{
-    base_factor, derive_shopping_list, quantity_token, Contribution, IdentityInfo, LineStatus,
-    SeparateReason, ShoppingError, ShoppingGroup, ShoppingInput, ShoppingLine, ShoppingList,
-    ShoppingManualItemId, UnitFamily, SHOPPING_ALGORITHM_VERSION,
+    base_factor, derive_shopping_list, line_key_prefix, quantity_token, Contribution, IdentityInfo,
+    LineStatus, SeparateReason, ShoppingError, ShoppingGroup, ShoppingInput, ShoppingLine,
+    ShoppingList, ShoppingManualItemId, UnitFamily, SHOPPING_ALGORITHM_VERSION,
 };
 pub use starter::*;
 

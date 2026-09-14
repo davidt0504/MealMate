@@ -151,6 +151,19 @@ String addedToPantryCopy(int n) => n == 1
     ? '1 item marked as in your pantry'
     : '$n items marked as in your pantry';
 
+/// The tooltip of a To buy row's menu — its own labelled node, outside the checkbox's.
+const lineOptionsTooltip = 'Line options';
+
+/// Says what a skip touched and what it did not, because "delete from the list" was feared to
+/// reach the recipes (FIX-001 item 2). The line returns with the next cycle's list.
+String skippedCopy(String name) =>
+    '$name skipped for this list. Your recipes and plan are unchanged.';
+
+/// "Already have it" is a pantry mark, so it outlasts this list — the difference from a skip,
+/// said at the moment it is made.
+String alreadyHaveItCopy(String name) =>
+    '$name marked as in your pantry, so it stays off your lists until you unmark it.';
+
 const resetTitle = 'Start over?';
 
 /// Names both counts, since both are cleared: every edit stored against this cycle's list —

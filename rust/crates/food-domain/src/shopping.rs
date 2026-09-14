@@ -390,11 +390,22 @@ struct GroupKey {
     known: bool,
 }
 
+/// The leading part every merged line key for `ingredient` shares, whatever its unit class,
+/// optionality or knownness. The closing `:` and the escaping in `ref_key` keep it from matching
+/// a different identity whose id merely starts the same way.
+pub fn line_key_prefix(ingredient: &IngredientRef) -> String {
+    merged_key_prefix(&ref_key(ingredient))
+}
+
+fn merged_key_prefix(ingredient_key: &str) -> String {
+    format!("m:{ingredient_key}:")
+}
+
 impl GroupKey {
     fn line_key(&self) -> String {
         format!(
-            "m:{}:{}:{}:{}",
-            self.ingredient,
+            "{}{}:{}:{}",
+            merged_key_prefix(&self.ingredient),
             self.unit_class,
             if self.optional { "opt" } else { "req" },
             if self.known { "known" } else { "unknown" }
@@ -642,10 +653,10 @@ pub fn derive_shopping_list(input: &ShoppingInput) -> ShoppingList {
 #[cfg(test)]
 mod tests {
     use crate::{
-        derive_shopping_list, CivilDate, CustomIngredientId, IdentityInfo, IngredientId,
-        IngredientLine, IngredientRef, LineStatus, MealComponent, MealSlot, PlannedMeal,
-        PlannedMealId, Quantity, QuantityRange, Rational, Recipe, RecipeId, SeparateReason,
-        ShoppingInput, ShoppingLine, ShoppingList, Unit, UnitFamily, UnitKind,
+        derive_shopping_list, line_key_prefix, CivilDate, CustomIngredientId, IdentityInfo,
+        IngredientId, IngredientLine, IngredientRef, LineStatus, MealComponent, MealSlot,
+        PlannedMeal, PlannedMealId, Quantity, QuantityRange, Rational, Recipe, RecipeId,
+        SeparateReason, ShoppingInput, ShoppingLine, ShoppingList, Unit, UnitFamily, UnitKind,
         SHOPPING_ALGORITHM_VERSION,
     };
     use crate::{parse_civil_date, ProvenanceKind, RecipeProvenance};
@@ -1976,6 +1987,35 @@ mod tests {
         assert_eq!(lines.len(), 2);
         let keys = key_set(&list);
         assert_eq!(keys.len(), lines.len(), "colliding keys: {keys:?}");
+    }
+
+    /// Storage clears `restored` by this prefix when a pantry mark is set (orch/31), so a
+    /// merged key that stopped starting with it would silently stop being cleared.
+    #[test]
+    fn every_merged_line_key_starts_with_its_ingredient_prefix() {
+        let list = single(
+            vec![
+                line("onion", Some(cat("onion")), exact(1, 1), Unit::None, false),
+                line(
+                    "odd",
+                    Some(cus("x:other=b\\")),
+                    exact(1, 1),
+                    Unit::Other("c".to_owned()),
+                    true,
+                ),
+            ],
+            vec![],
+        );
+        let merged: Vec<_> = all_lines(&list)
+            .into_iter()
+            .filter(|l| l.key.starts_with("m:"))
+            .collect();
+        assert_eq!(merged.len(), 2);
+        for l in merged {
+            let prefix = line_key_prefix(l.ingredient.as_ref().unwrap());
+            assert!(l.key.starts_with(&prefix), "{} lacks {prefix}", l.key);
+        }
+        assert!(!line_key_prefix(&cat("onion2")).starts_with(&line_key_prefix(&cat("onion"))));
     }
 
     /// Escaping has to be injective over `\` as well as `:`. The first pair below collides with

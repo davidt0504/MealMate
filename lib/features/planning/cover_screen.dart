@@ -37,7 +37,6 @@ class CoverScreen extends ConsumerStatefulWidget {
 
 class _CoverScreenState extends ConsumerState<CoverScreen> {
   bool _busy = false;
-  bool _accepted = false;
 
   CoverNotifier get _notifier =>
       ref.read(coverProvider(widget.offset).notifier);
@@ -82,7 +81,12 @@ class _CoverScreenState extends ConsumerState<CoverScreen> {
     final assumptionLines = [
       for (final code in result.assumptions) ?assumptionCopy(code),
     ];
-    final showAccept = result.status != OutcomeStatusDto.needsAttention;
+    // Keyed on what was written, not on the tap: only `accept` publishes `applied: true`, and a
+    // later decision re-previews with `applied: false`, so Accept returns exactly when there is
+    // a changed plan to write. A first-run completion failing after the write keeps it gone.
+    final written = view.outcome.applied;
+    final showAccept =
+        result.status != OutcomeStatusDto.needsAttention && !written;
     final firstRun =
         ref.watch(householdProvider).valueOrNull?.onboarded == false;
     return ListView(
@@ -95,8 +99,9 @@ class _CoverScreenState extends ConsumerState<CoverScreen> {
           ),
         ),
         if (firstRun) ...[const SizedBox(height: 4), const Text(firstRunCopy)],
-        if (_accepted && view.outcome.applied) ...[
+        if (written) ...[
           const SizedBox(height: 4),
+          const Text(acceptedCopy),
           Align(
             alignment: Alignment.centerLeft,
             child: TextButton(
@@ -352,7 +357,6 @@ class _CoverScreenState extends ConsumerState<CoverScreen> {
     try {
       await _notifier.accept();
       await widget.completeFirstRun();
-      if (mounted) setState(() => _accepted = true);
     } catch (e) {
       _report(e);
     } finally {

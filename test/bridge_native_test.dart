@@ -46,9 +46,9 @@ void main() {
     );
   });
 
-  test('open_database migrates a real database to schema v12', () async {
+  test('open_database migrates a real database to schema v13', () async {
     final report = await openDatabase(dbPath: await tempDb());
-    expect(report.schemaVersion, 12);
+    expect(report.schemaVersion, 13);
   });
 
   test('storage failure surfaces as KimattaError_Storage', () async {
@@ -92,11 +92,11 @@ void main() {
         '${Platform.pathSeparator}kimatta-export.db';
     final report = await exportDatabase(destPath: dest);
     expect(report.path, dest);
-    expect(report.schemaVersion, 12);
+    expect(report.schemaVersion, 13);
     // Opening the export as the live database proves it is the database's own
     // format, not a write-only artifact.
     final opened = await openDatabase(dbPath: dest);
-    expect(opened.schemaVersion, 12);
+    expect(opened.schemaVersion, 13);
     expect((await bootstrapHousehold()).id, h.id);
   });
 
@@ -886,6 +886,72 @@ void main() {
     expect(
       restored.list.groups.single.lines.single.status,
       ShoppingLineStatusDto.needed,
+    );
+
+    // orch/31 (FIX-001) at the real bridge: Add anyway over a mark, unmark, re-mark. The
+    // re-mark is a new statement, so the line is omitted again with its override cleared.
+    // Expected-to-pass here: the Rust clear landed first, proven by its storage tests.
+    await setPantryMarks(
+      householdId: h.id,
+      ingredients: [a.ingredient],
+      marked: true,
+    );
+    await setShoppingLineState(
+      householdId: h.id,
+      fromDate: '2026-08-30',
+      toDate: '2026-08-30',
+      state: ShoppingLineStateDto(
+        key: line.key,
+        checked: true,
+        hidden: false,
+        restored: true,
+        changed: false,
+      ),
+    );
+    await setPantryMarks(
+      householdId: h.id,
+      ingredients: [a.ingredient],
+      marked: false,
+    );
+    await setPantryMarks(
+      householdId: h.id,
+      ingredients: [a.ingredient],
+      marked: true,
+    );
+    final remarked = await loadShoppingView(
+      householdId: h.id,
+      fromDate: '2026-08-30',
+      toDate: '2026-08-30',
+    );
+    expect(
+      remarked.list.groups.single.lines.single.status,
+      ShoppingLineStatusDto.omittedPantryMarked,
+    );
+    expect(remarked.lineStates.single.restored, isFalse);
+    expect(
+      remarked.lineStates.single.checked,
+      isTrue,
+      reason: 'only the override is cleared, never the check',
+    );
+    // A mark is not per-window: the next cycle's list omits the same identity too.
+    await savePlannedMeal(
+      meal: PlannedMealDto(
+        id: '',
+        householdId: h.id,
+        date: '2026-08-31',
+        slot: MealSlotDto.dinner,
+        locked: false,
+        components: [MealComponentDto(kind: 'recipe', recipeId: saved.id)],
+      ),
+    );
+    final next = await loadShoppingView(
+      householdId: h.id,
+      fromDate: '2026-08-31',
+      toDate: '2026-08-31',
+    );
+    expect(
+      next.list.groups.single.lines.single.status,
+      ShoppingLineStatusDto.omittedPantryMarked,
     );
 
     await resetShoppingList(

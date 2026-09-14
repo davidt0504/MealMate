@@ -27,6 +27,39 @@ String unitLabel(String kind) => switch (kind) {
 /// (invariant 2). The structured fields are for matching and shopping, never for display.
 String describeLine(IngredientLineDto line) => line.originalText;
 
+/// The `original_text` a new or edited ingredient row saves (D-045): `amount unit name`, then
+/// `, preparation` — each part as typed less its outer spaces, so an absent part leaves no gap.
+/// Only the two word units read plural above one; an Other unit is the user's own word and
+/// stays as they wrote it. An unreadable amount pluralises nothing, and the form rejects it.
+String composeLine({
+  required String amount,
+  required String unitKey,
+  required String otherUnit,
+  required String name,
+  required String preparation,
+}) {
+  final many = switch (parseQuantity(amount)) {
+    QuantityDto_Exact(:final numer, :final denom) => numer > denom,
+    QuantityDto_Range(:final maxNumer, :final maxDenom) => maxNumer > maxDenom,
+    _ => false,
+  };
+  final unit = switch (unitKey) {
+    unitNoneKey => '',
+    unitOtherKey => otherUnit.trim(),
+    'cup' || 'piece' when many => '${unitLabel(unitKey)}s',
+    final kind => unitLabel(kind),
+  };
+  final head = [
+    amount.trim(),
+    unit,
+    name.trim(),
+  ].where((part) => part.isNotEmpty).join(' ');
+  final prep = preparation.trim();
+  return prep.isEmpty ? head : '$head, $prep';
+}
+
+String savesAsCopy(String line) => 'Saves as: $line';
+
 final _mixed = RegExp(r'^(\d+) (\d+)/(\d+)$');
 final _fraction = RegExp(r'^(\d+)/(\d+)$');
 final _decimal = RegExp(r'^(\d+)\.(\d+)$');

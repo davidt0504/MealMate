@@ -14,16 +14,17 @@ pub use food_domain::starter::{
     StarterRecipe,
 };
 pub use food_domain::{
-    assess, base_factor, derive_shopping_list, format_civil_date, parse_civil_date, quantity_token,
-    CivilDate, Conflict, Contribution, CustomIngredient, CustomIngredientId, HouseholdRestrictions,
-    IdentityInfo, Ingredient, IngredientId, IngredientLine, IngredientRef, LineStatus,
-    MealComponent, MealScope, MealSlot, MemberPreference, MemberPreferences, PlannedMeal,
-    PlannedMealError, PlannedMealId, PlanningCycle, PlanningError, PreferenceError, ProvenanceKind,
-    Quantity, QuantityRange, Rational, Recipe, RecipeError, RecipeId, RecipeProvenance,
-    RecipeRights, Restriction, RestrictionAssessment, RestrictionError, RestrictionKind,
-    RightsBasis, Sentiment, SeparateReason, ShoppingError, ShoppingGroup, ShoppingInput,
-    ShoppingLine, ShoppingList, ShoppingManualItemId, Unit, UnitFamily, UnitKind, WriteSource,
-    DEFAULT_CYCLE_DAYS, MAX_CYCLE_DAYS, MIN_CYCLE_DAYS, RULE_VERSION, SHOPPING_ALGORITHM_VERSION,
+    assess, base_factor, derive_shopping_list, format_civil_date, line_key_prefix,
+    parse_civil_date, quantity_token, CivilDate, Conflict, Contribution, CustomIngredient,
+    CustomIngredientId, HouseholdRestrictions, IdentityInfo, Ingredient, IngredientId,
+    IngredientLine, IngredientRef, LineStatus, MealComponent, MealScope, MealSlot,
+    MemberPreference, MemberPreferences, PlannedMeal, PlannedMealError, PlannedMealId,
+    PlanningCycle, PlanningError, PreferenceError, ProvenanceKind, Quantity, QuantityRange,
+    Rational, Recipe, RecipeError, RecipeId, RecipeProvenance, RecipeRights, Restriction,
+    RestrictionAssessment, RestrictionError, RestrictionKind, RightsBasis, Sentiment,
+    SeparateReason, ShoppingError, ShoppingGroup, ShoppingInput, ShoppingLine, ShoppingList,
+    ShoppingManualItemId, Unit, UnitFamily, UnitKind, WriteSource, DEFAULT_CYCLE_DAYS,
+    MAX_CYCLE_DAYS, MIN_CYCLE_DAYS, RULE_VERSION, SHOPPING_ALGORITHM_VERSION,
 };
 pub use household_core::{
     ActionProposal, AttentionRequest, Band, Confidence, EvidenceSource, Horizon, Household,
@@ -566,6 +567,28 @@ const MIGRATION_ARRAY: &[M] = &[
         FROM meal_component c
         JOIN recipe_quarantine q ON q.recipe_id = c.recipe_id
     );",
+    ),
+    // FIX-001: five starter "diced tomatoes" lines pointed at `ing-canned-tomatoes`, whose
+    // canonical name is "crushed tomatoes", and the shopping list names a merged line by its
+    // catalog entry. The manifest fix reaches fresh installs only: `install_starter_content`
+    // never rewrites an installed recipe, and returns before its catalog upsert once no id is
+    // missing — which this row's insert guarantees — so the aliases are written here too. Every
+    // statement is guarded on an existing catalog row, so a database that never installed
+    // starter content gains nothing. The remap also moves an authored "diced" line resolved to
+    // the crushed entry, which names the product it asks for. A pantry mark is not copied: a
+    // mark is only ever the user's own statement.
+    M::up(
+        "INSERT OR IGNORE INTO ingredient (id, canonical_name, store_category)
+    SELECT 'ing-diced-tomatoes', 'diced tomatoes', 'pantry'
+    WHERE EXISTS (SELECT 1 FROM ingredient WHERE id = 'ing-canned-tomatoes');
+    INSERT OR IGNORE INTO ingredient_alias (ingredient_id, alias)
+    SELECT id, 'canned diced tomatoes' FROM ingredient WHERE id = 'ing-diced-tomatoes';
+    INSERT OR IGNORE INTO ingredient_alias (ingredient_id, alias)
+    SELECT id, 'orzo pasta' FROM ingredient WHERE id = 'ing-orzo';
+    INSERT OR IGNORE INTO ingredient_alias (ingredient_id, alias)
+    SELECT id, 'elbow macaroni pasta' FROM ingredient WHERE id = 'ing-small-pasta';
+    UPDATE recipe_ingredient_line SET ingredient_id = 'ing-diced-tomatoes'
+    WHERE ingredient_id = 'ing-canned-tomatoes' AND lower(name) LIKE '%diced%';",
     ),
 ];
 pub const MIGRATIONS: Migrations<'static> = Migrations::from_slice(MIGRATION_ARRAY);
@@ -1595,6 +1618,25 @@ fn set_pantry_mark_in(
             params![household.as_str(), catalog_id, custom_id],
         )?
     };
+    // orch/31: `restored` (Add anyway) answers the mark it overrode. A mark this write adds is
+    // a new statement, so the flag stops overriding it — on every window, since no line-state
+    // write happens between an unmark in Pantry and the re-mark. A row with nothing else set
+    // would say nothing (and the CHECK forbids it), so it goes. Overflow-fallback `s:` lines
+    // carry no identity in their key and are not reached.
+    if marked && changed == 1 {
+        let prefix = line_key_prefix(ingredient);
+        tx.execute(
+            "DELETE FROM shopping_line_state
+             WHERE household_id = ?1 AND substr(line_key, 1, length(?2)) = ?2
+               AND restored = 1 AND checked = 0 AND hidden = 0",
+            params![household.as_str(), prefix],
+        )?;
+        tx.execute(
+            "UPDATE shopping_line_state SET restored = 0
+             WHERE household_id = ?1 AND substr(line_key, 1, length(?2)) = ?2 AND restored = 1",
+            params![household.as_str(), prefix],
+        )?;
+    }
     let (name, aliases) = match ingredient {
         IngredientRef::Catalog(id) => (
             tx.query_row(
@@ -3280,19 +3322,19 @@ mod tests {
         let conn = open(&path).unwrap();
         let dest = dir.path().join("export.db");
         export_database(&conn, &dest).unwrap();
-        assert_eq!(validate_export(&dest).unwrap(), 12);
+        assert_eq!(validate_export(&dest).unwrap(), 13);
 
         Connection::open(&dest)
             .unwrap()
-            .pragma_update(None, "user_version", 13)
+            .pragma_update(None, "user_version", 14)
             .unwrap();
         let err = validate_export(&dest).unwrap_err();
         assert!(
             matches!(
                 err,
                 StorageError::NewerSchema {
-                    found: 13,
-                    supported: 12,
+                    found: 14,
+                    supported: 13,
                 }
             ),
             "want NewerSchema, got {err:?}"
@@ -3358,15 +3400,15 @@ mod tests {
         drop(open(&path).unwrap());
         {
             let conn = Connection::open(&path).unwrap();
-            conn.pragma_update(None, "user_version", 13).unwrap();
+            conn.pragma_update(None, "user_version", 14).unwrap();
         }
         let err = open(&path).unwrap_err();
         assert!(
             matches!(
                 err,
                 StorageError::NewerSchema {
-                    found: 13,
-                    supported: 12,
+                    found: 14,
+                    supported: 13,
                 }
             ),
             "want NewerSchema, got {err:?}"
@@ -3375,8 +3417,8 @@ mod tests {
         // the recovery.
         let text = err.to_string();
         assert!(text.contains("newer version of the app"), "got {text:?}");
-        assert!(text.contains("schema 13"), "got {text:?}");
-        assert!(text.contains("supports 12"), "got {text:?}");
+        assert!(text.contains("schema 14"), "got {text:?}");
+        assert!(text.contains("supports 13"), "got {text:?}");
         assert!(text.contains("Update the app"), "got {text:?}");
     }
 
@@ -3390,7 +3432,7 @@ mod tests {
         let path = dir.path().join("does-not-exist-yet.db");
         let conn = open(&path).unwrap();
         // Hard-coded, not derived from MIGRATIONS: a new migration must consciously bump it.
-        assert_eq!(schema_version(&conn).unwrap(), 12);
+        assert_eq!(schema_version(&conn).unwrap(), 13);
         assert_eq!(count(&conn, "household"), 0);
     }
 
@@ -3538,7 +3580,7 @@ mod tests {
     /// on-device v1→v2 migration (PRD §12: tested from representative prior versions); since
     /// v4 it proves v1→latest end to end.
     #[test]
-    fn an_existing_v1_database_migrates_to_v12_without_losing_data() {
+    fn an_existing_v1_database_migrates_to_v13_without_losing_data() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("kimatta.db");
         {
@@ -3553,7 +3595,7 @@ mod tests {
             .unwrap();
         }
         let conn = open(&path).unwrap();
-        assert_eq!(schema_version(&conn).unwrap(), 12);
+        assert_eq!(schema_version(&conn).unwrap(), 13);
         assert_eq!(count(&conn, "household"), 1);
         assert_eq!(count(&conn, "household_member"), 2);
         assert_eq!(count(&conn, "planning_cycle"), 0);
@@ -3767,16 +3809,16 @@ mod tests {
     }
 
     #[test]
-    fn empty_db_migrates_to_v12() {
+    fn empty_db_migrates_to_v13() {
         let conn = open(":memory:").unwrap();
-        assert_eq!(schema_version(&conn).unwrap(), 12);
+        assert_eq!(schema_version(&conn).unwrap(), 13);
     }
 
     // --- Step 4: schema v3 -----------------------------------------------------------------
 
     /// Test-level stand-in for the on-device v2→v3 migration, as the v1 test is for v1→v2.
     #[test]
-    fn an_existing_v2_database_migrates_to_v12_without_losing_data() {
+    fn an_existing_v2_database_migrates_to_v13_without_losing_data() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("kimatta.db");
         {
@@ -3797,7 +3839,7 @@ mod tests {
             .unwrap();
         }
         let conn = open(&path).unwrap();
-        assert_eq!(schema_version(&conn).unwrap(), 12);
+        assert_eq!(schema_version(&conn).unwrap(), 13);
         assert_eq!(count(&conn, "household"), 1);
         assert_eq!(count(&conn, "planning_cycle"), 1);
         assert_eq!(count(&conn, "planning_meal_slot"), 2);
@@ -3810,7 +3852,7 @@ mod tests {
     /// theirs. A recipe is saved at v3 so the migration is proved not to disturb the tables
     /// migration 3 introduced, not merely the household one it alters.
     #[test]
-    fn an_existing_v3_database_migrates_to_v12_without_losing_data() {
+    fn an_existing_v3_database_migrates_to_v13_without_losing_data() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("kimatta.db");
         {
@@ -3822,7 +3864,7 @@ mod tests {
             insert_pre_v6_recipe(&raw, "h", "r");
         }
         let conn = open(&path).unwrap();
-        assert_eq!(schema_version(&conn).unwrap(), 12);
+        assert_eq!(schema_version(&conn).unwrap(), 13);
         assert_eq!(count(&conn, "household"), 1);
         assert_eq!(count(&conn, "household_member"), 1);
         assert_eq!(count(&conn, "recipe"), 1);
@@ -3836,7 +3878,7 @@ mod tests {
     /// test: a recipe saved at v4 must survive the `ALTER TABLE`s that add `archived_at` (v5)
     /// and `prep_minutes`/the rights columns (v6).
     #[test]
-    fn an_existing_v4_database_migrates_to_v12_without_losing_data() {
+    fn an_existing_v4_database_migrates_to_v13_without_losing_data() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("kimatta.db");
         {
@@ -3848,7 +3890,7 @@ mod tests {
             insert_pre_v6_recipe(&raw, "h", "r");
         }
         let conn = open(&path).unwrap();
-        assert_eq!(schema_version(&conn).unwrap(), 12);
+        assert_eq!(schema_version(&conn).unwrap(), 13);
         assert_eq!(count(&conn, "household"), 1);
         assert_eq!(count(&conn, "recipe"), 1);
         assert_eq!(count(&conn, "household_restriction"), 0);
@@ -5198,7 +5240,7 @@ mod tests {
             insert_household(&mut conn, &household("h"), &[member("m", "h")]).unwrap();
         }
         let conn = open(&path).unwrap();
-        assert_eq!(schema_version(&conn).unwrap(), 12);
+        assert_eq!(schema_version(&conn).unwrap(), 13);
         assert_eq!(count(&conn, "household"), 1);
         assert_eq!(count(&conn, "household_member"), 1);
         let on: i32 = conn
@@ -5916,7 +5958,7 @@ mod tests {
     }
 
     #[test]
-    fn an_existing_v5_database_migrates_to_v12_without_losing_data() {
+    fn an_existing_v5_database_migrates_to_v13_without_losing_data() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("kimatta.db");
         {
@@ -5928,7 +5970,7 @@ mod tests {
             insert_pre_v6_recipe(&raw, "h", "r");
         }
         let conn = open(&path).unwrap();
-        assert_eq!(schema_version(&conn).unwrap(), 12);
+        assert_eq!(schema_version(&conn).unwrap(), 13);
         assert_eq!(count(&conn, "household"), 1);
         assert_eq!(count(&conn, "recipe"), 1);
         assert_eq!(load(&conn, "h", "r").unwrap().title(), "Recipe r");
@@ -5955,7 +5997,7 @@ mod tests {
     /// predecessors: a recipe saved at v6 must survive the two new tables, which touch nothing
     /// that exists.
     #[test]
-    fn an_existing_v6_database_migrates_to_v12_without_losing_data() {
+    fn an_existing_v6_database_migrates_to_v13_without_losing_data() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("kimatta.db");
         {
@@ -5967,7 +6009,7 @@ mod tests {
             save_recipe(&mut raw, &recipe("h", "r", vec![])).unwrap();
         }
         let conn = open(&path).unwrap();
-        assert_eq!(schema_version(&conn).unwrap(), 12);
+        assert_eq!(schema_version(&conn).unwrap(), 13);
         assert_eq!(count(&conn, "household"), 1);
         assert_eq!(count(&conn, "recipe"), 1);
         assert_eq!(load(&conn, "h", "r").unwrap().title(), "Recipe r");
@@ -7443,7 +7485,7 @@ mod tests {
     /// Test-level stand-in for the on-device v7→v8 migration, in the pattern of its
     /// predecessors: everything saved at v7 must survive a migration that only adds a table.
     #[test]
-    fn an_existing_v7_database_migrates_to_v12_without_losing_data() {
+    fn an_existing_v7_database_migrates_to_v13_without_losing_data() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("kimatta.db");
         {
@@ -7455,7 +7497,7 @@ mod tests {
             save_recipe(&mut raw, &recipe("h", "r", vec![])).unwrap();
         }
         let conn = open(&path).unwrap();
-        assert_eq!(schema_version(&conn).unwrap(), 12);
+        assert_eq!(schema_version(&conn).unwrap(), 13);
         assert_eq!(count(&conn, "household"), 1);
         assert_eq!(count(&conn, "recipe"), 1);
         assert_eq!(load(&conn, "h", "r").unwrap().title(), "Recipe r");
@@ -7836,7 +7878,7 @@ mod tests {
     /// Test-level stand-in for the on-device v8→v9 migration, in the pattern of its
     /// predecessors: everything saved at v8 must survive a migration that only adds tables.
     #[test]
-    fn an_existing_v8_database_migrates_to_v12_without_losing_data() {
+    fn an_existing_v8_database_migrates_to_v13_without_losing_data() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("kimatta.db");
         {
@@ -7845,10 +7887,16 @@ mod tests {
             assert_eq!(schema_version(&raw).unwrap(), 8);
             raw.pragma_update(None, "foreign_keys", "ON").unwrap();
             seed_for_pantry(&mut raw, "h");
-            set_pantry_mark(&mut raw, &hid("h"), &catalog_ref("flour"), true).unwrap();
+            // Raw rather than `set_pantry_mark`: that write now also clears overlay flags in
+            // `shopping_line_state`, a table v8 does not have yet.
+            raw.execute(
+                "INSERT INTO pantry_item (household_id, ingredient_id) VALUES ('h', 'flour')",
+                [],
+            )
+            .unwrap();
         }
         let conn = open(&path).unwrap();
-        assert_eq!(schema_version(&conn).unwrap(), 12);
+        assert_eq!(schema_version(&conn).unwrap(), 13);
         assert_eq!(count(&conn, "household"), 1);
         assert_eq!(count(&conn, "pantry_item"), 1);
         assert_eq!(count(&conn, "shopping_line_state"), 0);
@@ -7858,7 +7906,7 @@ mod tests {
     /// Test-level stand-in for the on-device v9→v12 migration: everything saved at
     /// v9 — a shopping overlay row included — survives a migration that only adds tables.
     #[test]
-    fn an_existing_v9_database_migrates_to_v12_without_losing_data() {
+    fn an_existing_v9_database_migrates_to_v13_without_losing_data() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("kimatta.db");
         {
@@ -7875,7 +7923,7 @@ mod tests {
             .unwrap();
         }
         let conn = open(&path).unwrap();
-        assert_eq!(schema_version(&conn).unwrap(), 12);
+        assert_eq!(schema_version(&conn).unwrap(), 13);
         assert_eq!(count(&conn, "household"), 1);
         assert_eq!(count(&conn, "pantry_item"), 1);
         assert_eq!(count(&conn, "shopping_line_state"), 1);
@@ -7990,6 +8038,132 @@ mod tests {
         ));
         assert!(load_meal(&conn, "h", "historical").is_some());
         assert_eq!(load_meal(&conn, "h", "future"), None);
+    }
+
+    #[test]
+    fn a_v12_database_moves_diced_lines_to_diced_tomatoes() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("kimatta.db");
+        let line = |text: &str, name: &str| {
+            IngredientLine::new(
+                text,
+                name,
+                Some(IngredientRef::Catalog(
+                    IngredientId::new("ing-canned-tomatoes").unwrap(),
+                )),
+                Quantity::Exact(Rational::new(1, 1).unwrap()),
+                Unit::Known(UnitKind::Cup),
+                None,
+                false,
+            )
+            .unwrap()
+        };
+        {
+            let mut raw = Connection::open(&path).unwrap();
+            MIGRATIONS.to_version(&mut raw, 12).unwrap();
+            seed_for_meals(&mut raw, "h");
+            for entry in [
+                ingredient(
+                    "ing-canned-tomatoes",
+                    "crushed tomatoes",
+                    &["canned crushed tomatoes"],
+                ),
+                ingredient("ing-orzo", "orzo", &[]),
+                ingredient("ing-small-pasta", "small pasta", &["elbow macaroni"]),
+            ] {
+                upsert_ingredient(&mut raw, &entry).unwrap();
+            }
+            // Mixed case on purpose: the migration matches `lower(name)`.
+            let chili = Recipe::new(
+                rid("chili"),
+                hid("h"),
+                "Chili".to_owned(),
+                Some(4),
+                Some(30),
+                "Cook.",
+                vec![
+                    line("1 cup Diced tomatoes", "Diced tomatoes"),
+                    line("1 cup crushed tomatoes", "crushed tomatoes"),
+                ],
+                starter_provenance("davids-chili", Some(rights(RightsBasis::Original, None))),
+            )
+            .unwrap();
+            save_recipe(&mut raw, &chili).unwrap();
+            user_save(
+                &mut raw,
+                &occurrence(
+                    "h",
+                    "m",
+                    "2026-09-01",
+                    MealSlot::Dinner,
+                    vec![MealComponent::recipe(rid("chili"), None)],
+                ),
+            )
+            .unwrap();
+        }
+
+        let mut conn = open(&path).unwrap();
+        assert_eq!(schema_version(&conn).unwrap(), 13);
+        let list = load_shopping_list(
+            &mut conn,
+            &hid("h"),
+            parse_civil_date("2026-08-29").unwrap(),
+            parse_civil_date("2026-09-04").unwrap(),
+        )
+        .unwrap();
+        let lines: Vec<_> = list.groups.iter().flat_map(|g| &g.lines).collect();
+        assert_eq!(lines.len(), 2, "{lines:?}");
+        let diced = lines
+            .iter()
+            .find(|l| l.name == "diced tomatoes")
+            .expect("the diced line is named for what the recipe asks for");
+        assert_eq!(
+            diced.ingredient,
+            Some(IngredientRef::Catalog(
+                IngredientId::new("ing-diced-tomatoes").unwrap()
+            ))
+        );
+        assert!(lines.iter().any(|l| l.name == "crushed tomatoes"));
+
+        let entry: (String, Option<String>) = conn
+            .query_row(
+                "SELECT canonical_name, store_category FROM ingredient \
+                 WHERE id = 'ing-diced-tomatoes'",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(
+            entry,
+            ("diced tomatoes".to_owned(), Some("pantry".to_owned()))
+        );
+        let aliases = |id: &str| -> Vec<String> {
+            let mut stmt = conn
+                .prepare(
+                    "SELECT alias FROM ingredient_alias WHERE ingredient_id = ?1 ORDER BY alias",
+                )
+                .unwrap();
+            stmt.query_map([id], |r| r.get(0))
+                .unwrap()
+                .map(Result::unwrap)
+                .collect()
+        };
+        assert_eq!(aliases("ing-diced-tomatoes"), ["canned diced tomatoes"]);
+        assert_eq!(aliases("ing-orzo"), ["orzo pasta"]);
+        assert_eq!(
+            aliases("ing-small-pasta"),
+            ["elbow macaroni", "elbow macaroni pasta"]
+        );
+    }
+
+    /// Expected to pass before and after v13: every v13 statement is guarded on a catalog row
+    /// already existing, so a database that never installed starter content stays empty and
+    /// the exact-count install tests keep their meaning.
+    #[test]
+    fn v13_adds_no_catalog_row_to_a_database_without_starter_content() {
+        let conn = open(":memory:").unwrap();
+        assert_eq!(count(&conn, "ingredient"), 0);
+        assert_eq!(count(&conn, "ingredient_alias"), 0);
     }
 
     /// Adversarial: an all-false row is a row that says nothing, and storage deletes rather
@@ -8152,6 +8326,91 @@ mod tests {
             .into_iter()
             .map(|i| i.name)
             .collect()
+    }
+
+    /// orch/31: Add anyway (`restored`) → unmark in Pantry → re-mark. No line-state write
+    /// happens between the unmark and the re-mark, so only the mark write can clear the flag.
+    #[test]
+    fn a_newly_set_pantry_mark_clears_restored_on_that_ingredients_lines_only() {
+        let mut conn = open(":memory:").unwrap();
+        seed(&mut conn, "h");
+        for id in ["onion", "onion2", "flour"] {
+            upsert_ingredient(&mut conn, &ingredient(id, id, &[])).unwrap();
+        }
+        let restored_only = "m:catalog:onion:count:req:known";
+        let checked_and_restored = "m:catalog:onion:count:opt:known";
+        // A prefix without its closing `:` would match this one too.
+        let longer_id = "m:catalog:onion2:count:req:known";
+        let other = "m:catalog:flour:volume_us:req:known";
+        for key in [restored_only, longer_id, other] {
+            set_state(
+                &mut conn,
+                "h",
+                "2026-08-29",
+                "2026-09-04",
+                &flags(key, false, true),
+            );
+        }
+        let mut both = checked(checked_and_restored, "exact:1/1|none");
+        both.restored = true;
+        set_state(&mut conn, "h", "2026-08-29", "2026-09-04", &both);
+        set_state(
+            &mut conn,
+            "h",
+            "2026-09-05",
+            "2026-09-11",
+            &flags(restored_only, false, true),
+        );
+
+        let onion = IngredientRef::Catalog(IngredientId::new("onion").unwrap());
+        set_pantry_mark(&mut conn, &hid("h"), &onion, true).unwrap();
+
+        let first = states(&conn, "h", "2026-08-29", "2026-09-04");
+        assert_eq!(
+            first,
+            vec![
+                flags(other, false, true),
+                flags(longer_id, false, true),
+                checked(checked_and_restored, "exact:1/1|none"),
+            ]
+        );
+        assert!(states(&conn, "h", "2026-09-05", "2026-09-11").is_empty());
+    }
+
+    /// Expected-to-pass regression pin, written before the orch/31 clear existed: only a mark
+    /// this write actually adds clears the flag. An Add anyway made while the mark already stood
+    /// is the statement about that mark, and a repeated tap or an unmark must not overturn it.
+    #[test]
+    fn a_pantry_mark_that_changes_nothing_clears_nothing() {
+        let mut conn = open(":memory:").unwrap();
+        seed(&mut conn, "h");
+        upsert_ingredient(&mut conn, &ingredient("onion", "onion", &[])).unwrap();
+        let onion = IngredientRef::Catalog(IngredientId::new("onion").unwrap());
+        set_pantry_mark(&mut conn, &hid("h"), &onion, true).unwrap();
+        let key = "m:catalog:onion:count:req:known";
+        set_state(
+            &mut conn,
+            "h",
+            "2026-08-29",
+            "2026-09-04",
+            &flags(key, false, true),
+        );
+
+        assert!(
+            set_pantry_marks(&mut conn, &hid("h"), std::slice::from_ref(&onion), true)
+                .unwrap()
+                .is_empty()
+        );
+        set_pantry_mark(&mut conn, &hid("h"), &onion, true).unwrap();
+        assert_eq!(
+            states(&conn, "h", "2026-08-29", "2026-09-04"),
+            vec![flags(key, false, true)]
+        );
+        set_pantry_mark(&mut conn, &hid("h"), &onion, false).unwrap();
+        assert_eq!(
+            states(&conn, "h", "2026-08-29", "2026-09-04"),
+            vec![flags(key, false, true)]
+        );
     }
 
     #[test]

@@ -126,6 +126,81 @@ void main() {
     });
   });
 
+  // D-045: the line a new or edited row saves as `original_text`, field by field.
+  group('composeLine', () {
+    String compose({
+      String amount = '',
+      String unitKey = unitNoneKey,
+      String otherUnit = '',
+      String name = 'flour',
+      String preparation = '',
+    }) => composeLine(
+      amount: amount,
+      unitKey: unitKey,
+      otherUnit: otherUnit,
+      name: name,
+      preparation: preparation,
+    );
+
+    test('reads amount, unit, name, then preparation after a comma', () {
+      expect(
+        compose(amount: '1/2', unitKey: 'cup', preparation: 'sifted'),
+        '1/2 cup flour, sifted',
+      );
+    });
+
+    test('a word unit is plural only when the amount is above one', () {
+      expect(compose(amount: '1', unitKey: 'cup'), '1 cup flour');
+      expect(compose(amount: '1/2', unitKey: 'cup'), '1/2 cup flour');
+      expect(compose(amount: '2', unitKey: 'cup'), '2 cups flour');
+      expect(compose(amount: '1 1/2', unitKey: 'cup'), '1 1/2 cups flour');
+      expect(compose(amount: '1/2-1', unitKey: 'cup'), '1/2-1 cup flour');
+      expect(compose(amount: '1-2', unitKey: 'cup'), '1-2 cups flour');
+      expect(
+        compose(amount: '3', unitKey: 'piece', name: 'garlic'),
+        '3 pieces garlic',
+      );
+    });
+
+    test('an abbreviation never changes and fl_oz reads as fl oz', () {
+      expect(compose(amount: '2', unitKey: 'tbsp'), '2 tbsp flour');
+      expect(
+        compose(amount: '8', unitKey: 'fl_oz', name: 'milk'),
+        '8 fl oz milk',
+      );
+    });
+
+    test('an Other unit is the typed text, never pluralised', () {
+      expect(
+        compose(
+          amount: '2',
+          unitKey: unitOtherKey,
+          otherUnit: 'handful',
+          name: "nana's mix",
+        ),
+        "2 handful nana's mix",
+      );
+    });
+
+    test('absent parts leave no stray space or comma', () {
+      expect(compose(), 'flour');
+      expect(compose(name: '  Flour ', preparation: '  '), 'Flour');
+      expect(
+        compose(
+          amount: ' 2 ',
+          unitKey: unitOtherKey,
+          otherUnit: ' ',
+          name: 'eggs',
+        ),
+        '2 eggs',
+      );
+    });
+
+    test('an unreadable amount is kept as typed and pluralises nothing', () {
+      expect(compose(amount: 'abc', unitKey: 'cup'), 'abc cup flour');
+    });
+  });
+
   test('describeLine renders the original text verbatim', () {
     const line = IngredientLineDto(
       originalText: '  1/2 cup Flour, sifted ',

@@ -550,7 +550,7 @@ mod tests {
             "crumbed-baked-fish",
         ];
         assert_eq!(content.recipes.len(), 35);
-        assert_eq!(content.catalog.len(), 106);
+        assert_eq!(content.catalog.len(), 107);
         assert_eq!(shipped_starter_content().unwrap().recipes.len(), 25);
         for slug in quarantined {
             assert!(
@@ -620,6 +620,38 @@ mod tests {
                     }
                     other => panic!("{}: line is not a catalog ref: {other:?}", recipe.slug),
                 }
+            }
+        }
+        assert!(checked > 0);
+    }
+
+    #[test]
+    fn every_catalog_line_name_is_its_canonical_name_or_an_alias() {
+        // The shopping list names a merged line by its catalog entry, so a line pointed at an
+        // entry for a different product puts that product on the list: "diced tomatoes" under
+        // a "crushed tomatoes" entry was FIX-001 item 1.
+        let content = all_starter_content().unwrap();
+        let mut checked = 0;
+        for recipe in &content.recipes {
+            for line in &recipe.lines {
+                let Some(IngredientRef::Catalog(id)) = line.ingredient() else {
+                    continue;
+                };
+                let entry = content
+                    .catalog
+                    .iter()
+                    .find(|i| i.id() == id)
+                    .expect("every_catalog_reference_resolves covers a dangling ref");
+                let name = line.name().trim().to_lowercase();
+                assert!(
+                    entry.canonical_name().to_lowercase() == name
+                        || entry.aliases().iter().any(|a| a.to_lowercase() == name),
+                    "{}: line {name:?} is neither {:?} nor one of {:?}",
+                    recipe.slug,
+                    entry.canonical_name(),
+                    entry.aliases()
+                );
+                checked += 1;
             }
         }
         assert!(checked > 0);

@@ -47,7 +47,7 @@ import 'package:meal_mate/src/rust/api/shopping.dart';
 
 const okReport = HealthReport(dbPath: '/x/kimatta.db', schemaVersion: 5);
 
-/// A *first* install as it now returns: the 106-entry catalog seeds and all 25 shipping recipes
+/// A *first* install as it now returns: the 107-entry catalog seeds and all 25 shipping recipes
 /// install — every currently shippable recipe is owner-reviewed. D-043/D-044 quarantine all
 /// federal records outside the APK.
 /// The ten Kimatta-authored entries stay pending; they ship by neither arm until someone cooks
@@ -56,7 +56,7 @@ const okReport = HealthReport(dbPath: '/x/kimatta.db', schemaVersion: 5);
 const okStarterReport = StarterInstallReportDto(
   installed: 25,
   skipped: 0,
-  catalogInstalled: 106,
+  catalogInstalled: 107,
   available: 25,
   pendingCookReview: 10,
 );
@@ -1514,6 +1514,75 @@ void main() {
     },
   );
 
+  // FIX-001 item 4 (dossier MVP-033_ACCEPT_FEEDBACK): once the plan is written the primary
+  // control gives way to a calm confirmation, so it cannot read as still actionable.
+  testWidgets('a successful accept replaces Accept with the confirmation', (
+    tester,
+  ) async {
+    usePixel5(tester);
+    await tester.pumpWidget(
+      harness(
+        cover: (req) => coverOutcome(applied: req.apply),
+        initial: '/plan/cover',
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.widgetWithText(FilledButton, 'Accept'), findsOneWidget);
+    await tester.tap(find.text('Accept'));
+    await tester.pumpAndSettle();
+    expect(find.widgetWithText(FilledButton, 'Accept'), findsNothing);
+    expect(find.text(acceptedCopy), findsOneWidget);
+    expect(find.text(shoppingReadyCopy), findsOneWidget);
+  });
+
+  // Expected-to-pass regression pin: a failed write must keep the one way to retry it.
+  testWidgets('a failed accept leaves Accept in place and enabled', (
+    tester,
+  ) async {
+    usePixel5(tester);
+    await tester.pumpWidget(
+      harness(
+        cover: (req) => req.apply
+            ? throw const KimattaError.storage(message: 'disk full')
+            : coverOutcome(),
+        initial: '/plan/cover',
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Accept'));
+    await tester.pumpAndSettle();
+    final accept = find.widgetWithText(FilledButton, 'Accept');
+    expect(accept, findsOneWidget);
+    expect(tester.widget<FilledButton>(accept).onPressed, isNotNull);
+    expect(find.text(acceptedCopy), findsNothing);
+    expect(find.text(shoppingReadyCopy), findsNothing);
+    expect(find.text('Cover My Week unavailable: disk full'), findsOneWidget);
+  });
+
+  testWidgets('a second tap cannot apply the plan twice', (tester) async {
+    usePixel5(tester);
+    final applies = <bool>[];
+    final gate = Completer<CoverCycleOutcomeDto>();
+    await tester.pumpWidget(
+      harness(
+        cover: (req) {
+          applies.add(req.apply);
+          return req.apply ? gate.future : coverOutcome();
+        },
+        initial: '/plan/cover',
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Accept'));
+    await tester.pump();
+    await tester.tap(find.text('Accept'), warnIfMissed: false);
+    await tester.pump();
+    gate.complete(coverOutcome(applied: true));
+    await tester.pumpAndSettle();
+    expect(applies, [false, true]);
+    expect(find.widgetWithText(FilledButton, 'Accept'), findsNothing);
+  });
+
   testWidgets(
     'a locked cover slot is marked and offers no swap or veto (AC-2)',
     (tester) async {
@@ -2625,6 +2694,27 @@ void main() {
     completion.complete(okHousehold);
     await tester.pumpAndSettle();
     expect(title('Settings'), findsOneWidget);
+  });
+
+  // FIX-001 item 4: the plan is written before first-run completion runs, so a completion
+  // failure must not bring back an Accept that would apply the plan a second time.
+  testWidgets('a failed completion after a written plan keeps Accept gone', (
+    tester,
+  ) async {
+    usePixel5(tester);
+    await tester.pumpWidget(
+      harness(
+        household: () => newHousehold,
+        completeOnboarding: (_) async =>
+            throw const KimattaError.storage(message: 'disk full'),
+        cover: (request) => coverOutcome(applied: request.apply),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Accept'));
+    await tester.pumpAndSettle();
+    expect(find.widgetWithText(FilledButton, 'Accept'), findsNothing);
+    expect(find.text(shoppingReadyCopy), findsOneWidget);
   });
 
   testWidgets('a failed completion reports and still leaves Cover', (
@@ -3986,8 +4076,9 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  // AC-1/AC-2: the exact DTO, with every string sent verbatim — no `.trim()` on the form,
-  // because silent normalisation is this card's stop condition. Rust validates.
+  // AC-1/AC-2: the exact DTO, with every typed field sent verbatim — no `.trim()` on the form,
+  // because silent normalisation is this card's stop condition. Rust validates. The one string
+  // nobody types is `original_text`: the form composes it from the fields (FIX-001, D-045).
   testWidgets('a new recipe with two ingredient rows is saved as entered', (
     tester,
   ) async {
@@ -4006,17 +4097,18 @@ void main() {
     await tester.enterText(field('Title'), '  Pancakes ');
     await tester.enterText(field('Servings'), '4');
     await tester.enterText(field('Instructions'), 'Mix. Fry.');
-    await tester.enterText(field('As written'), '  1/2 cup Flour, sifted ');
+    expect(find.widgetWithText(TextField, 'As written'), findsNothing);
     await tester.enterText(field('Name'), 'Flour');
     await tester.enterText(field('Amount'), '1/2');
     await pickUnit(tester, 0, 'cup');
     await tester.enterText(field('Preparation'), 'sifted');
+    await tester.pump();
+    expect(find.text('Saves as: 1/2 cup Flour, sifted'), findsOneWidget);
     await tapVisible(
       tester,
       find.widgetWithText(OutlinedButton, 'Add ingredient'),
     );
     await tester.pumpAndSettle();
-    await tester.enterText(field('As written', 1), "2-3 handfuls nana's mix");
     await tester.enterText(field('Name', 1), "nana's mix");
     await tester.enterText(field('Amount', 1), '2-3');
     await pickUnit(tester, 1, 'Other…');
@@ -4033,14 +4125,14 @@ void main() {
     expect(sent?.servings, 4);
     expect(sent?.instructions, 'Mix. Fry.');
     expect(sent?.lines.length, 2);
-    expect(sent?.lines[0].originalText, '  1/2 cup Flour, sifted ');
+    expect(sent?.lines[0].originalText, '1/2 cup Flour, sifted');
     expect(
       sent?.lines[0].quantity,
       const QuantityDto.exact(numer: 1, denom: 2),
     );
     expect(sent?.lines[0].unit, const UnitDto.known(unit: 'cup'));
     expect(sent?.lines[0].preparation, 'sifted');
-    expect(sent?.lines[1].originalText, "2-3 handfuls nana's mix");
+    expect(sent?.lines[1].originalText, "2-3 handful nana's mix");
     expect(sent?.lines[1].unit, const UnitDto.other(text: 'handful'));
     expect(sent?.lines[1].optional, isTrue);
     expect(sent?.lines[1].preparation, isNull);
@@ -4052,7 +4144,7 @@ void main() {
     expect(sent?.archivedAt, isNull);
     expect(sent?.lines, const [
       IngredientLineDto(
-        originalText: '  1/2 cup Flour, sifted ',
+        originalText: '1/2 cup Flour, sifted',
         name: 'Flour',
         quantity: QuantityDto.exact(numer: 1, denom: 2),
         unit: UnitDto.known(unit: 'cup'),
@@ -4060,7 +4152,7 @@ void main() {
         optional: false,
       ),
       IngredientLineDto(
-        originalText: "2-3 handfuls nana's mix",
+        originalText: "2-3 handful nana's mix",
         name: "nana's mix",
         quantity: QuantityDto.range(
           minNumer: 2,
@@ -4254,7 +4346,6 @@ void main() {
       find.widgetWithText(OutlinedButton, 'Add ingredient'),
     );
     await tester.pumpAndSettle();
-    await tester.enterText(field('As written', 1), 'a pinch of salt');
     await tester.enterText(field('Name', 1), 'salt');
     await tapVisible(tester, find.widgetWithText(FilledButton, 'Save recipe'));
     await tester.pumpAndSettle();
@@ -4287,7 +4378,6 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await tester.enterText(field('As written'), '2 cups chickpeas, rinsed');
     await tester.enterText(field('Amount'), '2');
     await pickUnit(tester, 0, 'cup');
     await tester.enterText(field('Preparation'), 'rinsed');
@@ -4303,6 +4393,8 @@ void main() {
     expect(sent?.lines[0].preparation, 'rinsed');
     expect(sent?.lines[0].optional, isTrue);
     expect(sent?.lines[0].ingredient, chickpeasRef);
+    // D-045: an edited loaded row is a new entry, so its text is recomposed from the fields.
+    expect(sent?.lines[0].originalText, '2 cups chickpeas, rinsed');
   });
 
   // Owner decision 2026-09-03, on the redteam of the carry-through above. Carrying the ref
@@ -4334,8 +4426,9 @@ void main() {
     await tester.pumpAndSettle();
     expect(sent?.lines[0].name, 'black beans');
     expect(sent?.lines[0].ingredient, isNull);
-    // Everything else on the row still round-trips — the rename drops the identity, not the row.
-    expect(sent?.lines[0].originalText, 'chickpeas');
+    // The rename drops the identity, not the row; being an edit, it also recomposes the row's
+    // text (D-045), so the line does not keep naming the food it no longer is.
+    expect(sent?.lines[0].originalText, 'black beans');
   });
 
   // The comparison is verbatim, matching the rest of the form: a name the user altered at all —
@@ -4445,6 +4538,66 @@ void main() {
     // carries both, so these fail if the form starts passing either back.
     expect(sent?.archivedAt, isNull);
     expect(sent?.assessment, isNull);
+  });
+
+  // D-045, adversarial: the untouched check covers the Other unit's *text*, not just the
+  // dropdown key, or "handful" → "scoop" would save the stored "handfuls" line. The caption
+  // follows the typing before any save.
+  testWidgets(
+    'editing a loaded Other unit recomposes the row and its caption',
+    (tester) async {
+      useTallView(tester);
+      RecipeDto? sent;
+      await tester.pumpWidget(
+        harness(
+          initial: '/recipes/r-1/edit',
+          recipe: (_) => fullyPopulatedRecipe,
+          saveRecipe: (dto) async {
+            sent = dto;
+            return fullyPopulatedRecipe;
+          },
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text("Saves as: 2 handfuls nana's mix"), findsOneWidget);
+      await tester.enterText(field('Unit name'), 'scoop');
+      await tester.pump();
+      expect(find.text("Saves as: 2 scoop nana's mix"), findsOneWidget);
+      await tapVisible(
+        tester,
+        find.widgetWithText(FilledButton, 'Save recipe'),
+      );
+      await tester.pumpAndSettle();
+      expect(sent?.lines[1].originalText, "2 scoop nana's mix");
+      expect(sent?.lines[0].originalText, '1 cup dried chickpeas, soaked');
+    },
+  );
+
+  // D-045 edge: "untouched" means equal to what was seeded, not "never focused". An amount
+  // changed and changed back keeps the stored wording rather than flattening it.
+  testWidgets('an edit reverted before save keeps the stored text', (
+    tester,
+  ) async {
+    useTallView(tester);
+    RecipeDto? sent;
+    await tester.pumpWidget(
+      harness(
+        initial: '/recipes/r-1/edit',
+        recipe: (_) => fullyPopulatedRecipe,
+        saveRecipe: (dto) async {
+          sent = dto;
+          return fullyPopulatedRecipe;
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.enterText(field('Amount'), '3');
+    await tester.pump();
+    expect(find.text('Saves as: 3 cups chickpeas, soaked'), findsOneWidget);
+    await tester.enterText(field('Amount'), '1');
+    await tapVisible(tester, find.widgetWithText(FilledButton, 'Save recipe'));
+    await tester.pumpAndSettle();
+    expect(sent?.lines[0].originalText, '1 cup dried chickpeas, soaked');
   });
 
   // The owner's 2026-08-29 audit (HIGH, §6 item 2): the form used to stamp the saved DTO with
@@ -4631,7 +4784,6 @@ void main() {
     );
     await tester.pumpAndSettle();
     await tester.enterText(field('Title'), 'Toast');
-    await tester.enterText(field('As written'), 'abc bread');
     await tester.enterText(field('Name'), 'bread');
     await tester.enterText(field('Amount'), 'abc');
     await tapVisible(tester, find.widgetWithText(FilledButton, 'Save recipe'));
@@ -4662,7 +4814,6 @@ void main() {
     );
     await tester.pumpAndSettle();
     await tester.enterText(field('Title'), 'Toast');
-    await tester.enterText(field('As written'), 'lots of bread');
     await tester.enterText(field('Name'), 'bread');
     await tester.enterText(field('Amount'), '99999999999999999999');
     await tapVisible(tester, find.widgetWithText(FilledButton, 'Save recipe'));
@@ -4797,7 +4948,6 @@ void main() {
       );
       await tester.pumpAndSettle();
       await tester.enterText(field('Title'), 'Toast');
-      await tester.enterText(field('As written'), 'abc bread');
       await tester.enterText(field('Name'), 'bread');
       await tester.enterText(field('Amount'), 'abc');
       for (var i = 0; i < 2; i++) {
@@ -4832,7 +4982,6 @@ void main() {
     await tester.pumpWidget(harness(initial: '/recipes/new'));
     await tester.pumpAndSettle();
     await tester.enterText(field('Title'), 'Toast');
-    await tester.enterText(field('As written'), 'abc bread');
     await tester.enterText(field('Name'), 'bread');
     await tester.enterText(field('Amount'), 'abc');
     for (var i = 0; i < 2; i++) {
@@ -4915,7 +5064,6 @@ void main() {
     );
     await tester.pumpAndSettle();
     await tester.enterText(field('Title'), 'Toast');
-    await tester.enterText(field('As written'), 'sifted flour');
     await tester.enterText(field('Name'), 'flour');
     await tester.enterText(field('Preparation'), ' ');
     await tapVisible(tester, find.widgetWithText(FilledButton, 'Save recipe'));
@@ -4944,7 +5092,6 @@ void main() {
     );
     await tester.pumpAndSettle();
     await tester.enterText(field('Title'), 'Toast');
-    await tester.enterText(field('As written'), 'sifted flour');
     await tester.enterText(field('Name'), 'flour');
     await tester.enterText(field('Preparation'), ' sifted ');
     await tapVisible(tester, find.widgetWithText(FilledButton, 'Save recipe'));
@@ -4968,18 +5115,16 @@ void main() {
     );
     await tester.pumpAndSettle();
     await tester.enterText(field('Title'), 'Toast');
-    await tester.enterText(field('As written'), 'bread');
     await tester.enterText(field('Name'), 'bread');
     await tapVisible(
       tester,
       find.widgetWithText(OutlinedButton, 'Add ingredient'),
     );
     await tester.pumpAndSettle();
-    await tester.enterText(field('As written', 1), 'butter');
     await tester.enterText(field('Name', 1), 'butter');
     await tapVisible(tester, find.byTooltip('Remove ingredient 2'));
     await tester.pumpAndSettle();
-    expect(find.widgetWithText(TextField, 'As written'), findsOneWidget);
+    expect(find.widgetWithText(TextField, 'Name'), findsOneWidget);
     await tapVisible(tester, find.widgetWithText(FilledButton, 'Save recipe'));
     await tester.pumpAndSettle();
     expect(sent?.lines.length, 1);
@@ -5008,7 +5153,7 @@ void main() {
     await tester.tap(find.byTooltip('Remove ingredient 2'));
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
-    expect(find.widgetWithText(TextField, 'As written'), findsOneWidget);
+    expect(find.widgetWithText(TextField, 'Name'), findsOneWidget);
   });
 
   // A removal renumbers every row below it, so an error written before the removal must not
@@ -5022,6 +5167,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.enterText(field('Title'), 'Toast');
     await tester.enterText(field('Name'), 'bread');
+    await tester.enterText(field('Amount'), 'abc');
     for (var row = 1; row < 3; row++) {
       await tapVisible(
         tester,
@@ -5029,14 +5175,15 @@ void main() {
       );
       await tester.pumpAndSettle();
       await tester.enterText(field('Name', row), 'filling $row');
+      await tester.enterText(field('Amount', row), 'abc');
     }
-    // Every row carries a name and no "As written", so `_validate` rejects all three rather
-    // than skipping any of them as untouched.
+    // Every row carries a name and an unreadable amount, so `_validate` rejects all three
+    // rather than skipping any of them as untouched.
     await tapVisible(tester, find.widgetWithText(FilledButton, 'Save recipe'));
     await tester.pumpAndSettle();
     for (final n in [1, 2, 3]) {
       expect(
-        find.text('Ingredient $n: write it as you would say it.'),
+        find.textContaining('Ingredient $n: cannot read "abc"'),
         findsOneWidget,
       );
     }
@@ -5046,11 +5193,11 @@ void main() {
     // surviving row's error would drop a rejection signal that is still true, which is the
     // silent-rejection shape this card already fixed once. The row that was 3 is now 2.
     expect(
-      find.text('Ingredient 1: write it as you would say it.'),
+      find.textContaining('Ingredient 1: cannot read "abc"'),
       findsOneWidget,
     );
     expect(
-      find.text('Ingredient 2: write it as you would say it.'),
+      find.textContaining('Ingredient 2: cannot read "abc"'),
       findsOneWidget,
     );
     expect(find.textContaining('Ingredient 3:'), findsNothing);
@@ -5316,10 +5463,8 @@ void main() {
         tester.widget<TextField>(field('Title')).controller?.text,
         'Pancakes',
       );
-      expect(
-        tester.widget<TextField>(field('As written')).controller?.text,
-        '  1/2 cup Flour, sifted ',
-      );
+      // D-045: a loaded row shows the text it will save; untouched, that is the stored text.
+      expect(find.text('Saves as:   1/2 cup Flour, sifted '), findsOneWidget);
       expect(tester.widget<TextField>(field('Amount')).controller?.text, '1/2');
       expect(tester.widget<TextField>(field('Amount', 1)).controller?.text, '');
       await tester.enterText(field('Title'), 'Pancakes v2');
@@ -6969,6 +7114,14 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  /// Opens the menu of the `row`th To buy row (in render order) and picks `action`.
+  Future<void> lineMenu(WidgetTester tester, int row, String action) async {
+    await tester.tap(find.byTooltip(lineOptionsTooltip).at(row));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(action));
+    await tester.pumpAndSettle();
+  }
+
   /// AC-1: lines land under their store category, the uncategorised line under `Other`, the
   /// omitted line under Already have, and the explain sheet names every contribution.
   testWidgets('the shopping screen groups lines and explains one', (
@@ -6997,12 +7150,11 @@ void main() {
     // The omitted line is not in the To buy list until expanded.
     expect(find.text('onion'), findsNothing);
 
-    await tester.tap(find.byTooltip('Why is this here?').first);
-    await tester.pumpAndSettle();
+    await lineMenu(tester, 0, 'Why is this here?');
     for (final c in okShoppingList.groups[0].lines[0].contributions) {
       expect(find.text(explainContribution(c)), findsOneWidget);
     }
-    expect(find.text('Remove from list'), findsOneWidget);
+    expect(find.text('Skip this time'), findsOneWidget);
     expect(find.text('Back to pantry'), findsNothing);
   });
 
@@ -7093,12 +7245,10 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('Why is this here?').first);
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Remove from list'));
-    await tester.pumpAndSettle();
+    await lineMenu(tester, 0, 'Skip this time');
     expect(sent.single.key, flourKey);
     expect(sent.single.hidden, isTrue);
+    expect(find.text(skippedCopy('flour')), findsOneWidget);
     expect(find.text(countsCopy(1, 1, 1)), findsOneWidget);
     expect(checkboxFor('flour'), findsNothing);
     expect(find.text('$removedHeading (1)'), findsOneWidget);
@@ -7139,9 +7289,8 @@ void main() {
     expect(find.text(countsCopy(3, 0, 0)), findsOneWidget);
     expect(checkboxFor('onion'), findsOneWidget);
 
-    // onion now sits second in the baking group, so its explain button is the second.
-    await tester.tap(find.byTooltip('Why is this here?').at(1));
-    await tester.pumpAndSettle();
+    // onion now sits second in the baking group, so its menu is the second.
+    await lineMenu(tester, 1, 'Why is this here?');
     expect(find.text(omittedCopy), findsOneWidget);
     await tester.tap(find.text('Back to pantry'));
     await tester.pumpAndSettle();
@@ -7149,6 +7298,130 @@ void main() {
     expect(sent.last.restored, isFalse);
     expect(find.text(countsCopy(2, 1, 0)), findsOneWidget);
     expect(checkboxFor('onion'), findsNothing);
+  });
+
+  /// FIX-001 item 2: a swipe skips the line for this list only. It writes `hidden` and never a
+  /// pantry mark — there is no `setPantryMarks` hook, so a mark would throw.
+  testWidgets('swiping a line skips it for this list and Undo puts it back', (
+    tester,
+  ) async {
+    useTallView(tester);
+    final sent = <ShoppingLineStateDto>[];
+    await tester.pumpWidget(
+      harness(
+        initial: '/shopping',
+        shopping: (_, _) => shoppingView(),
+        setLineState: (s) {
+          sent.add(s);
+          return echoLineState(s);
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.drag(checkboxFor('flour'), const Offset(-1000, 0));
+    await tester.pumpAndSettle();
+    expect(sent.single.key, flourKey);
+    expect(sent.single.hidden, isTrue);
+    expect(find.text(countsCopy(1, 1, 1)), findsOneWidget);
+    expect(find.text(skippedCopy('flour')), findsOneWidget);
+
+    await tester.tap(find.text('Undo'));
+    await tester.pumpAndSettle();
+    expect(sent, hasLength(2));
+    expect(sent.last.hidden, isFalse);
+    expect(find.text(countsCopy(2, 1, 0)), findsOneWidget);
+    expect(checkboxFor('flour'), findsOneWidget);
+  });
+
+  /// A skip whose write failed must not claim it happened, nor offer to undo it.
+  testWidgets('a failed skip reports the failure and offers no Undo', (
+    tester,
+  ) async {
+    useTallView(tester);
+    await tester.pumpWidget(
+      harness(
+        initial: '/shopping',
+        shopping: (_, _) => shoppingView(),
+        setLineState: (_) async => throw StateError('disk full'),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await lineMenu(tester, 0, 'Skip this time');
+    expect(find.text(skippedCopy('flour')), findsNothing);
+    expect(find.text('Undo'), findsNothing);
+    expect(checkboxFor('flour'), findsOneWidget);
+    expect(find.text(countsCopy(2, 1, 0)), findsOneWidget);
+  });
+
+  /// FIX-001 item 2: "Already have it" is an explicit pantry mark for that one line, and Undo
+  /// sends exactly the refs the mark changed, as purchased→pantry does.
+  testWidgets(
+    'Already have it marks that line and Undo sends the returned set',
+    (tester) async {
+      useTallView(tester);
+      final calls = <(List<IngredientRefDto>, bool)>[];
+      await tester.pumpWidget(
+        harness(
+          initial: '/shopping',
+          shopping: (_, _) => shoppingView(),
+          pantry: () => pantryEntries,
+          setPantryMarks: (refs, marked) async {
+            calls.add((refs, marked));
+            return refs;
+          },
+        ),
+      );
+      await tester.pumpAndSettle();
+      await lineMenu(tester, 0, 'Already have it');
+      expect(calls, hasLength(1));
+      expect(calls.single.$1, [chickpeasRef]);
+      expect(calls.single.$2, isTrue);
+      expect(find.text(alreadyHaveItCopy('flour')), findsOneWidget);
+
+      await tester.tap(find.text('Undo'));
+      await tester.pumpAndSettle();
+      expect(calls, hasLength(2));
+      expect(calls.last.$1, [chickpeasRef]);
+      expect(calls.last.$2, isFalse);
+    },
+  );
+
+  /// The menu offers only what applies: an unresolved line has no identity to mark, and a line
+  /// already added anyway over a mark goes back to pantry rather than re-marking a mark.
+  testWidgets('the line menu offers only the actions that apply to the line', (
+    tester,
+  ) async {
+    useTallView(tester);
+    await tester.pumpWidget(
+      harness(
+        initial: '/shopping',
+        shopping: (_, _) =>
+            shoppingView(states: [lineStateOf(onionKey, restored: true)]),
+      ),
+    );
+    await tester.pumpAndSettle();
+    // To buy rows in render order: flour, onion (added anyway), mystery (unresolved).
+    await tester.tap(find.byTooltip(lineOptionsTooltip).at(0));
+    await tester.pumpAndSettle();
+    expect(find.text('Already have it'), findsOneWidget);
+    expect(find.text('Back to pantry'), findsNothing);
+    await tester.tapAt(const Offset(1, 1));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip(lineOptionsTooltip).at(1));
+    await tester.pumpAndSettle();
+    expect(find.text('Already have it'), findsNothing);
+    expect(find.text('Back to pantry'), findsOneWidget);
+    expect(find.text('Skip this time'), findsOneWidget);
+    await tester.tapAt(const Offset(1, 1));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip(lineOptionsTooltip).at(2));
+    await tester.pumpAndSettle();
+    expect(find.text('Already have it'), findsNothing);
+    expect(find.text('Back to pantry'), findsNothing);
+    expect(find.text('Skip this time'), findsOneWidget);
+    expect(find.text('Why is this here?'), findsOneWidget);
   });
 
   testWidgets('manual items can be added, checked, edited and deleted', (
@@ -7521,10 +7794,7 @@ void main() {
     await tester.tap(checkboxFor('flour'));
     await tester.pumpAndSettle();
     expect(sent.last.checked, isTrue);
-    await tester.tap(find.byTooltip('Why is this here?').first);
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Remove from list'));
-    await tester.pumpAndSettle();
+    await lineMenu(tester, 0, 'Skip this time');
     expect(sent.last.key, flourKey);
     expect(sent.last.hidden, isTrue);
     expect(sent.last.checked, isTrue);
@@ -7538,8 +7808,7 @@ void main() {
 
     // The fourth arm: sending onion back under Already have keeps its check too, so a
     // second "Add anyway" returns it checked rather than blank.
-    await tester.tap(find.byTooltip('Why is this here?').at(1));
-    await tester.pumpAndSettle();
+    await lineMenu(tester, 1, 'Why is this here?');
     await tester.tap(find.text('Back to pantry'));
     await tester.pumpAndSettle();
     expect(sent.last.key, onionKey);
@@ -7739,8 +8008,8 @@ void main() {
         find.bySemanticsLabel(lineLabel('batteries', false)),
         findsOneWidget,
       );
-      // One explain node per Needed row, outside the tile's merged node.
-      expect(find.byTooltip('Why is this here?'), findsNWidgets(2));
+      // One menu node per Needed row, outside the tile's merged node.
+      expect(find.byTooltip(lineOptionsTooltip), findsNWidgets(2));
     }
     handle.dispose();
   });

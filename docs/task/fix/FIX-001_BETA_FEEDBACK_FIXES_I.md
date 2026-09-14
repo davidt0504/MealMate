@@ -30,7 +30,7 @@ resolved inside the plan.
 
 ## Authoritative sources
 
-- `docs/task/MVP_INVARIANTS.md` 2 (original text retained), 6 and 19 (pantry mark semantics), 17 (same snapshot derives the same list)
+- `docs/task/MVP_INVARIANTS.md` 2 (original text retained; read with D-045), 6 and 19 (pantry mark semantics), 17 (Rust owns the overlay and pantry tables, so the orch/31 clear is a Rust write). Same-snapshot list determinism is MVP-015's pure-derivation rule; an earlier revision cited it as invariant 17 by mistake.
 - `docs/bugs/MVP-033_ACCEPT_FEEDBACK.md` (item 4 dossier)
 - `docs/task/optional/OPT-003_STAPLES.md` *Rejected designs* — a check never implies a pantry mark; an explicit "Already have it" action is an explicit user statement and is not that rejection
 - `KNOWN_ISSUES.md` orch/31 MEDIUM (restore then re-mark does not re-hide) — fixed here because item 2 lands on the same code
@@ -39,22 +39,26 @@ resolved inside the plan.
 
 ### 1. "Crushed tomatoes" on the list for a diced-tomato recipe
 
-**Cause (verified 2026-09-08).** `rust/crates/food-domain/content/starter_recipes.json` catalog
-entry `ing-canned-tomatoes` has canonical name "crushed tomatoes"; the lines "diced tomatoes" in
-David's Chili, Taco Soup, Taco Pasta, Stuffed Pepper Casserole and Black Bean and Lentil Soup
-point at it. `derive_shopping_list` (`rust/crates/food-domain/src/shopping.rs:595-599`) names a
-merged line by the catalog canonical name. Six catalog ids have line names outside canonical or
-aliases; only this one changes the product bought (the others: lemon juice → lemon, lime juice →
-lime, orzo pasta → orzo, elbow macaroni pasta → small pasta, chicken → skinless chicken pieces).
+**Cause (verified 2026-09-08; paths refreshed 2026-09-13 after MVP-032).** Starter content is
+`docs/research/MVP-032_STARTER_PROVENANCE_MANIFEST.json`, embedded by `food-domain/build.rs`. Its
+catalog entry `ing-canned-tomatoes` has canonical name "crushed tomatoes"; the lines "diced
+tomatoes" in David's Chili, Taco Soup, Taco Pasta, Stuffed Pepper Casserole and Black Bean and
+Lentil Soup point at it. `derive_shopping_list` (`rust/crates/food-domain/src/shopping.rs`, the
+`identities.info` name lookup) names a merged line by the catalog canonical name. In the shipped
+roster three catalog ids have line names outside canonical or aliases; only this one changes the
+product bought (the others: orzo pasta → orzo, elbow macaroni pasta → small pasta). The lemon
+juice, lime juice and chicken mismatches exist only in quarantined recipes, which the build
+excludes.
 
 **Fix.** Add catalog `ing-diced-tomatoes` ("diced tomatoes", store category pantry); remap the
-five lines. One schema-version migration that (a) inserts the new catalog row itself, so it does
-not depend on `install_starter_content` ordering, and (b) runs
-`UPDATE recipe_ingredient_line SET ingredient_id = 'ing-diced-tomatoes' WHERE ingredient_id = 'ing-canned-tomatoes' AND lower(name) LIKE '%diced%'`
-(`recipe_ingredient_line`, `kimatta-storage/src/lib.rs:265`), because
-`install_starter_content` skips recipes whose slug already exists, so a JSON-only fix reaches
-fresh installs only. Add the five benign names as aliases. Add one Rust content test: every
-starter line name equals its catalog canonical name or one of its aliases.
+five lines. One schema-version migration (v13) that (a) inserts the new catalog row itself, guarded
+on `ing-canned-tomatoes` existing so a never-installed database stays empty, (b) inserts the new
+aliases, and (c) runs
+`UPDATE recipe_ingredient_line SET ingredient_id = 'ing-diced-tomatoes' WHERE ingredient_id = 'ing-canned-tomatoes' AND lower(name) LIKE '%diced%'`.
+The migration is needed because `install_starter_content` skips recipes whose slug already exists
+and returns early when no catalog id is missing, so a manifest-only fix reaches fresh installs
+only. Add the two benign shipped names as aliases. Add one Rust content test: every starter line
+name equals its catalog canonical name or one of its aliases.
 
 ### 2. Removing a line from the shopping list
 
@@ -69,8 +73,12 @@ mis-served: the line returns every week and the pantry never learns.
   snackbar whose copy says recipes are unchanged, and kept in the sheet.
 - **Already have it** — existing `set_pantry_mark`. Line moves to Already have; persists across
   cycles; Undo unmarks exactly the returned set (same contract as purchased→pantry).
-- Fix the open orch/31 edge (restore → unmark → re-mark leaves the line restored) with the clamp
-  the finding describes, since the new action exercises that path.
+- Fix the open orch/31 edge (restore → unmark → re-mark leaves the line restored), since the new
+  action exercises that path. The Dart write-time clamp already exists and cannot fire there (no
+  line-state write happens between unmark and re-mark), so the fix is in Rust: when a pantry mark
+  is newly set, the same transaction clears `restored` on that ingredient's `m:` overlay rows.
+  "Add anyway" holds against the mark it overrode; a new mark re-hides (AC-2). Overflow-fallback
+  `s:` lines carry no ingredient in their key and are not cleared.
 
 ### 3. "As written" and "Name" both required on a new ingredient row
 
@@ -78,10 +86,11 @@ mis-served: the line returns every week and the pantry never learns.
 the shopping explain sheet render; `name` is what matching, restriction scanning, merging and
 pantry identity key on. Both are needed in the domain; only the form makes the user type both.
 
-**Fix (Flutter only).** New rows show no "As written" field; at save the form composes
-`original_text` from amount, unit, name and preparation. Loaded rows whose stored text differs
-from the composed form (starter, imported) show it as a read-only "As written" caption. The
-verbatim-send rule of MVP-008 still applies to what the user typed. Copy test on the composer.
+**Fix (Flutter only; D-045).** No row shows an "As written" field; every row shows a read-only
+"Saves as" caption. A loaded row whose amount, unit, name and preparation are untouched shows and
+saves its stored `original_text` unchanged; any other row composes `original_text` from those
+fields. MVP-008's rule (preserve entered text, no silent normalization) still applies to each field
+the user typed. Copy test on the composer.
 
 ### 4. Accept stays actionable after success
 
@@ -100,12 +109,12 @@ modal, no change to MVP-024 one-tap acceptance or MVP-033 no-trap completion.
 ## Non-goals
 
 - Pantry screen changes, staples, counts (OPT-006). Planner action vocabulary, reshuffle (OPT-007).
-- Renaming or merging the other five mismatched catalog ids beyond adding aliases.
+- Renaming or merging the other two shipped mismatched catalog ids beyond adding aliases.
 - Any parse of free text into structured fields (OPT-002).
 
 ## Decision gates
 
-- None. All four items were resolved in the 2026-09-08 owner interview.
+- None. All four items were resolved in the 2026-09-08 owner interview; the FIX-001 grill on 2026-09-11 placed "Already have it" in a row menu and recorded D-045 for edited rows.
 
 ## Acceptance criteria
 

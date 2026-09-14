@@ -11,8 +11,10 @@ import 'package:meal_mate/src/rust/api/recipe.dart';
 /// Create (`recipeId == null`) or edit. Ephemeral form state lives here (PRD §13); the saved
 /// recipe is Rust's. Nothing is trimmed or normalised on the way out — the user's text goes
 /// verbatim and Rust reports what it rejects — because silent normalisation is this card's
-/// stop condition. Ingredient identity (`ingredient`) is not *chosen* by this card;
-/// MVP-009/011 add matching on top. A seeded line's existing ref rides through the edit
+/// stop condition. The one string nobody types is a line's `original_text`:
+/// `_LineDraft.savesAs` composes it from the row's fields unless a loaded row is left as it was
+/// (D-045). Ingredient identity (`ingredient`) is not *chosen* by this card; MVP-009/011 add
+/// matching on top. A seeded line's existing ref rides through the edit
 /// untouched — a field the form does not render is a field it has no business erasing — right
 /// up until the user rewrites the row's name, at which point it is dropped rather than left to
 /// speak for a food the line no longer names. See `_LineDraft.emittedIngredient`.
@@ -29,8 +31,7 @@ class RecipeFormScreen extends ConsumerStatefulWidget {
 /// half-typed row.
 class _LineDraft {
   _LineDraft([IngredientLineDto? from])
-    : original = TextEditingController(text: from?.originalText ?? ''),
-      name = TextEditingController(text: from?.name ?? ''),
+    : name = TextEditingController(text: from?.name ?? ''),
       amount = TextEditingController(text: _amountText(from?.quantity)),
       preparation = TextEditingController(text: from?.preparation ?? ''),
       otherUnit = TextEditingController(
@@ -46,9 +47,11 @@ class _LineDraft {
       },
       optional = from?.optional ?? false,
       ingredient = from?.ingredient,
-      seededName = from?.name;
+      seededName = from?.name,
+      seededOriginal = from?.originalText {
+    _seededFields = from == null ? null : _fields;
+  }
 
-  final TextEditingController original;
   final TextEditingController name;
   final TextEditingController amount;
   final TextEditingController preparation;
@@ -86,6 +89,33 @@ class _LineDraft {
   IngredientRefDto? get emittedIngredient =>
       name.text == seededName ? ingredient : null;
 
+  /// The `original_text` this row arrived with. `null` on a row the user added.
+  final String? seededOriginal;
+
+  /// Every field [composeLine] reads, as loaded — `null` on a row the user added. Captured in
+  /// the constructor, not lazily, so it can never pick up an edit.
+  late final (String, String, String, String, String)? _seededFields;
+
+  (String, String, String, String, String) get _fields =>
+      (name.text, amount.text, unitKey, otherUnit.text, preparation.text);
+
+  /// What this row saves as `original_text` (D-045). A loaded row whose fields all still equal
+  /// what was loaded keeps its stored text verbatim — starter and imported wording included.
+  /// Any other row is a new entry and composes it, so recipe detail never states an amount the
+  /// structured line contradicts. Compared verbatim, like [emittedIngredient].
+  String get savesAs {
+    final original = seededOriginal;
+    return original != null && _fields == _seededFields
+        ? original
+        : composeLine(
+            amount: amount.text,
+            unitKey: unitKey,
+            otherUnit: otherUnit.text,
+            name: name.text,
+            preparation: preparation.text,
+          );
+  }
+
   /// What is wrong with this row, *without* the `Ingredient N:` prefix — `_row` applies the
   /// number at paint time from the live index. Baking it in here would outlive its own truth:
   /// removing a row renumbers every row below it, so the surviving card would head
@@ -98,7 +128,7 @@ class _LineDraft {
   final GlobalKey errorKey = GlobalKey();
 
   void dispose() {
-    for (final c in [original, name, amount, preparation, otherUnit]) {
+    for (final c in [name, amount, preparation, otherUnit]) {
       c.dispose();
     }
   }
@@ -166,7 +196,8 @@ class _RecipeFormScreenState extends ConsumerState<RecipeFormScreen> {
     _lines.addAll(existing.lines.map(_LineDraft.new));
   }
 
-  /// Builds the DTO, or `null` after setting the inline errors. Strings go verbatim.
+  /// Builds the DTO, or `null` after setting the inline errors. Typed strings go verbatim;
+  /// `original_text` is the row's [_LineDraft.savesAs].
   RecipeDto? _validate(String householdId) {
     var ok = true;
     _titleError = null;
@@ -203,7 +234,6 @@ class _RecipeFormScreenState extends ConsumerState<RecipeFormScreen> {
       // An untouched row (the one a new form starts with) is not a line; only a row the
       // user started filling in is validated.
       if ([
-        l.original,
         l.name,
         l.amount,
         l.preparation,
@@ -212,9 +242,8 @@ class _RecipeFormScreenState extends ConsumerState<RecipeFormScreen> {
         continue;
       }
       final quantity = parseQuantity(l.amount.text);
-      if (l.original.text.trim().isEmpty) {
-        l.error = 'write it as you would say it.';
-      } else if (l.name.text.trim().isEmpty) {
+      // A required name is also what keeps a composed `original_text` non-blank.
+      if (l.name.text.trim().isEmpty) {
         l.error = 'name the ingredient.';
       } else if (quantity == null) {
         l.error =
@@ -236,7 +265,7 @@ class _RecipeFormScreenState extends ConsumerState<RecipeFormScreen> {
       }
       lines.add(
         IngredientLineDto(
-          originalText: l.original.text,
+          originalText: l.savesAs,
           name: l.name.text,
           ingredient: l.emittedIngredient,
           quantity: quantity!,
@@ -481,13 +510,21 @@ class _RecipeFormScreenState extends ConsumerState<RecipeFormScreen> {
               ),
             ],
           ),
-          TextField(
-            controller: l.original,
-            enabled: !_saving,
-            decoration: const InputDecoration(
-              labelText: 'As written',
-              helperText: 'Kept exactly as you type it.',
-            ),
+          // Rebuilt on each keystroke in the fields it reads; the unit dropdown already
+          // rebuilds the form.
+          ListenableBuilder(
+            listenable: Listenable.merge([
+              l.name,
+              l.amount,
+              l.otherUnit,
+              l.preparation,
+            ]),
+            builder: (context, _) {
+              final line = l.savesAs;
+              return line.isEmpty
+                  ? const SizedBox.shrink()
+                  : Text(savesAsCopy(line));
+            },
           ),
           TextField(
             controller: l.name,
