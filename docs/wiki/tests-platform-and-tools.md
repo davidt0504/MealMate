@@ -16,7 +16,7 @@ The main manifest names the app and launch activity, declares no Internet permis
 
 ## Release automation
 
-`.github/workflows/release-apk.yml` builds and publishes an Android APK for version tags or manual workflow dispatch. It prepares Flutter/Rust/Android toolchains, builds the universal release artifact, and attaches it to the matching GitHub release. This is an internal distribution path; production signing and store activation remain separately gated.
+`.github/workflows/release-apk.yml` builds and publishes an Android APK for app-code pushes to master, version tags, or manual workflow dispatch. It prepares Flutter/Rust/Android toolchains, runs the Rust build and Flutter tests, installs the shared debug signing key from a secret, builds the universal release artifact and checks its signing certificate in a read-only build job; a separate publish job releases it as a `build-<run number>` (or tag-named) GitHub release. This is an internal distribution path; production signing and store activation remain separately gated.
 
 ## Device and emulator tools
 

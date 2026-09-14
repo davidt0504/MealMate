@@ -4,7 +4,7 @@ A household meal-planning app: recipes, meal plans, a pantry-aware shopping list
 the loop between them. Android is the MVP and initial-launch platform; iOS is the first
 post-launch priority.
 
-> **Android APK:** [Download the latest release (v1.0.1)](https://github.com/davidt0504/MealMate/releases/download/v1.0.1/app-release.apk)
+> **Android APK:** [Download the latest build](https://github.com/davidt0504/MealMate/releases/latest/download/app-release.apk)
 
 ## Architecture direction (PRD v3)
 
@@ -57,24 +57,39 @@ installing it. Two phones are two independent households: there is no sync until
 
 ## Downloading an APK from GitHub
 
-Every pushed version tag such as `v1.0.1` triggers the **Publish Android APK** GitHub
-Actions workflow. It builds the universal release APK and attaches it to that tag's GitHub
-Release, where it can be downloaded directly from the repository's **Releases** page.
+Every push to `master` that changes the app (`lib/`, `rust/`, `android/`, `assets/`, `hook/`,
+`pubspec.*`, `flutter_rust_bridge.yaml`) or the workflow itself triggers the **Publish Android
+APK** GitHub Actions workflow. It runs the Rust build and `flutter test`, builds the universal
+release APK, and publishes it as a GitHub Release tagged `build-<run number>`; the link at the
+top of this README always serves the newest one. A failing test publishes nothing, and a push
+that only fixes a test does not start a run — use **Actions → Publish Android APK → Run
+workflow** then. Run workflow or a pushed `v*` tag publishes the same way; a tag names the
+release after itself.
 
-To publish a version, first update `version:` in `pubspec.yaml` (the build number after `+`
-must be higher than every previously published Android build), commit the release-ready
-source, then run:
+Leave the build number after `+` in `pubspec.yaml` alone. Every build — CI or local — carries the
+same one, so any of them installs over any other; raising it on one branch makes builds from the
+others fail to install as a downgrade. Install only the newest build — the link above — never an
+older `build-N` from the Releases page: Android accepts it, but data a newer build has upgraded will
+not open in the older app ("This data was written by a newer version of the app") until a newer APK
+is installed over it.
+
+CI signs with the same `~/.android/debug.keystore` as local builds (see Caveats), stored
+base64-encoded in the `DEBUG_KEYSTORE_B64` repository secret, and fails rather than publish an APK
+signed with any other key. To set or replace the secret:
 
 ```bash
-git tag v1.0.1
-git push origin v1.0.1
+base64 -w0 ~/.android/debug.keystore | gh secret set DEBUG_KEYSTORE_B64
 ```
 
-When the workflow succeeds, download `app-release.apk` from the newly created release.
-You can also re-run it from **Actions → Publish Android APK → Run workflow**, providing an
-existing tag. The current project signs release builds with its debug key, so these downloads
-are appropriate for internal testing and sideloading—not public production distribution. Use a
-dedicated release keystore stored as GitHub Actions secrets before sharing broadly.
+That is a debug key with a well-known password, so these downloads are appropriate for internal
+testing and sideloading, not public production distribution.
+
+**Updating a phone from the link:** install over the existing app. If Android says "App not
+installed", first work through the Path B prerequisites below (Auto Blocker, Install unknown apps,
+Play Protect → *Install anyway*). If it still refuses, **do not uninstall** — that erases the app's
+data: the installed copy was signed with a different key, as earlier CI releases were. Keep using
+it, use Settings → **Export data** to keep a copy off the phone, and wait until an import path
+exists.
 
 **Build once.** One universal APK, all three ABIs, so it installs on any Android phone:
 
@@ -146,9 +161,9 @@ still needs Developer options, and needs both devices on the same non-isolated n
   expiry is not a concern) — but that key is **per-machine**. Building on a different machine,
   or losing that file to a WSL reset, produces a different signature, and Android then refuses
   the update: reinstalling means uninstalling first, which **erases the app's data**
-  (`allowBackup=false`, no cloud backup yet). **Back up `~/.android/debug.keystore`** if
-  anyone but you is running these builds. The release build type is not `debuggable` — this is
-  a real release build that merely carries a debug *signature*.
+  (`allowBackup=false`, no cloud backup yet). **Back up `~/.android/debug.keystore`** — the
+  repository secret cannot be read back, so it is not a backup. The release build type is
+  not `debuggable` — this is a real release build that merely carries a debug *signature*.
 - The Settings export is the only sanctioned way data leaves the phone.
 - A phone plugged in *after* the host adb server started may not enumerate until
   `bash tools/emulator.sh down` and a fresh `up`.

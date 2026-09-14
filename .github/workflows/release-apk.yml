@@ -2,33 +2,44 @@ name: Publish Android APK
 
 on:
   push:
+    branches:
+      - master
+    # Tag pushes skip these path filters, so every pushed v* tag still publishes.
+    paths:
+      - ".github/workflows/release-apk.yml"
+      - "android/**"
+      - "assets/**"
+      - "flutter_rust_bridge.yaml"
+      - "hook/**"
+      - "lib/**"
+      - "pubspec.lock"
+      - "pubspec.yaml"
+      - "rust/**"
     tags:
       - "v*"
   workflow_dispatch:
-    inputs:
-      tag:
-        description: "Existing tag to publish (for example v1.0.0)"
-        required: true
-        type: string
 
-# Required for `gh release create` to publish the APK to this repository.
 permissions:
-  contents: write
+  contents: read
+
+# One build at a time; a newer push replaces a still-pending run. Never cancel a running
+# build: stopped mid-publish, it leaves a release with no APK and the README link 404s.
+concurrency:
+  group: release-apk
+  cancel-in-progress: false
 
 jobs:
-  release:
-    name: Build and publish APK
+  build:
+    name: Build APK
     runs-on: ubuntu-latest
     env:
-      # `gh` uses this token to create the release and upload its asset.
-      GH_TOKEN: ${{ github.token }}
       RUSTUP_TOOLCHAIN: "1.98.0"
 
     steps:
       - name: Check out the release source
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
+          persist-credentials: false
 
       - name: Set up Java
         uses: actions/setup-java@v4
@@ -60,14 +71,70 @@ jobs:
       - name: Verify generated bridge bindings
         run: flutter_rust_bridge_codegen generate
 
+      # Stale .so = false pass, so the Rust build always precedes the tests.
+      - name: Run tests
+        run: (cd rust && cargo build --release) && flutter test
+
+      # Without the shared key, Gradle generates a fresh debug key per run, and phones refuse
+      # the update unless the app (and its local data) is uninstalled first.
+      # Installed late to shorten exposure; code from earlier steps in this job can still persist
+      # and read it.
+      - name: Install the shared signing key
+        env:
+          DEBUG_KEYSTORE_B64: ${{ secrets.DEBUG_KEYSTORE_B64 }}
+        run: |
+          if [ -z "$DEBUG_KEYSTORE_B64" ]; then
+            echo "::error::DEBUG_KEYSTORE_B64 secret is not set"
+            exit 1
+          fi
+          mkdir -p "$HOME/.android"
+          printf '%s' "$DEBUG_KEYSTORE_B64" | base64 -d > "$HOME/.android/debug.keystore"
+
       - name: Build universal release APK
         run: flutter build apk --release
 
+      - name: Verify the APK carries the shared signing key
+        shell: bash
+        run: |
+          apksigner=$(ls -d "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -1)
+          "$apksigner" verify --print-certs build/app/outputs/flutter-apk/app-release.apk \
+            > signers.txt
+          cat signers.txt
+          grep -q 'SHA-256 digest: f0d663498fb06a14a79e87f7ef090dbd6b6a697dbf1d815ae42cbb291dcfffe3' \
+            signers.txt
+
+      - name: Upload APK for publishing
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-release
+          path: build/app/outputs/flutter-apk/app-release.apk
+          if-no-files-found: error
+
+  publish:
+    name: Publish GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    # Required for `gh release create`; only this job holds it, and it runs no dependency code.
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download the verified APK
+        uses: actions/download-artifact@v4
+        with:
+          name: app-release
+
       - name: Publish GitHub Release
         env:
-          RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+          # `gh` uses this token to create the release and upload its asset.
+          GH_TOKEN: ${{ github.token }}
+          # No checkout in this job, so `gh` cannot infer the repository.
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_type == 'tag' && github.ref_name || format('build-{0}', github.run_number) }}
         run: >-
           gh release create "$RELEASE_TAG"
-          "build/app/outputs/flutter-apk/app-release.apk#MealMate-${RELEASE_TAG}.apk"
+          "app-release.apk#MealMate-${RELEASE_TAG}.apk"
+          --target "$GITHUB_SHA"
           --title "MealMate ${RELEASE_TAG}"
+          --latest
           --generate-notes
