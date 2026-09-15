@@ -59,12 +59,16 @@ installing it. Two phones are two independent households: there is no sync until
 
 Every push to `master` that changes the app (`lib/`, `rust/`, `android/`, `assets/`, `hook/`,
 `pubspec.*`, `flutter_rust_bridge.yaml`) or the workflow itself triggers the **Publish Android
-APK** GitHub Actions workflow. It runs the Rust build and `flutter test`, builds the universal
-release APK, and publishes it as a GitHub Release tagged `build-<run number>`; the link at the
-top of this README always serves the newest one. A failing test publishes nothing, and a push
+APK** GitHub Actions workflow. It runs the Rust tests, the Rust build and `flutter test`, builds the
+universal release APK, and publishes it as a GitHub Release tagged `build-<run number>`; the link at
+the top of this README always serves the newest one. A failing test publishes nothing, and a push
 that only fixes a test does not start a run — use **Actions → Publish Android APK → Run
-workflow** then. Run workflow or a pushed `v*` tag publishes the same way; a tag names the
-release after itself.
+workflow** then. Run workflow on `master` or a `v*` tag pushed on a `master` commit publishes the
+same way; a tag names the release after itself. Run workflow on any other branch builds and verifies
+but publishes nothing. Publishing also requires the `PUBLISH_APK` repository variable to be `true`;
+while it is unset, every run builds and verifies without publishing. To lift the hold,
+`gh variable set PUBLISH_APK --body true`, then Run workflow on `master` — setting the variable
+starts no run.
 
 Leave the build number after `+` in `pubspec.yaml` alone. Every build — CI or local — carries the
 same one, so any of them installs over any other; raising it on one branch makes builds from the
@@ -74,11 +78,11 @@ not open in the older app ("This data was written by a newer version of the app"
 is installed over it.
 
 CI signs with the same `~/.android/debug.keystore` as local builds (see Caveats), stored
-base64-encoded in the `DEBUG_KEYSTORE_B64` repository secret, and fails rather than publish an APK
+base64-encoded in the `SIGNING_KEYSTORE_B64` repository secret, and fails rather than publish an APK
 signed with any other key. To set or replace the secret:
 
 ```bash
-base64 -w0 ~/.android/debug.keystore | gh secret set DEBUG_KEYSTORE_B64
+base64 -w0 ~/.android/debug.keystore | gh secret set SIGNING_KEYSTORE_B64
 ```
 
 That is a debug key with a well-known password, so these downloads are appropriate for internal

@@ -1054,3 +1054,37 @@ Full review: /home/davidlinux/.claude/reviews/redteam-apk-auto-publish-2026-09-1
   **Status:** OPEN
 
 ---
+
+## master -- 2026-09-15
+
+Source: /home/davidlinux/.claude/reviews/impl-handoff-master-2026-09-15T0923-9f58.md
+Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-master-2026-09-15t0923-9f58-2026-09-15T0937-445b.md
+
+### LOW
+
+- **The concurrency comment's rationale for `cancel-in-progress: false` does not match `gh` behaviour** (`.github/workflows/release-apk.yml:25`) -- the comment claims a cancelled publish leaves an asset-less release and a 404 link; `gh release create` makes a draft first, so the real leftover is an orphan draft `build-N` a re-run may collide with. Fix: reword the comment to name the orphan draft.
+  Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-master-2026-09-15t0923-9f58-2026-09-15T0937-445b.md
+  **Status:** OPEN
+
+---
+
+## master -- 2026-09-15
+
+Source: /home/davidlinux/.claude/reviews/impl-handoff-fix-001-beta-feedback-fixes-2026-09-15T0935-d846.md
+Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-fix-001-beta-feedback-fixes-2026-09-15t0935-d846-2026-09-15T0946-49c0.md
+
+### LOW
+
+- **Row menu actions ignore the per-key busy guard that swipe and checkbox honour** (`lib/features/shopping/shopping_screen.dart:582`) -- `onSelected` runs while the row's write is in flight; a Skip during a pending check writes the pre-check state and can overwrite the check. Fix: `enabled: !busy` on the `PopupMenuButton`.
+  Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-fix-001-beta-feedback-fixes-2026-09-15t0935-d846-2026-09-15T0946-49c0.md
+  **Status:** RESOLVED 2026-09-15 -- the row `PopupMenuButton` now takes `enabled: !busy`, so the explain sheet it opens is gated too; pinned by `the line menu is disabled while that row's write is in flight` (`test/app_test.dart`).
+
+- **No test covers Accept returning after a later decision** (`lib/features/planning/cover_screen.dart:87`) -- `showAccept` keys on `outcome.applied`; no test pins true→false after a swap/veto, so a regression hiding Accept on a changed unwritten plan would pass. Fix: widget test accept → decide → Accept visible, confirmation gone.
+  Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-fix-001-beta-feedback-fixes-2026-09-15t0935-d846-2026-09-15T0946-49c0.md
+  **Status:** RESOLVED 2026-09-15 -- pinned by `a decision after accept brings Accept back and drops the confirmation` (`test/app_test.dart`), which passed on first run: no production change was needed.
+
+- **A shopping write in flight across a cycle change is lost from view on return** (`lib/features/shopping/shopping_provider.dart:153`) -- paging away and back while a skip or check is in flight rebuilds the autoDispose notifier, which can fetch before the write lands; the landed write republishes into the disposed notifier, so the row shows its pre-write state until a refresh. Predates FIX-001; found by the fix pass's plan redteam. Fix: invalidate `shoppingProvider(startedAt)` in `_write`'s finally when the cycle changed.
+  Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-fix-001-beta-feedback-fixes-2026-09-15t0935-d846-2026-09-15T0946-49c0.md
+  **Status:** OPEN
+
+---

@@ -306,6 +306,24 @@ const okCycle = PlanningCycleDto(
   ],
 );
 
+/// [okCycle] one cycle on: the harness answers every offset with [okCycle], so a test that needs
+/// two windows to differ by their dates supplies this for the other one.
+const laterCycle = PlanningCycleDto(
+  householdId: 'h-1',
+  anchorDate: '2026-09-05',
+  lengthDays: 7,
+  mealSlots: [MealSlotDto.dinner],
+  dates: [
+    '2026-09-05',
+    '2026-09-06',
+    '2026-09-07',
+    '2026-09-08',
+    '2026-09-09',
+    '2026-09-10',
+    '2026-09-11',
+  ],
+);
+
 /// `onboarded: true` throughout, so every pre-existing test keeps exercising the
 /// completed-first-run path and the startup gate stays the concern of the tests that
 /// deliberately opt out of it.
@@ -1582,6 +1600,39 @@ void main() {
     expect(applies, [false, true]);
     expect(find.widgetWithText(FilledButton, 'Accept'), findsNothing);
   });
+
+  // Expected-to-pass regression pin: Accept keys on what was written, and a later decision
+  // re-previews with `applied: false`, so a changed plan must get its Accept back.
+  testWidgets(
+    'a decision after accept brings Accept back and drops the confirmation',
+    (tester) async {
+      usePixel5(tester);
+      await tester.pumpWidget(
+        harness(
+          cover: (req) => coverOutcome(applied: req.apply),
+          decide: (_) async => const PlanDecisionOutcomeDto(
+            ledgerEntryId: 'le-2',
+            priorStatus: OutcomeStatusDto.covered,
+            resultingStatus: OutcomeStatusDto.covered,
+          ),
+          recipes: () => const [okSummary],
+          initial: '/plan/cover',
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Accept'));
+      await tester.pumpAndSettle();
+      expect(find.text(acceptedCopy), findsOneWidget);
+
+      await tester.tap(find.text('Swap'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('cover:pick:r-1')));
+      await tester.pumpAndSettle();
+      expect(find.widgetWithText(FilledButton, 'Accept'), findsOneWidget);
+      expect(find.text(acceptedCopy), findsNothing);
+      expect(find.text(shoppingReadyCopy), findsNothing);
+    },
+  );
 
   testWidgets(
     'a locked cover slot is marked and offers no swap or veto (AC-2)',
@@ -7353,6 +7404,93 @@ void main() {
     expect(find.text(countsCopy(2, 1, 0)), findsOneWidget);
   });
 
+  /// Undo writes through whichever window is on screen, so it must not outlive a cycle change. Two
+  /// skips, because a snackbar with an action persists and the second waits queued behind the first.
+  for (final chevron in const ['Next cycle', 'Previous cycle']) {
+    testWidgets('$chevron drops every queued skip Undo', (tester) async {
+      useTallView(tester);
+      await tester.pumpWidget(
+        harness(
+          initial: '/shopping',
+          shopping: (_, _) => shoppingView(),
+          setLineState: echoLineState,
+        ),
+      );
+      await tester.pumpAndSettle();
+      // To buy rows in render order: flour, mystery. Skipping mystery first leaves flour at 0.
+      await lineMenu(tester, 1, 'Skip this time');
+      await lineMenu(tester, 0, 'Skip this time');
+      expect(find.text('Undo'), findsOneWidget);
+
+      await tester.tap(find.byTooltip(chevron));
+      await tester.pumpAndSettle();
+      expect(find.text('Undo'), findsNothing);
+      expect(find.text(skippedCopy('flour')), findsNothing);
+    });
+  }
+
+  /// A skip still in flight when the cycle changes lands for a window no longer on screen, so it
+  /// must not then offer that window's Undo over this one.
+  testWidgets('a skip that lands after a cycle change offers no Undo', (
+    tester,
+  ) async {
+    useTallView(tester);
+    final gate = Completer<ShoppingLineStateDto>();
+    await tester.pumpWidget(
+      harness(
+        initial: '/shopping',
+        shopping: (_, _) => shoppingView(),
+        cycleWindow: (offset) => offset == 0 ? okCycle : laterCycle,
+        setLineState: (_) => gate.future,
+      ),
+    );
+    await tester.pumpAndSettle();
+    await lineMenu(tester, 0, 'Skip this time');
+    await tester.tap(find.byTooltip('Next cycle'));
+    await tester.pumpAndSettle();
+    gate.complete(lineStateOf(flourKey, hidden: true));
+    await tester.pumpAndSettle();
+    expect(find.text(skippedCopy('flour')), findsNothing);
+    expect(find.text('Undo'), findsNothing);
+  });
+
+  /// The dates can move under an unchanged offset — a cycle edit, a restore, a re-anchor — while
+  /// the Undo snackbar stays up, so the guard is the window's dates rather than the offset.
+  testWidgets("an Undo after the window's dates move writes nothing", (
+    tester,
+  ) async {
+    useTallView(tester);
+    var moved = false;
+    final sent = <ShoppingLineStateDto>[];
+    await tester.pumpWidget(
+      harness(
+        initial: '/shopping',
+        shopping: (_, _) => shoppingView(),
+        cycleWindow: (_) => moved ? laterCycle : okCycle,
+        setLineState: (s) {
+          sent.add(s);
+          return echoLineState(s);
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+    await lineMenu(tester, 0, 'Skip this time');
+    expect(find.text('Undo'), findsOneWidget);
+
+    moved = true;
+    await tester.fling(find.byType(ListView), const Offset(0, 300), 1000);
+    await tester.pumpAndSettle();
+    expect(
+      find.text(shoppingHeading('2026-09-05', '2026-09-11')),
+      findsOneWidget,
+    );
+    expect(find.text('Undo'), findsOneWidget);
+
+    await tester.tap(find.text('Undo'));
+    await tester.pumpAndSettle();
+    expect(sent, hasLength(1));
+  });
+
   /// FIX-001 item 2: "Already have it" is an explicit pantry mark for that one line, and Undo
   /// sends exactly the refs the mark changed, as purchased→pantry does.
   testWidgets(
@@ -7850,6 +7988,34 @@ void main() {
       tester.widget<CheckboxListTile>(checkboxFor('flour')).onChanged,
       isNotNull,
     );
+  });
+
+  /// The row menu carries the per-key guard the swipe and checkbox do: a Skip picked while a
+  /// check is in flight would send the pre-check state and could land over the check.
+  testWidgets("the line menu is disabled while that row's write is in flight", (
+    tester,
+  ) async {
+    useTallView(tester);
+    final gate = Completer<ShoppingLineStateDto>();
+    await tester.pumpWidget(
+      harness(
+        initial: '/shopping',
+        shopping: (_, _) => shoppingView(),
+        setLineState: (_) => gate.future,
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(checkboxFor('flour'));
+    await tester.pump();
+    await tester.tap(find.byTooltip(lineOptionsTooltip).at(0));
+    await tester.pumpAndSettle();
+    expect(find.text('Skip this time'), findsNothing);
+
+    gate.complete(lineStateOf(flourKey, checked: true));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip(lineOptionsTooltip).at(0));
+    await tester.pumpAndSettle();
+    expect(find.text('Skip this time'), findsOneWidget);
   });
 
   /// Rust mints a fresh id for every blank-id save, so nothing deduplicates a repeated submit:

@@ -196,24 +196,37 @@ class _ShoppingScreenState extends ConsumerState<ShoppingScreen> {
     // Removing is a move, not an edit: the check comes back with "Put back".
     final checked = _renderedCheck(state);
     final restored = state?.restored ?? false;
+    final skipped = ref.read(shoppingProvider(_offset)).valueOrNull;
+    // The window, not the offset: a cycle edit, a restore or a re-anchor moves the dates under
+    // the same offset, and an Undo written into other dates would clear a line there.
+    bool onSkippedWindow() {
+      final now = ref.read(shoppingProvider(_offset)).valueOrNull;
+      return now != null && now.from == skipped?.from && now.to == skipped?.to;
+    }
+
     final landed = await _setLine(
       line,
       checked: checked,
       hidden: true,
       restored: restored,
     );
-    if (landed && mounted) {
+    if (landed && mounted && onSkippedWindow()) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(skippedCopy(line.name)),
           action: SnackBarAction(
             label: 'Undo',
-            onPressed: () => _setLine(
-              line,
-              checked: checked,
-              hidden: false,
-              restored: restored,
-            ),
+            // ponytail: a moved window's Undo dismisses silently; report it if users hit it.
+            onPressed: () {
+              if (mounted && onSkippedWindow()) {
+                _setLine(
+                  line,
+                  checked: checked,
+                  hidden: false,
+                  restored: restored,
+                );
+              }
+            },
           ),
         ),
       );
@@ -338,19 +351,27 @@ class _ShoppingScreenState extends ConsumerState<ShoppingScreen> {
             tooltip: 'Previous cycle',
             icon: const Icon(Icons.chevron_left),
             // The busy set is per-key and keys carry no window bound, so it would otherwise
-            // freeze the arriving cycle's rows on the outgoing cycle's writes.
-            onPressed: () => setState(() {
-              _offset--;
-              _writing.clear();
-            }),
+            // freeze the arriving cycle's rows on the outgoing cycle's writes. For the same
+            // reason every snackbar goes, queued ones included: a skip's Undo writes through
+            // whichever cycle is on screen, and would clear that line in the arriving one.
+            onPressed: () {
+              ScaffoldMessenger.of(context).clearSnackBars();
+              setState(() {
+                _offset--;
+                _writing.clear();
+              });
+            },
           ),
           IconButton(
             tooltip: 'Next cycle',
             icon: const Icon(Icons.chevron_right),
-            onPressed: () => setState(() {
-              _offset++;
-              _writing.clear();
-            }),
+            onPressed: () {
+              ScaffoldMessenger.of(context).clearSnackBars();
+              setState(() {
+                _offset++;
+                _writing.clear();
+              });
+            },
           ),
           PopupMenuButton<String>(
             tooltip: 'More',
@@ -579,6 +600,7 @@ class _ShoppingScreenState extends ConsumerState<ShoppingScreen> {
           ),
           PopupMenuButton<_LineAction>(
             tooltip: lineOptionsTooltip,
+            enabled: !busy,
             onSelected: (action) {
               switch (action) {
                 case _LineAction.alreadyHave:

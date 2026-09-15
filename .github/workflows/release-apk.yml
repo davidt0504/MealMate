@@ -34,6 +34,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       RUSTUP_TOOLCHAIN: "1.98.0"
+      SIGNING_CERT_SHA256: f0d663498fb06a14a79e87f7ef090dbd6b6a697dbf1d815ae42cbb291dcfffe3
 
     steps:
       - name: Check out the release source
@@ -73,7 +74,7 @@ jobs:
 
       # Stale .so = false pass, so the Rust build always precedes the tests.
       - name: Run tests
-        run: (cd rust && cargo build --release) && flutter test
+        run: (cd rust && cargo test --workspace && cargo build --release) && flutter test
 
       # Without the shared key, Gradle generates a fresh debug key per run, and phones refuse
       # the update unless the app (and its local data) is uninstalled first.
@@ -81,14 +82,26 @@ jobs:
       # and read it.
       - name: Install the shared signing key
         env:
-          DEBUG_KEYSTORE_B64: ${{ secrets.DEBUG_KEYSTORE_B64 }}
+          SIGNING_KEYSTORE_B64: ${{ secrets.SIGNING_KEYSTORE_B64 }}
         run: |
-          if [ -z "$DEBUG_KEYSTORE_B64" ]; then
-            echo "::error::DEBUG_KEYSTORE_B64 secret is not set"
+          if [ -z "$SIGNING_KEYSTORE_B64" ]; then
+            echo "::error::SIGNING_KEYSTORE_B64 secret is not set"
             exit 1
           fi
           mkdir -p "$HOME/.android"
-          printf '%s' "$DEBUG_KEYSTORE_B64" | base64 -d > "$HOME/.android/debug.keystore"
+          printf '%s' "$SIGNING_KEYSTORE_B64" | base64 -d > "$HOME/.android/debug.keystore"
+          # Checked before the build: a wrong secret fails here in seconds, naming both digests.
+          env | grep '^ANDROID' || true
+          set -o pipefail
+          actual=$(keytool -list -v -keystore "$HOME/.android/debug.keystore" -storepass android \
+            | sed -n 's/^[[:space:]]*SHA256: //p' | tr -d ':' | tr 'A-F' 'a-f') || {
+            echo "::error::keytool could not read the keystore decoded from SIGNING_KEYSTORE_B64"
+            exit 1
+          }
+          if [ "$actual" != "$SIGNING_CERT_SHA256" ]; then
+            echo "::error::SIGNING_KEYSTORE_B64 decodes to certificate '${actual}', expected ${SIGNING_CERT_SHA256}"
+            exit 1
+          fi
 
       - name: Build universal release APK
         run: flutter build apk --release
@@ -100,8 +113,10 @@ jobs:
           "$apksigner" verify --print-certs build/app/outputs/flutter-apk/app-release.apk \
             > signers.txt
           cat signers.txt
-          grep -q 'SHA-256 digest: f0d663498fb06a14a79e87f7ef090dbd6b6a697dbf1d815ae42cbb291dcfffe3' \
-            signers.txt
+          if ! grep -q "SHA-256 digest: ${SIGNING_CERT_SHA256}" signers.txt; then
+            echo "::error::APK not signed with ${SIGNING_CERT_SHA256} although the installed key matched; the build read another keystore (see the ANDROID_* variables printed by the install step)"
+            exit 1
+          fi
 
       - name: Upload APK for publishing
         uses: actions/upload-artifact@v4
@@ -113,6 +128,11 @@ jobs:
   publish:
     name: Publish GitHub Release
     needs: build
+    # Publishes only from master or a v* tag, and only while the PUBLISH_APK repository variable
+    # is 'true' (unset holds releases, e.g. an unapproved migration). Other runs build and verify.
+    if: >-
+      vars.PUBLISH_APK == 'true' &&
+      (github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/v'))
     runs-on: ubuntu-latest
     # Required for `gh release create`; only this job holds it, and it runs no dependency code.
     permissions:

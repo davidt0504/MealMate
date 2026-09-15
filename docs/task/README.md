@@ -85,15 +85,19 @@ No task implicitly authorizes production/paid resources, destructive replacement
 
 Owner directive recorded 2026-09-07: a new owner-installable Android build is not handed off as
 a local filesystem path alone. Its corresponding source must be intentionally committed and pushed,
-a `.github/workflows/release-apk.yml` run covering that commit's app code (a push to `master`, a new
-`v*` tag, or Run workflow) must succeed, and the handoff must include the direct link to that run's
-`build-N` or tag Release page or its APK — not only the `/releases/latest/` URL. Verify the release
-asset exists and record its size and SHA-256 digest before calling delivery complete.
+a `.github/workflows/release-apk.yml` run covering that commit's app code (a push to `master`, Run
+workflow on `master`, or a new `v*` tag on a `master` commit that contains the publish hold — never
+an older commit, whose workflow bypasses it) must succeed, and the handoff must include the direct
+link to that run's `build-N` or tag Release page or its APK — not only the `/releases/latest/` URL.
+Verify the release asset exists and record its size and SHA-256 digest before calling delivery
+complete.
 
 A local APK may still be built for verification before the source is ready to publish. Do not attach
 an APK made from an uncommitted or mismatched tree to an older tag, and do not sweep unrelated or
 unreviewed working-tree changes into a release commit merely to satisfy this rule. If the source is
 not yet safe to commit and publish, report the GitHub build as pending rather than presenting the local
-APK as the owner handoff.
+APK as the owner handoff. While `PUBLISH_APK` is unset, an owner-device check needed before approval
+uses a local build or the run's `app-release` artifact (`gh run download <run> -n app-release`) —
+verification, not delivery.
 
 A small read-only metadata/dependency validator may be added later if repeated maintenance friction justifies it. Do not add orchestration machinery preemptively.

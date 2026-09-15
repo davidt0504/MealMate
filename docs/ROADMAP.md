@@ -5,7 +5,7 @@ This is the durable operational source of truth after the MVP as well as during 
 ## Current milestone
 
 - **Milestone:** LOCAL-CORE-LOOP-READY; EMULATOR-PERSISTENCE-READY achieved 2026-08-29, DOMAIN-READY achieved 2026-08-27.
-- **Current implementation task:** `FIX-001` — `Verify` since 2026-09-13: implementation and automated evidence PASS; the AC-1 owner-device check on an existing install and explicit owner approval remain.
+- **Current implementation task:** `FIX-001` — `Verify` since 2026-09-13: implementation and automated evidence PASS; the AC-1 owner-device check on an existing install and explicit owner approval remain. APK publishing is held (`PUBLISH_APK` unset) until that approval; the device check uses a local or CI-artifact build. After approving, confirm a green build showed `publish` skipped, then set the variable and Run workflow on `master`.
 - **Next implementation task:** None `Ready` while `FIX-001` occupies the lane. `MVP-018` remains Draft, blocked by `DEC-004`.
 - **Concurrent owner-paced work:** `DEC-004` — `In Progress`; it does not occupy the implementation lane, but it still directly gates `MVP-018`, `MVP-021`, and `MVP-022` and transitively gates `MVP-019` and `MVP-020`.
 - **Platform:** Android MVP and initial launch. iOS is the first post-launch platform priority.

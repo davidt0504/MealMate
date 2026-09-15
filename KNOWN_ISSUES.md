@@ -234,3 +234,18 @@ Full review: /home/davidlinux/.claude/reviews/redteam-integration-ratification-2
   **Status:** OPEN
 
 ---
+
+## master -- 2026-09-15
+
+Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-master-2026-09-15t0923-9f58-2026-09-15T0937-445b.md
+
+### MEDIUM
+
+- **A `v*` tag on a commit before the publish hold bypasses it and publishes FIX-001 as Latest** (`.github/workflows/release-apk.yml:113`) -- a tag runs the workflow file of its own commit; `883479b`'s has a tag trigger, no signing guard and no secret, and GitHub picks Latest automatically, so a `v*` tag there ships the unapproved v13 migration. Only the `docs/task/README.md` delivery rule prevents it. Fix: a checkout + `git merge-base --is-ancestor <hold> HEAD` step in `publish` guards future commits only, so the rule stays load-bearing until FIX-001 is approved.
+  Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-master-2026-09-15t0923-9f58-2026-09-15T0937-445b.md
+  **Status:** OPEN
+- **CI APK signing root cause unresolved; diagnostic in place** (`.github/workflows/release-apk.yml:96`) -- run 34869565167 signed with `3e98ef16…` instead of the pinned `f0d66349…`. The secret was re-issued from the local key as `SIGNING_KEYSTORE_B64`, and the install step now checks its fingerprint and prints `ANDROID_*`. If the verify step still fails, AGP reads another keystore location. The first green build must show `publish` skipped before `PUBLISH_APK` is set.
+  Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-master-2026-09-15t0923-9f58-2026-09-15T0937-445b.md
+  **Status:** OPEN
+
+---
