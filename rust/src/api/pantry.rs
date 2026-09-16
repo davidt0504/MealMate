@@ -15,6 +15,12 @@ pub struct PantryEntryDto {
     pub name: String,
     pub aliases: Vec<String>,
     pub marked: bool,
+    /// Independent of `marked` (OPT-006 gate 1): flagged for restock without necessarily ever
+    /// being marked "have".
+    pub restock_requested: bool,
+    /// `None` only for a pre-existing custom ingredient created before OPT-006's
+    /// required-category rule — never for a catalog row.
+    pub store_category: Option<String>,
 }
 
 /// Everything this household can mark — the catalog plus its own custom ingredients — each
@@ -66,7 +72,51 @@ fn to_dto(entry: PantryEntry) -> PantryEntryDto {
         name: entry.name,
         aliases: entry.aliases,
         marked: entry.marked,
+        restock_requested: entry.restock_requested,
+        store_category: entry.store_category,
     }
+}
+
+/// Flags or unflags one identity for restock, independent of `marked` (OPT-006 gate 1).
+/// Idempotent in both directions, same return-what-was-stored contract as `set_pantry_mark`.
+pub fn set_restock_flag(
+    household_id: String,
+    ingredient: IngredientRefDto,
+    flagged: bool,
+) -> Result<PantryEntryDto, KimattaError> {
+    crate::db::with(|conn| set_restock_flag_in(conn, &household_id, ingredient, flagged))
+}
+
+/// Clears the have-mark and sets the restock flag in one transaction (OPT-006 gate 4, "Used
+/// it up") — restores the safety net that a plain unmark alone would drop.
+pub fn set_pantry_used_up(
+    household_id: String,
+    ingredient: IngredientRefDto,
+) -> Result<PantryEntryDto, KimattaError> {
+    crate::db::with(|conn| set_used_up_in(conn, &household_id, ingredient))
+}
+
+fn set_restock_flag_in(
+    conn: &mut Connection,
+    household_id: &str,
+    ingredient: IngredientRefDto,
+    flagged: bool,
+) -> Result<PantryEntryDto, KimattaError> {
+    let id = HouseholdId::new(household_id)?;
+    let reference: IngredientRef = ref_to_domain(ingredient)?;
+    let stored = kimatta_storage::set_restock_flag(conn, &id, &reference, flagged)?;
+    Ok(to_dto(stored))
+}
+
+fn set_used_up_in(
+    conn: &mut Connection,
+    household_id: &str,
+    ingredient: IngredientRefDto,
+) -> Result<PantryEntryDto, KimattaError> {
+    let id = HouseholdId::new(household_id)?;
+    let reference: IngredientRef = ref_to_domain(ingredient)?;
+    let stored = kimatta_storage::set_pantry_used_up(conn, &id, &reference)?;
+    Ok(to_dto(stored))
 }
 
 /// Split out from the commands for the same reason `restrictions.rs`'s `load_in` is: they can
@@ -119,7 +169,7 @@ mod tests {
                 CustomIngredientId::new(format!("c-{id}")).unwrap(),
                 h.id.clone(),
                 "mix",
-                None,
+                "pantry",
             )
             .unwrap(),
         )
@@ -229,5 +279,39 @@ mod tests {
         let err = set_in(&mut conn, "h1", custom("c-h2"), true).unwrap_err();
         assert!(matches!(err, KimattaError::Storage { .. }), "{err:?}");
         assert!(marked_refs(&list_in(&conn, "h2").unwrap()).is_empty());
+    }
+
+    #[test]
+    fn flagging_and_unflagging_round_trips_through_the_bridge() {
+        let mut conn = open_seeded(&["h"]);
+        let stored = set_restock_flag_in(&mut conn, "h", catalog("chickpeas"), true).unwrap();
+        assert!(stored.restock_requested);
+        assert!(!stored.marked);
+
+        let cleared = set_restock_flag_in(&mut conn, "h", catalog("chickpeas"), false).unwrap();
+        assert!(!cleared.restock_requested);
+    }
+
+    #[test]
+    fn used_up_clears_the_mark_and_sets_the_flag() {
+        let mut conn = open_seeded(&["h"]);
+        set_in(&mut conn, "h", catalog("chickpeas"), true).unwrap();
+        let entry = set_used_up_in(&mut conn, "h", catalog("chickpeas")).unwrap();
+        assert!(!entry.marked);
+        assert!(entry.restock_requested);
+    }
+
+    #[test]
+    fn flagging_an_unknown_ingredient_is_rejected() {
+        let mut conn = open_seeded(&["h"]);
+        let err = set_restock_flag_in(&mut conn, "h", catalog("ghost"), true).unwrap_err();
+        assert!(matches!(err, KimattaError::Storage { .. }), "{err:?}");
+    }
+
+    #[test]
+    fn flagging_a_custom_ingredient_of_another_household_is_rejected() {
+        let mut conn = open_seeded(&["h1", "h2"]);
+        let err = set_restock_flag_in(&mut conn, "h1", custom("c-h2"), true).unwrap_err();
+        assert!(matches!(err, KimattaError::Storage { .. }), "{err:?}");
     }
 }

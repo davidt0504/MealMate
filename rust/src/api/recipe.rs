@@ -129,7 +129,19 @@ pub struct CustomIngredientDto {
     pub id: String,
     pub household_id: String,
     pub name: String,
-    pub store_category: Option<String>,
+    /// Required at creation (OPT-006 gate 5) — a pre-existing row created before this
+    /// requirement lands in `CustomIngredientMissingCategoryDto` instead, never here with an
+    /// invented value.
+    pub store_category: String,
+}
+
+/// A custom ingredient this household has not yet categorized (OPT-006 gate 5 remediation) —
+/// `CustomIngredientDto` is deliberately not reused here, since its `store_category` is
+/// non-optional and this listing exists precisely because that field is missing.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CustomIngredientMissingCategoryDto {
+    pub id: String,
+    pub name: String,
 }
 
 /// Saves the whole recipe; an empty `id` mints a v4 UUID (as `bootstrap_household` does).
@@ -179,6 +191,65 @@ pub fn known_unit_kinds() -> Vec<String> {
         .iter()
         .map(|kind| kind.as_str().to_owned())
         .collect()
+}
+
+/// The known store-category vocabulary (OPT-006 gate 5), so the custom-ingredient creation and
+/// categorization dropdowns have one source and cannot drift from the domain.
+pub fn known_store_categories() -> Vec<String> {
+    kimatta_storage::KNOWN_STORE_CATEGORIES
+        .iter()
+        .map(|c| (*c).to_owned())
+        .collect()
+}
+
+/// Custom ingredients this household has not yet categorized (OPT-006 gate 5 remediation).
+pub fn list_custom_ingredients_missing_category(
+    household_id: String,
+) -> Result<Vec<CustomIngredientMissingCategoryDto>, KimattaError> {
+    crate::db::with(|conn| missing_category_in(conn, &household_id))
+}
+
+/// Sets `store_category` on a pre-existing custom ingredient (OPT-006 gate 5 remediation),
+/// validated identically to creation. Returns the entry as stored.
+pub fn set_custom_ingredient_category(
+    household_id: String,
+    id: String,
+    store_category: String,
+) -> Result<CustomIngredientDto, KimattaError> {
+    crate::db::with(|conn| set_category_in(conn, &household_id, &id, store_category))
+}
+
+fn missing_category_in(
+    conn: &Connection,
+    household_id: &str,
+) -> Result<Vec<CustomIngredientMissingCategoryDto>, KimattaError> {
+    let household = HouseholdId::new(household_id)?;
+    Ok(
+        kimatta_storage::list_custom_ingredients_missing_category(conn, &household)?
+            .into_iter()
+            .map(|(id, name)| CustomIngredientMissingCategoryDto {
+                id: id.as_str().to_owned(),
+                name,
+            })
+            .collect(),
+    )
+}
+
+fn set_category_in(
+    conn: &mut Connection,
+    household_id: &str,
+    id: &str,
+    store_category: String,
+) -> Result<CustomIngredientDto, KimattaError> {
+    let household = HouseholdId::new(household_id)?;
+    let custom_id = CustomIngredientId::new(id)?;
+    let item = kimatta_storage::set_custom_ingredient_category(
+        conn,
+        &household,
+        &custom_id,
+        store_category,
+    )?;
+    Ok(custom_from_domain(&item))
 }
 
 /// Empty `id` mints a UUID. Returns the stored item.
@@ -438,7 +509,7 @@ fn custom_from_domain(c: &CustomIngredient) -> CustomIngredientDto {
         id: c.id().as_str().to_owned(),
         household_id: c.household_id().as_str().to_owned(),
         name: c.name().to_owned(),
-        store_category: c.store_category().map(str::to_owned),
+        store_category: c.store_category().to_owned(),
     }
 }
 
@@ -949,7 +1020,7 @@ mod tests {
                 id: "c".to_owned(),
                 household_id: "h".to_owned(),
                 name: "nana's mix".to_owned(),
-                store_category: None,
+                store_category: "pantry".to_owned(),
             },
         )
         .unwrap();
@@ -1219,7 +1290,7 @@ mod tests {
                     id: blank.to_owned(),
                     household_id: "h".to_owned(),
                     name: "x".to_owned(),
-                    store_category: None,
+                    store_category: "pantry".to_owned(),
                 },
             )
             .unwrap();
@@ -1319,7 +1390,7 @@ mod tests {
                 id: "c".to_owned(),
                 household_id: "h".to_owned(),
                 name: " ".to_owned(),
-                store_category: None,
+                store_category: "pantry".to_owned(),
             },
         )
         .unwrap_err();
@@ -1346,7 +1417,7 @@ mod tests {
                 id: "c1".to_owned(),
                 household_id: "h1".to_owned(),
                 name: "x".to_owned(),
-                store_category: None,
+                store_category: "pantry".to_owned(),
             },
         )
         .unwrap();
@@ -1377,7 +1448,7 @@ mod tests {
                 id: "cus-mix".to_owned(),
                 household_id: "h".to_owned(),
                 name: "nana's mix".to_owned(),
-                store_category: None,
+                store_category: "pantry".to_owned(),
             },
         )
         .unwrap();
@@ -1457,7 +1528,7 @@ mod tests {
                     id: "c".to_owned(),
                     household_id: "h".to_owned(),
                     name: name.to_owned(),
-                    store_category: None,
+                    store_category: "pantry".to_owned(),
                 },
             )
         };
@@ -1479,7 +1550,7 @@ mod tests {
                 id: "c2".to_owned(),
                 household_id: "h2".to_owned(),
                 name: "x".to_owned(),
-                store_category: None,
+                store_category: "pantry".to_owned(),
             },
         )
         .unwrap();

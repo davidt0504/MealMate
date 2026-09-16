@@ -15,7 +15,8 @@ pub use food_domain::starter::{
 };
 pub use food_domain::{
     assess, base_factor, derive_shopping_list, format_civil_date, line_key_prefix,
-    parse_civil_date, quantity_token, CivilDate, Conflict, Contribution, CustomIngredient,
+    parse_civil_date, quantity_token, restock_line_key, CivilDate, Conflict, Contribution,
+    CustomIngredient,
     CustomIngredientId, HouseholdRestrictions, IdentityInfo, Ingredient, IngredientId,
     IngredientLine, IngredientRef, LineStatus, MealComponent, MealScope, MealSlot,
     MemberPreference, MemberPreferences, PlannedMeal, PlannedMealError, PlannedMealId,
@@ -24,7 +25,8 @@ pub use food_domain::{
     RestrictionAssessment, RestrictionError, RestrictionKind, RightsBasis, Sentiment,
     SeparateReason, ShoppingError, ShoppingGroup, ShoppingInput, ShoppingLine, ShoppingList,
     ShoppingManualItemId, Unit, UnitFamily, UnitKind, WriteSource, DEFAULT_CYCLE_DAYS,
-    MAX_CYCLE_DAYS, MIN_CYCLE_DAYS, RULE_VERSION, SHOPPING_ALGORITHM_VERSION,
+    KNOWN_STORE_CATEGORIES, MAX_CYCLE_DAYS, MIN_CYCLE_DAYS, RULE_VERSION,
+    SHOPPING_ALGORITHM_VERSION,
 };
 pub use household_core::{
     ActionProposal, AttentionRequest, Band, Confidence, EvidenceSource, Horizon, Household,
@@ -589,6 +591,27 @@ const MIGRATION_ARRAY: &[M] = &[
     SELECT id, 'elbow macaroni pasta' FROM ingredient WHERE id = 'ing-small-pasta';
     UPDATE recipe_ingredient_line SET ingredient_id = 'ing-diced-tomatoes'
     WHERE ingredient_id = 'ing-canned-tomatoes' AND lower(name) LIKE '%diced%';",
+    ),
+    // OPT-006: `restock_requested` is independent of the have/none mark in `pantry_item` — a
+    // household can flag a low/never-had ingredient for restock without ever marking it "have",
+    // and unmarking "have" does not imply a restock flag. Same shape as `pantry_item`
+    // deliberately: one row per flagged identity, no tri-state column, cascade with the
+    // household like every other pantry table.
+    M::up(
+        "CREATE TABLE pantry_restock_flag (
+        household_id TEXT NOT NULL REFERENCES household(id) ON DELETE CASCADE,
+        ingredient_id TEXT REFERENCES ingredient(id),
+        custom_ingredient_id TEXT REFERENCES custom_ingredient(id),
+        CHECK ((ingredient_id IS NULL) <> (custom_ingredient_id IS NULL))
+    ) STRICT;
+    CREATE UNIQUE INDEX pantry_restock_flag_catalog
+        ON pantry_restock_flag(household_id, ingredient_id) WHERE ingredient_id IS NOT NULL;
+    CREATE UNIQUE INDEX pantry_restock_flag_custom
+        ON pantry_restock_flag(household_id, custom_ingredient_id)
+        WHERE custom_ingredient_id IS NOT NULL;
+    CREATE INDEX pantry_restock_flag_ingredient ON pantry_restock_flag(ingredient_id);
+    CREATE INDEX pantry_restock_flag_custom_ingredient
+        ON pantry_restock_flag(custom_ingredient_id);",
     ),
 ];
 pub const MIGRATIONS: Migrations<'static> = Migrations::from_slice(MIGRATION_ARRAY);
@@ -1385,7 +1408,12 @@ pub fn upsert_custom_ingredient(
     Ok(())
 }
 
-/// Every custom ingredient of exactly `household`, ordered by name then id.
+/// Every custom ingredient of exactly `household`, ordered by name then id, that already has a
+/// valid `store_category` — `CustomIngredient::new` requires and membership-checks one (OPT-006
+/// gate 5), and a pre-existing row created before that requirement may still carry `NULL`.
+/// Such a row is skipped here rather than erroring the whole read (invariant 6: coarse, never
+/// an audit that halts on one bad row) — it stays visible via
+/// [`list_custom_ingredients_missing_category`] until the household remediates it.
 pub fn list_custom_ingredients(
     conn: &Connection,
     household: &HouseholdId,
@@ -1394,7 +1422,7 @@ pub fn list_custom_ingredients(
         "SELECT id, name, store_category FROM custom_ingredient
          WHERE household_id = ?1 ORDER BY name, id",
     )?;
-    let items = stmt
+    let rows = stmt
         .query_map(params![household.as_str()], |r| {
             Ok((
                 r.get::<_, String>(0)?,
@@ -1402,17 +1430,79 @@ pub fn list_custom_ingredients(
                 r.get::<_, Option<String>>(2)?,
             ))
         })?
-        .map(|row| {
-            let (id, name, store_category) = row?;
-            Ok(CustomIngredient::new(
-                CustomIngredientId::new(id)?,
-                household.clone(),
-                name,
-                store_category,
-            )?)
-        })
-        .collect();
-    items
+        .collect::<Result<Vec<_>, _>>()?;
+    let mut items = Vec::with_capacity(rows.len());
+    for (id, name, store_category) in rows {
+        let Some(store_category) = store_category else {
+            continue;
+        };
+        if let Ok(item) = CustomIngredient::new(
+            CustomIngredientId::new(id)?,
+            household.clone(),
+            name,
+            store_category,
+        ) {
+            items.push(item);
+        }
+    }
+    Ok(items)
+}
+
+/// Custom ingredients of `household` with no `store_category` yet — the read side of the
+/// OPT-006 gate 5 remediation flow. Never returns a row `list_custom_ingredients` also returns.
+pub fn list_custom_ingredients_missing_category(
+    conn: &Connection,
+    household: &HouseholdId,
+) -> Result<Vec<(CustomIngredientId, String)>, StorageError> {
+    let mut stmt = conn.prepare(
+        "SELECT id, name FROM custom_ingredient
+         WHERE household_id = ?1 AND store_category IS NULL ORDER BY name, id",
+    )?;
+    let rows = stmt
+        .query_map(params![household.as_str()], |r| {
+            Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?))
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
+    rows.into_iter()
+        .map(|(id, name)| Ok((CustomIngredientId::new(id)?, name)))
+        .collect()
+}
+
+/// Sets `store_category` on an existing custom ingredient (OPT-006 gate 5 remediation) —
+/// validated identically to [`CustomIngredient::new`], so this second write path can never
+/// bypass the membership rule. Idempotent; rejects a foreign or absent identity like every
+/// other custom-ingredient write.
+pub fn set_custom_ingredient_category(
+    conn: &mut Connection,
+    household: &HouseholdId,
+    id: &CustomIngredientId,
+    store_category: impl Into<String>,
+) -> Result<CustomIngredient, StorageError> {
+    let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    require_household(&tx, household)?;
+    let name: Option<String> = tx
+        .query_row(
+            "SELECT name FROM custom_ingredient WHERE id = ?1 AND household_id = ?2",
+            params![id.as_str(), household.as_str()],
+            |r| r.get(0),
+        )
+        .optional()?;
+    let Some(name) = name else {
+        return Err(StorageError::NoSuchCustomIngredient {
+            ingredient: id.as_str().to_owned(),
+            household: household.as_str().to_owned(),
+        });
+    };
+    // Re-validate through the domain constructor before writing anything — the same guard
+    // `CustomIngredient::new` runs at creation, so this write path can never store a category
+    // outside `KNOWN_STORE_CATEGORIES`.
+    let item = CustomIngredient::new(id.clone(), household.clone(), name, store_category)?;
+    tx.execute(
+        "UPDATE custom_ingredient SET store_category = ?1 WHERE id = ?2 AND household_id = ?3",
+        params![item.store_category(), id.as_str(), household.as_str()],
+    )?;
+    tx.commit()?;
+    Ok(item)
 }
 
 /// One browsable identity with this household's mark. `marked` means *the household marked
@@ -1428,6 +1518,12 @@ pub struct PantryEntry {
     pub name: String,
     pub aliases: Vec<String>,
     pub marked: bool,
+    /// Independent of `marked` (OPT-006 gate 1) — a household can flag a low/never-had
+    /// ingredient for restock without ever marking it "have".
+    pub restock_requested: bool,
+    /// From the catalog or custom-ingredient row; `None` only for a pre-existing custom
+    /// ingredient created before OPT-006's required-category rule, never for a catalog row.
+    pub store_category: Option<String>,
 }
 
 /// Every catalog alias, keyed by ingredient id, in one query rather than one per row — the
@@ -1461,12 +1557,18 @@ pub fn list_pantry_entries(
     let mut stmt = conn.prepare(
         "SELECT 'catalog' AS kind, i.id AS id, i.canonical_name AS name,
                 EXISTS(SELECT 1 FROM pantry_item p
-                       WHERE p.household_id = ?1 AND p.ingredient_id = i.id) AS marked
+                       WHERE p.household_id = ?1 AND p.ingredient_id = i.id) AS marked,
+                EXISTS(SELECT 1 FROM pantry_restock_flag f
+                       WHERE f.household_id = ?1 AND f.ingredient_id = i.id) AS restock_requested,
+                i.store_category AS store_category
          FROM ingredient i
          UNION ALL
          SELECT 'custom', c.id, c.name,
                 EXISTS(SELECT 1 FROM pantry_item p
-                       WHERE p.household_id = ?1 AND p.custom_ingredient_id = c.id)
+                       WHERE p.household_id = ?1 AND p.custom_ingredient_id = c.id),
+                EXISTS(SELECT 1 FROM pantry_restock_flag f
+                       WHERE f.household_id = ?1 AND f.custom_ingredient_id = c.id),
+                c.store_category
          FROM custom_ingredient c WHERE c.household_id = ?1
          ORDER BY name COLLATE NOCASE, kind, id",
     )?;
@@ -1477,12 +1579,14 @@ pub fn list_pantry_entries(
                 r.get::<_, String>(1)?,
                 r.get::<_, String>(2)?,
                 r.get::<_, bool>(3)?,
+                r.get::<_, bool>(4)?,
+                r.get::<_, Option<String>>(5)?,
             ))
         })?
         .collect::<Result<Vec<_>, _>>()?;
     let mut aliases = alias_index(conn)?;
     rows.into_iter()
-        .map(|(kind, id, name, marked)| {
+        .map(|(kind, id, name, marked, restock_requested, store_category)| {
             // Keyed on the kind, not the bare id: a custom ingredient whose id string happens
             // to match a catalog one must not inherit that catalog entry's aliases.
             let (ingredient, aliases) = if kind == "catalog" {
@@ -1501,6 +1605,8 @@ pub fn list_pantry_entries(
                 name,
                 aliases,
                 marked,
+                restock_requested,
+                store_category,
             })
         })
         .collect::<Result<Vec<_>, StorageError>>()
@@ -1637,7 +1743,7 @@ fn set_pantry_mark_in(
             params![household.as_str(), prefix],
         )?;
     }
-    let (name, aliases) = match ingredient {
+    let (name, aliases, store_category) = match ingredient {
         IngredientRef::Catalog(id) => (
             tx.query_row(
                 "SELECT canonical_name FROM ingredient WHERE id = ?1",
@@ -1645,6 +1751,11 @@ fn set_pantry_mark_in(
                 |r| r.get::<_, String>(0),
             )?,
             load_aliases(tx, id)?,
+            tx.query_row(
+                "SELECT store_category FROM ingredient WHERE id = ?1",
+                params![id.as_str()],
+                |r| r.get::<_, Option<String>>(0),
+            )?,
         ),
         IngredientRef::Custom(id) => (
             tx.query_row(
@@ -1653,17 +1764,218 @@ fn set_pantry_mark_in(
                 |r| r.get::<_, String>(0),
             )?,
             Vec::new(),
+            tx.query_row(
+                "SELECT store_category FROM custom_ingredient WHERE id = ?1",
+                params![id.as_str()],
+                |r| r.get::<_, Option<String>>(0),
+            )?,
         ),
     };
+    let restock_requested = restock_flagged_in(tx, household, ingredient)?;
     Ok((
         PantryEntry {
             ingredient: ingredient.clone(),
             name,
             aliases,
             marked,
+            restock_requested,
+            store_category,
         },
         changed == 1,
     ))
+}
+
+/// Whether `ingredient` is currently restock-flagged for `household` — the read `set_pantry_mark_in`
+/// and `set_restock_flag_in` both need to fill in `PantryEntry.restock_requested` on a write that
+/// changed the *other* field.
+fn restock_flagged_in(
+    tx: &Transaction<'_>,
+    household: &HouseholdId,
+    ingredient: &IngredientRef,
+) -> Result<bool, StorageError> {
+    let (catalog_id, custom_id) = match ingredient {
+        IngredientRef::Catalog(id) => (Some(id.as_str()), None),
+        IngredientRef::Custom(id) => (None, Some(id.as_str())),
+    };
+    Ok(tx.query_row(
+        "SELECT EXISTS(SELECT 1 FROM pantry_restock_flag
+         WHERE household_id = ?1 AND ingredient_id IS ?2 AND custom_ingredient_id IS ?3)",
+        params![household.as_str(), catalog_id, custom_id],
+        |r| r.get(0),
+    )?)
+}
+
+/// Whether `ingredient` is currently marked "have" for `household` — the counterpart
+/// `set_restock_flag_in` needs to fill in `PantryEntry.marked` on a write that only changed the
+/// restock flag.
+fn pantry_marked_in(
+    tx: &Transaction<'_>,
+    household: &HouseholdId,
+    ingredient: &IngredientRef,
+) -> Result<bool, StorageError> {
+    let (catalog_id, custom_id) = match ingredient {
+        IngredientRef::Catalog(id) => (Some(id.as_str()), None),
+        IngredientRef::Custom(id) => (None, Some(id.as_str())),
+    };
+    Ok(tx.query_row(
+        "SELECT EXISTS(SELECT 1 FROM pantry_item
+         WHERE household_id = ?1 AND ingredient_id IS ?2 AND custom_ingredient_id IS ?3)",
+        params![household.as_str(), catalog_id, custom_id],
+        |r| r.get(0),
+    )?)
+}
+
+/// Just the identities this household has flagged for restock — independent of the have/none
+/// mark (OPT-006 gate 1), the parallel read to [`list_marked_pantry_refs`].
+pub fn list_restock_flagged_refs(
+    conn: &Connection,
+    household: &HouseholdId,
+) -> Result<Vec<IngredientRef>, StorageError> {
+    let ids = |sql: &str| -> Result<Vec<String>, StorageError> {
+        let mut stmt = conn.prepare(sql)?;
+        let rows = stmt
+            .query_map(params![household.as_str()], |r| r.get::<_, String>(0))?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(rows)
+    };
+    let catalog = ids(
+        "SELECT ingredient_id FROM pantry_restock_flag
+          WHERE household_id = ?1 AND ingredient_id IS NOT NULL
+          ORDER BY ingredient_id",
+    )?;
+    let custom = ids(
+        "SELECT custom_ingredient_id FROM pantry_restock_flag
+          WHERE household_id = ?1 AND custom_ingredient_id IS NOT NULL
+          ORDER BY custom_ingredient_id",
+    )?;
+    let mut flagged = Vec::with_capacity(catalog.len() + custom.len());
+    for id in catalog {
+        flagged.push(IngredientRef::Catalog(IngredientId::new(&id)?));
+    }
+    for id in custom {
+        flagged.push(IngredientRef::Custom(CustomIngredientId::new(&id)?));
+    }
+    Ok(flagged)
+}
+
+/// Flags or unflags one identity for restock, in one IMMEDIATE transaction — same idempotent,
+/// return-what-was-stored contract as [`set_pantry_mark`]. Independent of the have/none mark:
+/// `pantry_restock_flag` carries no CHECK or FK linking it to `pantry_item` (OPT-006 gate 1).
+pub fn set_restock_flag(
+    conn: &mut Connection,
+    household: &HouseholdId,
+    ingredient: &IngredientRef,
+    flagged: bool,
+) -> Result<PantryEntry, StorageError> {
+    let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    require_household(&tx, household)?;
+    let (entry, _) = set_restock_flag_in(&tx, household, ingredient, flagged)?;
+    tx.commit()?;
+    Ok(entry)
+}
+
+/// The transaction-scoped body of [`set_restock_flag`], shared with [`set_pantry_used_up`].
+fn set_restock_flag_in(
+    tx: &Transaction<'_>,
+    household: &HouseholdId,
+    ingredient: &IngredientRef,
+    flagged: bool,
+) -> Result<(PantryEntry, bool), StorageError> {
+    check_ingredient_ref(tx, household, ingredient)?;
+    let (catalog_id, custom_id) = match ingredient {
+        IngredientRef::Catalog(id) => (Some(id.as_str()), None),
+        IngredientRef::Custom(id) => (None, Some(id.as_str())),
+    };
+    let changed = if flagged {
+        tx.execute(
+            "INSERT INTO pantry_restock_flag (household_id, ingredient_id, custom_ingredient_id)
+             VALUES (?1, ?2, ?3) ON CONFLICT DO NOTHING",
+            params![household.as_str(), catalog_id, custom_id],
+        )?
+    } else {
+        tx.execute(
+            "DELETE FROM pantry_restock_flag
+             WHERE household_id = ?1 AND ingredient_id IS ?2 AND custom_ingredient_id IS ?3",
+            params![household.as_str(), catalog_id, custom_id],
+        )?
+    };
+    // MVP-016 overlay: only a flag transitioning true->false can have a stale overlay row to
+    // clear — a line only ever exists in `shopping_line_state` once a derivation produced it
+    // and the user then checked/hid/restored it, and a newly-flagged ref has never been
+    // derived before. Mirrors `set_pantry_mark_in`'s `m:`-prefix clearing block, keyed to the
+    // `r:` prefix instead; a have-mark-only change never reaches this block at all.
+    if !flagged && changed == 1 {
+        let prefix = restock_line_key(ingredient);
+        tx.execute(
+            "DELETE FROM shopping_line_state
+             WHERE household_id = ?1 AND substr(line_key, 1, length(?2)) = ?2
+               AND restored = 1 AND checked = 0 AND hidden = 0",
+            params![household.as_str(), prefix],
+        )?;
+        tx.execute(
+            "UPDATE shopping_line_state SET restored = 0
+             WHERE household_id = ?1 AND substr(line_key, 1, length(?2)) = ?2 AND restored = 1",
+            params![household.as_str(), prefix],
+        )?;
+    }
+    let (name, aliases, store_category) = match ingredient {
+        IngredientRef::Catalog(id) => (
+            tx.query_row(
+                "SELECT canonical_name FROM ingredient WHERE id = ?1",
+                params![id.as_str()],
+                |r| r.get::<_, String>(0),
+            )?,
+            load_aliases(tx, id)?,
+            tx.query_row(
+                "SELECT store_category FROM ingredient WHERE id = ?1",
+                params![id.as_str()],
+                |r| r.get::<_, Option<String>>(0),
+            )?,
+        ),
+        IngredientRef::Custom(id) => (
+            tx.query_row(
+                "SELECT name FROM custom_ingredient WHERE id = ?1",
+                params![id.as_str()],
+                |r| r.get::<_, String>(0),
+            )?,
+            Vec::new(),
+            tx.query_row(
+                "SELECT store_category FROM custom_ingredient WHERE id = ?1",
+                params![id.as_str()],
+                |r| r.get::<_, Option<String>>(0),
+            )?,
+        ),
+    };
+    let marked = pantry_marked_in(tx, household, ingredient)?;
+    Ok((
+        PantryEntry {
+            ingredient: ingredient.clone(),
+            name,
+            aliases,
+            marked,
+            restock_requested: flagged,
+            store_category,
+        },
+        changed == 1,
+    ))
+}
+
+/// Clears the have-mark and sets the restock flag in one IMMEDIATE transaction (OPT-006 gate
+/// 4, "Used it up") — the two writes must not be visible independently, or a mid-way failure
+/// (or two separate bridge round-trips) could leave the mark cleared with no flag set. Both
+/// underlying writes are already idempotent, so repeating this call, or calling it after a
+/// prior "Low" tap already set the flag, leaves exactly one flag row and no mark row.
+pub fn set_pantry_used_up(
+    conn: &mut Connection,
+    household: &HouseholdId,
+    ingredient: &IngredientRef,
+) -> Result<PantryEntry, StorageError> {
+    let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    require_household(&tx, household)?;
+    set_pantry_mark_in(&tx, household, ingredient, false)?;
+    let (entry, _) = set_restock_flag_in(&tx, household, ingredient, true)?;
+    tx.commit()?;
+    Ok(entry)
 }
 
 /// `(id, title)` of a recipe plus its line names, for listing without loading whole recipes.
@@ -2853,7 +3165,7 @@ pub fn load_shopping_input(
             }),
             IngredientRef::Custom(id) => customs.get(id.as_str()).map(|c| IdentityInfo {
                 name: c.name().to_owned(),
-                store_category: c.store_category().map(str::to_owned),
+                store_category: Some(c.store_category().to_owned()),
             }),
         };
         if let Some(info) = info {
@@ -2861,6 +3173,33 @@ pub fn load_shopping_input(
         }
     }
     let pantry_marked = list_marked_pantry_refs(&tx, household)?;
+    let restock_flagged = list_restock_flagged_refs(&tx, household)?;
+    // A restock-flagged identity may never appear in a recipe line within this window — the
+    // loop above only ever populates `identities` from recipe demand — so without this, a
+    // flagged-but-never-cooked ingredient's restock line would have no name or category to
+    // render (OPT-006).
+    for r in &restock_flagged {
+        let seen_key = match r {
+            IngredientRef::Catalog(id) => (true, id.as_str().to_owned()),
+            IngredientRef::Custom(id) => (false, id.as_str().to_owned()),
+        };
+        if !seen.insert(seen_key) {
+            continue;
+        }
+        let info = match r {
+            IngredientRef::Catalog(id) => load_ingredient(&tx, id)?.map(|i| IdentityInfo {
+                name: i.canonical_name().to_owned(),
+                store_category: i.store_category().map(str::to_owned),
+            }),
+            IngredientRef::Custom(id) => customs.get(id.as_str()).map(|c| IdentityInfo {
+                name: c.name().to_owned(),
+                store_category: Some(c.store_category().to_owned()),
+            }),
+        };
+        if let Some(info) = info {
+            identities.push((r.clone(), info));
+        }
+    }
     tx.commit()?;
     Ok(ShoppingInput {
         from,
@@ -2869,6 +3208,7 @@ pub fn load_shopping_input(
         recipes,
         identities,
         pantry_marked,
+        restock_flagged,
     })
 }
 
@@ -3322,19 +3662,19 @@ mod tests {
         let conn = open(&path).unwrap();
         let dest = dir.path().join("export.db");
         export_database(&conn, &dest).unwrap();
-        assert_eq!(validate_export(&dest).unwrap(), 13);
+        assert_eq!(validate_export(&dest).unwrap(), 14);
 
         Connection::open(&dest)
             .unwrap()
-            .pragma_update(None, "user_version", 14)
+            .pragma_update(None, "user_version", 15)
             .unwrap();
         let err = validate_export(&dest).unwrap_err();
         assert!(
             matches!(
                 err,
                 StorageError::NewerSchema {
-                    found: 14,
-                    supported: 13,
+                    found: 15,
+                    supported: 14,
                 }
             ),
             "want NewerSchema, got {err:?}"
@@ -3400,15 +3740,15 @@ mod tests {
         drop(open(&path).unwrap());
         {
             let conn = Connection::open(&path).unwrap();
-            conn.pragma_update(None, "user_version", 14).unwrap();
+            conn.pragma_update(None, "user_version", 15).unwrap();
         }
         let err = open(&path).unwrap_err();
         assert!(
             matches!(
                 err,
                 StorageError::NewerSchema {
-                    found: 14,
-                    supported: 13,
+                    found: 15,
+                    supported: 14,
                 }
             ),
             "want NewerSchema, got {err:?}"
@@ -3417,8 +3757,8 @@ mod tests {
         // the recovery.
         let text = err.to_string();
         assert!(text.contains("newer version of the app"), "got {text:?}");
-        assert!(text.contains("schema 14"), "got {text:?}");
-        assert!(text.contains("supports 13"), "got {text:?}");
+        assert!(text.contains("schema 15"), "got {text:?}");
+        assert!(text.contains("supports 14"), "got {text:?}");
         assert!(text.contains("Update the app"), "got {text:?}");
     }
 
@@ -3432,7 +3772,7 @@ mod tests {
         let path = dir.path().join("does-not-exist-yet.db");
         let conn = open(&path).unwrap();
         // Hard-coded, not derived from MIGRATIONS: a new migration must consciously bump it.
-        assert_eq!(schema_version(&conn).unwrap(), 13);
+        assert_eq!(schema_version(&conn).unwrap(), 14);
         assert_eq!(count(&conn, "household"), 0);
     }
 
@@ -3595,7 +3935,7 @@ mod tests {
             .unwrap();
         }
         let conn = open(&path).unwrap();
-        assert_eq!(schema_version(&conn).unwrap(), 13);
+        assert_eq!(schema_version(&conn).unwrap(), 14);
         assert_eq!(count(&conn, "household"), 1);
         assert_eq!(count(&conn, "household_member"), 2);
         assert_eq!(count(&conn, "planning_cycle"), 0);
@@ -3811,7 +4151,7 @@ mod tests {
     #[test]
     fn empty_db_migrates_to_v13() {
         let conn = open(":memory:").unwrap();
-        assert_eq!(schema_version(&conn).unwrap(), 13);
+        assert_eq!(schema_version(&conn).unwrap(), 14);
     }
 
     // --- Step 4: schema v3 -----------------------------------------------------------------
@@ -3839,7 +4179,7 @@ mod tests {
             .unwrap();
         }
         let conn = open(&path).unwrap();
-        assert_eq!(schema_version(&conn).unwrap(), 13);
+        assert_eq!(schema_version(&conn).unwrap(), 14);
         assert_eq!(count(&conn, "household"), 1);
         assert_eq!(count(&conn, "planning_cycle"), 1);
         assert_eq!(count(&conn, "planning_meal_slot"), 2);
@@ -3864,7 +4204,7 @@ mod tests {
             insert_pre_v6_recipe(&raw, "h", "r");
         }
         let conn = open(&path).unwrap();
-        assert_eq!(schema_version(&conn).unwrap(), 13);
+        assert_eq!(schema_version(&conn).unwrap(), 14);
         assert_eq!(count(&conn, "household"), 1);
         assert_eq!(count(&conn, "household_member"), 1);
         assert_eq!(count(&conn, "recipe"), 1);
@@ -3890,7 +4230,7 @@ mod tests {
             insert_pre_v6_recipe(&raw, "h", "r");
         }
         let conn = open(&path).unwrap();
-        assert_eq!(schema_version(&conn).unwrap(), 13);
+        assert_eq!(schema_version(&conn).unwrap(), 14);
         assert_eq!(count(&conn, "household"), 1);
         assert_eq!(count(&conn, "recipe"), 1);
         assert_eq!(count(&conn, "household_restriction"), 0);
@@ -4111,7 +4451,7 @@ mod tests {
             CustomIngredientId::new(id).unwrap(),
             HouseholdId::new(household).unwrap(),
             name,
-            None,
+            "pantry",
         )
         .unwrap()
     }
@@ -5091,7 +5431,7 @@ mod tests {
             CustomIngredientId::new("c").unwrap(),
             HouseholdId::new("h").unwrap(),
             "nana's mix",
-            Some("spices".to_owned()),
+            "dairy",
         )
         .unwrap();
         upsert_custom_ingredient(&mut conn, &renamed).unwrap();
@@ -5240,7 +5580,7 @@ mod tests {
             insert_household(&mut conn, &household("h"), &[member("m", "h")]).unwrap();
         }
         let conn = open(&path).unwrap();
-        assert_eq!(schema_version(&conn).unwrap(), 13);
+        assert_eq!(schema_version(&conn).unwrap(), 14);
         assert_eq!(count(&conn, "household"), 1);
         assert_eq!(count(&conn, "household_member"), 1);
         let on: i32 = conn
@@ -5970,7 +6310,7 @@ mod tests {
             insert_pre_v6_recipe(&raw, "h", "r");
         }
         let conn = open(&path).unwrap();
-        assert_eq!(schema_version(&conn).unwrap(), 13);
+        assert_eq!(schema_version(&conn).unwrap(), 14);
         assert_eq!(count(&conn, "household"), 1);
         assert_eq!(count(&conn, "recipe"), 1);
         assert_eq!(load(&conn, "h", "r").unwrap().title(), "Recipe r");
@@ -6009,7 +6349,7 @@ mod tests {
             save_recipe(&mut raw, &recipe("h", "r", vec![])).unwrap();
         }
         let conn = open(&path).unwrap();
-        assert_eq!(schema_version(&conn).unwrap(), 13);
+        assert_eq!(schema_version(&conn).unwrap(), 14);
         assert_eq!(count(&conn, "household"), 1);
         assert_eq!(count(&conn, "recipe"), 1);
         assert_eq!(load(&conn, "h", "r").unwrap().title(), "Recipe r");
@@ -7497,7 +7837,7 @@ mod tests {
             save_recipe(&mut raw, &recipe("h", "r", vec![])).unwrap();
         }
         let conn = open(&path).unwrap();
-        assert_eq!(schema_version(&conn).unwrap(), 13);
+        assert_eq!(schema_version(&conn).unwrap(), 14);
         assert_eq!(count(&conn, "household"), 1);
         assert_eq!(count(&conn, "recipe"), 1);
         assert_eq!(load(&conn, "h", "r").unwrap().title(), "Recipe r");
@@ -7869,6 +8209,199 @@ mod tests {
         assert_eq!(survivor, "h2");
     }
 
+    const RAW_RESTOCK_FLAG: &str = "INSERT INTO pantry_restock_flag
+        (household_id, ingredient_id, custom_ingredient_id) VALUES (?1, ?2, ?3)";
+
+    /// Mirrors `deleting_a_household_cascades_to_its_pantry_items` — `pantry_restock_flag` is
+    /// the same shape (cascading child of `household`, `NO ACTION` child of `custom_ingredient`).
+    #[test]
+    fn deleting_a_household_cascades_to_its_pantry_restock_flags() {
+        let mut conn = open(":memory:").unwrap();
+        seed_for_pantry(&mut conn, "h");
+        seed_for_pantry(&mut conn, "h2");
+        conn.execute(RAW_RESTOCK_FLAG, params!["h", "flour", Option::<String>::None])
+            .unwrap();
+        conn.execute(RAW_RESTOCK_FLAG, params!["h", Option::<String>::None, "c-h"])
+            .unwrap();
+        conn.execute(RAW_RESTOCK_FLAG, params!["h2", "flour", Option::<String>::None])
+            .unwrap();
+        conn.execute("DELETE FROM household WHERE id = 'h'", [])
+            .unwrap();
+        assert_eq!(count(&conn, "pantry_restock_flag"), 1);
+        let survivor: String = conn
+            .query_row("SELECT household_id FROM pantry_restock_flag", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert_eq!(survivor, "h2");
+    }
+
+    // --- OPT-006: restock flag, independent of the have/none mark ------------------------
+
+    #[test]
+    fn flagging_an_identity_persists_and_unflagging_removes_it() {
+        let mut conn = open(":memory:").unwrap();
+        seed_for_pantry(&mut conn, "h");
+        let stored = set_restock_flag(&mut conn, &hid("h"), &catalog_ref("flour"), true).unwrap();
+        assert!(stored.restock_requested);
+        assert!(!stored.marked, "flagging must not touch the have/none mark");
+        assert_eq!(count(&conn, "pantry_restock_flag"), 1);
+
+        // Idempotent: flagging twice leaves one row.
+        set_restock_flag(&mut conn, &hid("h"), &catalog_ref("flour"), true).unwrap();
+        assert_eq!(count(&conn, "pantry_restock_flag"), 1);
+
+        let cleared = set_restock_flag(&mut conn, &hid("h"), &catalog_ref("flour"), false).unwrap();
+        assert!(!cleared.restock_requested);
+        assert_eq!(count(&conn, "pantry_restock_flag"), 0);
+
+        // Idempotent the other way too: unflagging twice leaves none, never an error.
+        set_restock_flag(&mut conn, &hid("h"), &catalog_ref("flour"), false).unwrap();
+        assert_eq!(count(&conn, "pantry_restock_flag"), 0);
+    }
+
+    #[test]
+    fn flagging_is_scoped_to_the_household() {
+        let mut conn = open(":memory:").unwrap();
+        seed_for_pantry(&mut conn, "h");
+        seed_for_pantry(&mut conn, "h2");
+        set_restock_flag(&mut conn, &hid("h"), &catalog_ref("flour"), true).unwrap();
+        assert_eq!(count(&conn, "pantry_restock_flag"), 1);
+        assert!(
+            !list_restock_flagged_refs(&conn, &hid("h2"))
+                .unwrap()
+                .contains(&catalog_ref("flour"))
+        );
+        assert!(
+            list_restock_flagged_refs(&conn, &hid("h"))
+                .unwrap()
+                .contains(&catalog_ref("flour"))
+        );
+    }
+
+    #[test]
+    fn flagging_an_unknown_ingredient_is_rejected() {
+        let mut conn = open(":memory:").unwrap();
+        seed_for_pantry(&mut conn, "h");
+        let err = set_restock_flag(&mut conn, &hid("h"), &catalog_ref("no-such-ingredient"), true)
+            .unwrap_err();
+        assert!(matches!(err, StorageError::NoSuchIngredient(_)), "{err:?}");
+        assert_eq!(count(&conn, "pantry_restock_flag"), 0);
+    }
+
+    #[test]
+    fn flagging_can_be_independent_of_the_mark() {
+        let mut conn = open(":memory:").unwrap();
+        seed_for_pantry(&mut conn, "h");
+        // Flagged without ever being marked "have" — gate 1's whole point: a household can
+        // flag a never-had ingredient for restock.
+        let entry = set_restock_flag(&mut conn, &hid("h"), &catalog_ref("flour"), true).unwrap();
+        assert!(entry.restock_requested);
+        assert!(!entry.marked);
+
+        let marked = set_pantry_mark(&mut conn, &hid("h"), &catalog_ref("flour"), true).unwrap();
+        assert!(marked.marked);
+        assert!(
+            marked.restock_requested,
+            "marking 'have' must not clear an independent restock flag"
+        );
+    }
+
+    #[test]
+    fn used_up_clears_the_mark_and_sets_the_flag_in_one_transaction() {
+        let mut conn = open(":memory:").unwrap();
+        seed_for_pantry(&mut conn, "h");
+        set_pantry_mark(&mut conn, &hid("h"), &catalog_ref("flour"), true).unwrap();
+        let entry = set_pantry_used_up(&mut conn, &hid("h"), &catalog_ref("flour")).unwrap();
+        assert!(!entry.marked);
+        assert!(entry.restock_requested);
+        assert_eq!(count(&conn, "pantry_item"), 0);
+        assert_eq!(count(&conn, "pantry_restock_flag"), 1);
+
+        // Idempotent: calling again leaves exactly one flag row and no mark row.
+        set_pantry_used_up(&mut conn, &hid("h"), &catalog_ref("flour")).unwrap();
+        assert_eq!(count(&conn, "pantry_item"), 0);
+        assert_eq!(count(&conn, "pantry_restock_flag"), 1);
+    }
+
+    #[test]
+    fn a_prior_low_tap_followed_by_used_up_does_not_duplicate_the_flag() {
+        let mut conn = open(":memory:").unwrap();
+        seed_for_pantry(&mut conn, "h");
+        set_pantry_mark(&mut conn, &hid("h"), &catalog_ref("flour"), true).unwrap();
+        set_restock_flag(&mut conn, &hid("h"), &catalog_ref("flour"), true).unwrap();
+        assert_eq!(count(&conn, "pantry_restock_flag"), 1);
+        set_pantry_used_up(&mut conn, &hid("h"), &catalog_ref("flour")).unwrap();
+        assert_eq!(count(&conn, "pantry_restock_flag"), 1);
+        assert_eq!(count(&conn, "pantry_item"), 0);
+    }
+
+    #[test]
+    fn unflagging_clears_a_stale_restock_overlay_row() {
+        let mut conn = open(":memory:").unwrap();
+        seed_for_pantry(&mut conn, "h");
+        set_restock_flag(&mut conn, &hid("h"), &catalog_ref("flour"), true).unwrap();
+        let key = restock_line_key(&catalog_ref("flour"));
+        conn.execute(
+            RAW_LINE_STATE,
+            params!["h", key, 0, Option::<String>::None, 0, 1],
+        )
+        .unwrap();
+        assert_eq!(count(&conn, "shopping_line_state"), 1);
+
+        set_restock_flag(&mut conn, &hid("h"), &catalog_ref("flour"), false).unwrap();
+        assert_eq!(
+            count(&conn, "shopping_line_state"),
+            0,
+            "a restored/hidden restock overlay row must clear when the flag clears"
+        );
+    }
+
+    #[test]
+    fn a_have_mark_only_change_never_touches_a_restock_overlay_row() {
+        let mut conn = open(":memory:").unwrap();
+        seed_for_pantry(&mut conn, "h");
+        set_restock_flag(&mut conn, &hid("h"), &catalog_ref("flour"), true).unwrap();
+        let key = restock_line_key(&catalog_ref("flour"));
+        conn.execute(
+            RAW_LINE_STATE,
+            params!["h", key, 0, Option::<String>::None, 0, 1],
+        )
+        .unwrap();
+        set_pantry_mark(&mut conn, &hid("h"), &catalog_ref("flour"), true).unwrap();
+        assert_eq!(
+            count(&conn, "shopping_line_state"),
+            1,
+            "the have-mark transition must not clear the restock overlay row"
+        );
+    }
+
+    #[test]
+    fn flagging_one_ingredient_does_not_touch_a_same_prefix_siblings_overlay_row() {
+        let mut conn = open(":memory:").unwrap();
+        seed_for_pantry(&mut conn, "h");
+        upsert_ingredient(
+            &mut conn,
+            &ingredient("flour-tortillas", "flour tortillas", &[]),
+        )
+        .unwrap();
+        set_restock_flag(&mut conn, &hid("h"), &catalog_ref("flour"), true).unwrap();
+        set_restock_flag(&mut conn, &hid("h"), &catalog_ref("flour-tortillas"), true).unwrap();
+        let sibling_key = restock_line_key(&catalog_ref("flour-tortillas"));
+        conn.execute(
+            RAW_LINE_STATE,
+            params!["h", sibling_key, 0, Option::<String>::None, 0, 1],
+        )
+        .unwrap();
+
+        set_restock_flag(&mut conn, &hid("h"), &catalog_ref("flour"), false).unwrap();
+        assert_eq!(
+            count(&conn, "shopping_line_state"),
+            1,
+            "unflagging 'flour' must not clear 'flour-tortillas' overlay row (prefix collision)"
+        );
+    }
+
     // --- MVP-016 step 3: schema v9, shopping line states and manual items ----------------
 
     const RAW_LINE_STATE: &str = "INSERT INTO shopping_line_state
@@ -7896,7 +8429,7 @@ mod tests {
             .unwrap();
         }
         let conn = open(&path).unwrap();
-        assert_eq!(schema_version(&conn).unwrap(), 13);
+        assert_eq!(schema_version(&conn).unwrap(), 14);
         assert_eq!(count(&conn, "household"), 1);
         assert_eq!(count(&conn, "pantry_item"), 1);
         assert_eq!(count(&conn, "shopping_line_state"), 0);
@@ -7915,7 +8448,12 @@ mod tests {
             assert_eq!(schema_version(&raw).unwrap(), 9);
             raw.pragma_update(None, "foreign_keys", "ON").unwrap();
             seed_for_pantry(&mut raw, "h");
-            set_pantry_mark(&mut raw, &hid("h"), &catalog_ref("flour"), true).unwrap();
+            // Raw insert rather than `set_pantry_mark`: that helper now also reads
+            // `pantry_restock_flag` (v14+), which does not exist yet at this connection's v9
+            // schema — this block is deliberately mid-migration, standing in for data an older
+            // app version wrote before an upgrade.
+            raw.execute(RAW_PANTRY, params!["h", "flour", Option::<String>::None])
+                .unwrap();
             raw.execute(
                 RAW_LINE_STATE,
                 params!["h", "m:x", 1, Some("exact:1/1|none"), 0, 0],
@@ -7923,7 +8461,7 @@ mod tests {
             .unwrap();
         }
         let conn = open(&path).unwrap();
-        assert_eq!(schema_version(&conn).unwrap(), 13);
+        assert_eq!(schema_version(&conn).unwrap(), 14);
         assert_eq!(count(&conn, "household"), 1);
         assert_eq!(count(&conn, "pantry_item"), 1);
         assert_eq!(count(&conn, "shopping_line_state"), 1);
@@ -8103,7 +8641,7 @@ mod tests {
         }
 
         let mut conn = open(&path).unwrap();
-        assert_eq!(schema_version(&conn).unwrap(), 13);
+        assert_eq!(schema_version(&conn).unwrap(), 14);
         let list = load_shopping_list(
             &mut conn,
             &hid("h"),
@@ -8979,7 +9517,7 @@ mod tests {
         assert_eq!(
             identities,
             vec![
-                ("mix".to_owned(), None),
+                ("mix".to_owned(), Some("pantry".to_owned())),
                 ("olive oil".to_owned(), Some("aisle".to_owned())),
                 ("salt".to_owned(), Some("aisle".to_owned())),
             ]
@@ -8987,7 +9525,79 @@ mod tests {
         let list = derive_shopping_list(&input);
         let categories: Vec<Option<&str>> =
             list.groups.iter().map(|g| g.category.as_deref()).collect();
-        assert_eq!(categories, vec![Some("aisle"), None]);
+        // Third, uncategorised group is the unresolved line `seed_for_shopping` names —
+        // distinct from "mix" now that "mix" has a real category of its own.
+        assert_eq!(categories, vec![Some("aisle"), Some("pantry"), None]);
+    }
+
+    /// A custom ingredient created before OPT-006's required-category rule may still carry a
+    /// `NULL` `store_category` in storage — `list_custom_ingredients` skips it rather than
+    /// erroring the whole household's read (invariant 6), so it also never resolves an
+    /// `IdentityInfo` for the shopping list until remediated.
+    #[test]
+    fn a_null_category_custom_ingredient_is_skipped_by_list_custom_ingredients() {
+        let mut conn = open(":memory:").unwrap();
+        seed_for_shopping(&mut conn, "h");
+        conn.execute(
+            "INSERT INTO custom_ingredient (id, household_id, name, store_category)
+             VALUES ('c-legacy', 'h', 'legacy mix', NULL)",
+            [],
+        )
+        .unwrap();
+        let listed = list_custom_ingredients(&conn, &hid("h")).unwrap();
+        assert!(listed.iter().all(|c| c.name() != "legacy mix"));
+        let missing = list_custom_ingredients_missing_category(&conn, &hid("h")).unwrap();
+        assert_eq!(missing.len(), 1);
+        assert_eq!(missing[0].1, "legacy mix");
+    }
+
+    #[test]
+    fn categorizing_a_legacy_custom_ingredient_makes_it_a_full_domain_entry() {
+        let mut conn = open(":memory:").unwrap();
+        seed_for_shopping(&mut conn, "h");
+        conn.execute(
+            "INSERT INTO custom_ingredient (id, household_id, name, store_category)
+             VALUES ('c-legacy', 'h', 'legacy mix', NULL)",
+            [],
+        )
+        .unwrap();
+        let id = CustomIngredientId::new("c-legacy").unwrap();
+        let categorized =
+            set_custom_ingredient_category(&mut conn, &hid("h"), &id, "pantry").unwrap();
+        assert_eq!(categorized.store_category(), "pantry");
+        assert!(list_custom_ingredients_missing_category(&conn, &hid("h"))
+            .unwrap()
+            .is_empty());
+        assert!(list_custom_ingredients(&conn, &hid("h"))
+            .unwrap()
+            .iter()
+            .any(|c| c.name() == "legacy mix"));
+    }
+
+    #[test]
+    fn categorizing_with_an_unknown_category_is_rejected() {
+        let mut conn = open(":memory:").unwrap();
+        seed_for_shopping(&mut conn, "h");
+        conn.execute(
+            "INSERT INTO custom_ingredient (id, household_id, name, store_category)
+             VALUES ('c-legacy', 'h', 'legacy mix', NULL)",
+            [],
+        )
+        .unwrap();
+        let id = CustomIngredientId::new("c-legacy").unwrap();
+        let err = set_custom_ingredient_category(&mut conn, &hid("h"), &id, "not-a-real-category")
+            .unwrap_err();
+        assert!(
+            matches!(err, StorageError::Recipe(RecipeError::UnknownStoreCategory(_))),
+            "{err:?}"
+        );
+        assert_eq!(
+            list_custom_ingredients_missing_category(&conn, &hid("h"))
+                .unwrap()
+                .len(),
+            1,
+            "the rejected write must not have landed"
+        );
     }
 
     #[test]
@@ -9008,6 +9618,38 @@ mod tests {
             .iter()
             .filter(|l| l.name != "salt")
             .all(|l| l.status == LineStatus::Needed));
+    }
+
+    #[test]
+    fn a_restock_flagged_identity_with_no_recipe_line_still_resolves_a_name_and_category() {
+        let mut conn = open(":memory:").unwrap();
+        seed_for_shopping(&mut conn, "h");
+        upsert_ingredient(
+            &mut conn,
+            &ingredient("i-never-cooked", "never cooked", &[]),
+        )
+        .unwrap();
+        user_save(&mut conn, &shop_dinner("h", "pm", "2026-08-29", 1, 1)).unwrap();
+        let never_cooked = IngredientRef::Catalog(IngredientId::new("i-never-cooked").unwrap());
+        set_restock_flag(&mut conn, &hid("h"), &never_cooked, true).unwrap();
+
+        let input = snapshot(&mut conn, "h", "2026-08-29", "2026-08-29");
+        assert_eq!(input.restock_flagged, vec![never_cooked.clone()]);
+        let info = input
+            .identities
+            .iter()
+            .find(|(r, _)| *r == never_cooked)
+            .map(|(_, i)| i)
+            .expect("a flagged-but-never-cooked identity must resolve an IdentityInfo");
+        assert_eq!(info.name, "never cooked");
+
+        let list = derive_shopping_list(&input);
+        let line = shopping_lines(&list)
+            .into_iter()
+            .find(|l| l.name == "never cooked")
+            .expect("its restock line must render a name, not fall back to the ref");
+        assert!(line.restock);
+        assert_eq!(line.quantity, Quantity::Unknown);
     }
 
     #[test]

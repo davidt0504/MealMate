@@ -48,7 +48,7 @@ void main() {
 
   test('open_database migrates a real database to schema v13', () async {
     final report = await openDatabase(dbPath: await tempDb());
-    expect(report.schemaVersion, 13);
+    expect(report.schemaVersion, 14);
   });
 
   test('storage failure surfaces as KimattaError_Storage', () async {
@@ -92,11 +92,11 @@ void main() {
         '${Platform.pathSeparator}kimatta-export.db';
     final report = await exportDatabase(destPath: dest);
     expect(report.path, dest);
-    expect(report.schemaVersion, 13);
+    expect(report.schemaVersion, 14);
     // Opening the export as the live database proves it is the database's own
     // format, not a write-only artifact.
     final opened = await openDatabase(dbPath: dest);
-    expect(opened.schemaVersion, 13);
+    expect(opened.schemaVersion, 14);
     expect((await bootstrapHousehold()).id, h.id);
   });
 
@@ -332,6 +332,7 @@ void main() {
           id: '',
           householdId: h.id,
           name: "nana's mix",
+          storeCategory: 'pantry',
         ),
       );
       final saved = await saveRecipe(
@@ -450,6 +451,166 @@ void main() {
     expect(again.marked, isTrue);
     expect(again.name, first.name);
   });
+
+  /// OPT-006 gate 1: the restock flag is independent of the have/none mark, end to end.
+  test(
+    'a restock flag round-trips independently of the have mark',
+    () async {
+      await openDatabase(dbPath: await tempDb());
+      final h = await bootstrapHousehold();
+      await installStarterContent(householdId: h.id);
+      final first = (await listPantry(householdId: h.id)).first;
+      expect(first.restockRequested, isFalse);
+
+      final flagged = await setRestockFlag(
+        householdId: h.id,
+        ingredient: first.ingredient,
+        flagged: true,
+      );
+      expect(flagged.restockRequested, isTrue);
+      expect(flagged.marked, isFalse, reason: 'flagging must not mark it "have"');
+
+      final cleared = await setRestockFlag(
+        householdId: h.id,
+        ingredient: first.ingredient,
+        flagged: false,
+      );
+      expect(cleared.restockRequested, isFalse);
+    },
+  );
+
+  /// OPT-006 gate 4: "Used it up" clears the mark and sets the flag together.
+  test('used_up clears the mark and sets the restock flag together', () async {
+    await openDatabase(dbPath: await tempDb());
+    final h = await bootstrapHousehold();
+    await installStarterContent(householdId: h.id);
+    final first = (await listPantry(householdId: h.id)).first;
+    await setPantryMark(
+      householdId: h.id,
+      ingredient: first.ingredient,
+      marked: true,
+    );
+
+    final usedUp = await setPantryUsedUp(
+      householdId: h.id,
+      ingredient: first.ingredient,
+    );
+    expect(usedUp.marked, isFalse);
+    expect(usedUp.restockRequested, isTrue);
+
+    // Idempotent: a prior flag plus a repeated tap leaves one flag, no mark.
+    final again = await setPantryUsedUp(
+      householdId: h.id,
+      ingredient: first.ingredient,
+    );
+    expect(again.marked, isFalse);
+    expect(again.restockRequested, isTrue);
+  });
+
+  /// OPT-006 gate 1: the restock line reaches the derived shopping list independent of any
+  /// recipe demand and independent of the have/none mark.
+  test(
+    'a restock-flagged, never-cooked ingredient reaches the derived shopping list',
+    () async {
+      await openDatabase(dbPath: await tempDb());
+      final h = await bootstrapHousehold();
+      await installStarterContent(householdId: h.id);
+      final target = (await listPantry(householdId: h.id))[2];
+      await setRestockFlag(
+        householdId: h.id,
+        ingredient: target.ingredient,
+        flagged: true,
+      );
+      final list = await deriveShoppingList(
+        householdId: h.id,
+        fromDate: '2026-08-29',
+        toDate: '2026-09-04',
+      );
+      final line = list.groups
+          .expand((g) => g.lines)
+          .firstWhere((l) => l.name == target.name);
+      expect(line.restock, isTrue);
+      expect(line.key, startsWith('r:'));
+    },
+  );
+
+  /// OPT-006 gate 5: the store-category vocabulary the creation and categorization dropdowns
+  /// share, and a custom ingredient created with one round-trips through listing.
+  test('known_store_categories matches the domain vocabulary', () async {
+    expect(await knownStoreCategories(), [
+      'bakery',
+      'dairy',
+      'frozen',
+      'meat',
+      'pantry',
+      'produce',
+      'seafood',
+    ]);
+  });
+
+  test(
+    'custom-ingredient creation requires a known category, and a valid one round-trips',
+    () async {
+      await openDatabase(dbPath: await tempDb());
+      final h = await bootstrapHousehold();
+
+      await expectLater(
+        () => addCustomIngredient(
+          item: CustomIngredientDto(
+            id: '',
+            householdId: h.id,
+            name: 'nana\'s mix',
+            storeCategory: 'not-a-real-category',
+          ),
+        ),
+        throwsA(isA<KimattaError_Recipe>()),
+      );
+
+      final created = await addCustomIngredient(
+        item: CustomIngredientDto(
+          id: '',
+          householdId: h.id,
+          name: 'nana\'s mix',
+          storeCategory: 'pantry',
+        ),
+      );
+      expect(created.storeCategory, 'pantry');
+      final listed = await listCustomIngredients(householdId: h.id);
+      expect(listed.single.storeCategory, 'pantry');
+    },
+  );
+
+  /// OPT-006 gate 5 remediation: an existing custom ingredient's category can be changed
+  /// through the same validated write path as creation.
+  test(
+    'set_custom_ingredient_category updates an existing custom ingredient',
+    () async {
+      await openDatabase(dbPath: await tempDb());
+      final h = await bootstrapHousehold();
+      final created = await addCustomIngredient(
+        item: CustomIngredientDto(
+          id: '',
+          householdId: h.id,
+          name: 'nana\'s mix',
+          storeCategory: 'pantry',
+        ),
+      );
+      final recategorized = await setCustomIngredientCategory(
+        householdId: h.id,
+        id: created.id,
+        storeCategory: 'dairy',
+      );
+      expect(recategorized.storeCategory, 'dairy');
+      expect(
+        (await listCustomIngredients(householdId: h.id)).single.storeCategory,
+        'dairy',
+      );
+      expect(
+        await listCustomIngredientsMissingCategory(householdId: h.id),
+        isEmpty,
+      );
+    },
+  );
 
   /// MVP-015 at the real bridge, and the only place the generated shopping decoders are ever
   /// executed: `flutter_rust_bridge_codegen generate` proves codegen ran, not that
@@ -1339,7 +1500,12 @@ void main() {
     await openDatabase(dbPath: await tempDb());
     final h = await bootstrapHousehold();
     await addCustomIngredient(
-      item: CustomIngredientDto(id: '', householdId: h.id, name: 'mix'),
+      item: CustomIngredientDto(
+        id: '',
+        householdId: h.id,
+        name: 'mix',
+        storeCategory: 'pantry',
+      ),
     );
     expect((await listCustomIngredients(householdId: h.id)).single.name, 'mix');
     expect(await listCustomIngredients(householdId: 'not-${h.id}'), isEmpty);

@@ -12,8 +12,8 @@ import 'package:freezed_annotation/freezed_annotation.dart' hide protected;
 import 'restrictions.dart';
 part 'recipe.freezed.dart';
 
-// These functions are ignored because they are not marked as `pub`: `add_custom_ingredient_in`, `archive_recipe_in`, `assess_names`, `assessment_from_domain`, `custom_from_domain`, `id_or_minted`, `line_from_domain`, `line_to_domain`, `list_archived_recipes_in`, `list_custom_ingredients_in`, `list_recipes_in`, `load_recipe_in`, `quantity_from_domain`, `quantity_to_domain`, `rational`, `recipe_from_domain`, `recipe_to_domain`, `ref_from_domain`, `ref_to_domain`, `restore_recipe_in`, `save_recipe_in`, `stored_recipe`, `summaries`, `unit_from_domain`, `unit_to_domain`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
+// These functions are ignored because they are not marked as `pub`: `add_custom_ingredient_in`, `archive_recipe_in`, `assess_names`, `assessment_from_domain`, `custom_from_domain`, `id_or_minted`, `line_from_domain`, `line_to_domain`, `list_archived_recipes_in`, `list_custom_ingredients_in`, `list_recipes_in`, `load_recipe_in`, `missing_category_in`, `quantity_from_domain`, `quantity_to_domain`, `rational`, `recipe_from_domain`, `recipe_to_domain`, `ref_from_domain`, `ref_to_domain`, `restore_recipe_in`, `save_recipe_in`, `set_category_in`, `stored_recipe`, `summaries`, `unit_from_domain`, `unit_to_domain`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 
 /// Saves the whole recipe; an empty `id` mints a v4 UUID (as `bootstrap_household` does).
 /// Returns what was stored.
@@ -67,6 +67,30 @@ Future<RecipeDto> restoreRecipe({
 Future<List<String>> knownUnitKinds() =>
     RustLib.instance.api.crateApiRecipeKnownUnitKinds();
 
+/// The known store-category vocabulary (OPT-006 gate 5), so the custom-ingredient creation and
+/// categorization dropdowns have one source and cannot drift from the domain.
+Future<List<String>> knownStoreCategories() =>
+    RustLib.instance.api.crateApiRecipeKnownStoreCategories();
+
+/// Custom ingredients this household has not yet categorized (OPT-006 gate 5 remediation).
+Future<List<CustomIngredientMissingCategoryDto>>
+listCustomIngredientsMissingCategory({required String householdId}) =>
+    RustLib.instance.api.crateApiRecipeListCustomIngredientsMissingCategory(
+      householdId: householdId,
+    );
+
+/// Sets `store_category` on a pre-existing custom ingredient (OPT-006 gate 5 remediation),
+/// validated identically to creation. Returns the entry as stored.
+Future<CustomIngredientDto> setCustomIngredientCategory({
+  required String householdId,
+  required String id,
+  required String storeCategory,
+}) => RustLib.instance.api.crateApiRecipeSetCustomIngredientCategory(
+  householdId: householdId,
+  id: id,
+  storeCategory: storeCategory,
+);
+
 /// Empty `id` mints a UUID. Returns the stored item.
 Future<CustomIngredientDto> addCustomIngredient({
   required CustomIngredientDto item,
@@ -115,13 +139,17 @@ class CustomIngredientDto {
   final String id;
   final String householdId;
   final String name;
-  final String? storeCategory;
+
+  /// Required at creation (OPT-006 gate 5) — a pre-existing row created before this
+  /// requirement lands in `CustomIngredientMissingCategoryDto` instead, never here with an
+  /// invented value.
+  final String storeCategory;
 
   const CustomIngredientDto({
     required this.id,
     required this.householdId,
     required this.name,
-    this.storeCategory,
+    required this.storeCategory,
   });
 
   @override
@@ -140,6 +168,30 @@ class CustomIngredientDto {
           householdId == other.householdId &&
           name == other.name &&
           storeCategory == other.storeCategory;
+}
+
+/// A custom ingredient this household has not yet categorized (OPT-006 gate 5 remediation) —
+/// `CustomIngredientDto` is deliberately not reused here, since its `store_category` is
+/// non-optional and this listing exists precisely because that field is missing.
+class CustomIngredientMissingCategoryDto {
+  final String id;
+  final String name;
+
+  const CustomIngredientMissingCategoryDto({
+    required this.id,
+    required this.name,
+  });
+
+  @override
+  int get hashCode => id.hashCode ^ name.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is CustomIngredientMissingCategoryDto &&
+          runtimeType == other.runtimeType &&
+          id == other.id &&
+          name == other.name;
 }
 
 class IngredientLineDto {

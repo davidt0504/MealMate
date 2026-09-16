@@ -585,11 +585,22 @@ class _SeamedArchivedRecipesNotifier extends ArchivedRecipesNotifier {
 /// so a regression in any of them is visible here. Overriding `setMark` wholesale — as this
 /// double used to — meant every row assertion verified the test file's own copy of the merge.
 class _FakePantryNotifier extends PantryNotifier {
-  _FakePantryNotifier(this._build, this._setMark);
+  _FakePantryNotifier(
+    this._build,
+    this._setMark, {
+    Future<PantryEntryDto> Function(String, IngredientRefDto, bool)?
+    setRestockFlag,
+    Future<PantryEntryDto> Function(String, IngredientRefDto)? setUsedUp,
+  }) : _setRestockFlag = setRestockFlag,
+       _setUsedUp = setUsedUp;
 
   final FutureOr<List<PantryEntryDto>> Function()? _build;
   final Future<PantryEntryDto> Function(String, IngredientRefDto, bool)?
   _setMark;
+  final Future<PantryEntryDto> Function(String, IngredientRefDto, bool)?
+  _setRestockFlag;
+  final Future<PantryEntryDto> Function(String, IngredientRefDto)?
+  _setUsedUp;
 
   @override
   Future<List<PantryEntryDto>> fetchPantry(String householdId) async =>
@@ -608,6 +619,35 @@ class _FakePantryNotifier extends PantryNotifier {
       );
     }
     return fake(householdId, ingredient, marked);
+  }
+
+  @override
+  Future<PantryEntryDto> writeRestockFlag(
+    String householdId,
+    IngredientRefDto ingredient,
+    bool flagged,
+  ) async {
+    final fake = _setRestockFlag;
+    if (fake == null) {
+      throw StateError(
+        'this test flags a pantry row without a `setRestockFlag:` hook',
+      );
+    }
+    return fake(householdId, ingredient, flagged);
+  }
+
+  @override
+  Future<PantryEntryDto> writeUsedUp(
+    String householdId,
+    IngredientRefDto ingredient,
+  ) async {
+    final fake = _setUsedUp;
+    if (fake == null) {
+      throw StateError(
+        'this test taps Used up without a `setUsedUp:` hook',
+      );
+    }
+    return fake(householdId, ingredient);
   }
 }
 
@@ -831,6 +871,7 @@ final okShoppingList = ShoppingListDto(
             contribution('pm-1', '2026-08-29', '1 cup flour'),
             contribution('pm-2', '2026-08-30', '1 1/2 cup flour'),
           ],
+          restock: false,
         ),
         ShoppingLineDto(
           key: onionKey,
@@ -841,6 +882,7 @@ final okShoppingList = ShoppingListDto(
           optional: false,
           status: ShoppingLineStatusDto.omittedPantryMarked,
           contributions: [contribution('pm-1', '2026-08-29', '2 onions')],
+          restock: false,
         ),
       ],
     ),
@@ -855,6 +897,7 @@ final okShoppingList = ShoppingListDto(
           status: ShoppingLineStatusDto.needed,
           separateReason: SeparateReasonDto.unresolved,
           contributions: [contribution('pm-1', '2026-08-29', 'a mystery')],
+          restock: false,
         ),
       ],
     ),
@@ -956,12 +999,16 @@ const pantryEntries = [
     name: 'chickpeas',
     aliases: ['garbanzo beans'],
     marked: false,
+    restockRequested: false,
+    storeCategory: 'pantry',
   ),
   PantryEntryDto(
     ingredient: houseMixRef,
     name: "nana's mix",
     aliases: [],
     marked: false,
+    restockRequested: false,
+    storeCategory: 'pantry',
   ),
 ];
 
@@ -972,8 +1019,16 @@ PantryEntryDto pantryEntryMarked(IngredientRefDto ingredient, bool marked) {
     name: entry.name,
     aliases: entry.aliases,
     marked: marked,
+    restockRequested: entry.restockRequested,
+    storeCategory: entry.storeCategory,
   );
 }
+
+/// Both fixture entries marked "have", so they render on My Shelves' default (unsearched) view
+/// — for tests about the list re-reading, not about the have-mark itself.
+List<PantryEntryDto> pantryEntriesAllMarked() => [
+  for (final entry in pantryEntries) pantryEntryMarked(entry.ingredient, true),
+];
 
 /// The eleven unit tokens the real bridge returns (`known_unit_kinds`).
 const unitKindTokens = [
@@ -988,6 +1043,17 @@ const unitKindTokens = [
   'oz',
   'lb',
   'piece',
+];
+
+/// The seven tokens the real bridge returns (`known_store_categories`, OPT-006 gate 5).
+const storeCategoryTokens = [
+  'bakery',
+  'dairy',
+  'frozen',
+  'meat',
+  'pantry',
+  'produce',
+  'seafood',
 ];
 
 /// The eleven tokens the real bridge returns, so the editor's checkbox list is the same
@@ -1030,6 +1096,8 @@ Widget harness({
   Future<StarterInstallReportDto> Function(String)? starterInstall,
   FutureOr<List<PantryEntryDto>> Function()? pantry,
   Future<PantryEntryDto> Function(String, IngredientRefDto, bool)? setMark,
+  Future<PantryEntryDto> Function(String, IngredientRefDto)? usedUp,
+  FutureOr<List<String>> Function()? storeCategories,
   FutureOr<PlanningCycleDto> Function(int)? cycleWindow,
   FutureOr<List<PlannedMealDto>> Function()? planner,
   Future<PlannedMealDto> Function(PlannedMealDto)? savePlanned,
@@ -1125,7 +1193,15 @@ Widget harness({
     // Unconditional, as the restriction overrides are: the destinations, restoration,
     // accessibility and text-scale tests all visit Pantry, and an un-overridden provider
     // would reach the real bridge.
-    pantryProvider.overrideWith(() => _FakePantryNotifier(pantry, setMark)),
+    pantryProvider.overrideWith(
+      () => _FakePantryNotifier(pantry, setMark, setUsedUp: usedUp),
+    ),
+    // Unconditional, like `knownUnitKindsProvider`: the categorize sheet and the
+    // custom-ingredient form both watch this, and an un-overridden provider would reach the
+    // real bridge, which `flutter test` never initialises.
+    knownStoreCategoriesProvider.overrideWith(
+      (_) async => (storeCategories ?? () => storeCategoryTokens)(),
+    ),
     plannerTodayProvider.overrideWithValue('2026-08-29'),
   ],
   child: App(initialLocation: initial),
@@ -1415,7 +1491,14 @@ void main() {
     for (final label in labels) {
       await tester.tap(tab(label));
       await tester.pumpAndSettle();
-      expect(title(label), findsOneWidget, reason: 'destination $label');
+      // The Pantry tab's AppBar reads "My Shelves" (OPT-006) — the bottom-nav label and the
+      // screen's own title are allowed to differ, and only Pantry's do.
+      final expectedTitle = label == 'Pantry' ? 'My Shelves' : label;
+      expect(
+        title(expectedTitle),
+        findsOneWidget,
+        reason: 'destination $label',
+      );
     }
   });
 
@@ -2064,11 +2147,11 @@ void main() {
 
     await tester.tap(tab('Pantry'));
     await tester.pumpAndSettle();
-    expect(title('Pantry'), findsOneWidget);
+    expect(title('My Shelves'), findsOneWidget);
 
     await tester.restartAndRestore();
     await tester.pumpAndSettle();
-    expect(title('Pantry'), findsOneWidget);
+    expect(title('My Shelves'), findsOneWidget);
   });
 
   testWidgets('Settings reports the database schema version and path', (
@@ -5645,6 +5728,12 @@ void main() {
 
   // --- MVP-014 pantry ------------------------------------------------------
 
+  /// The default "My Shelves" view shows only marked rows, so an unmarked catalog identity is
+  /// found through search first (gate 2) before it can be marked from this screen.
+  // `find.text` also matches the search `TextField`'s own `EditableText` once its value is
+  // the same string, so this targets the row's `InkWell` specifically rather than any text.
+  Finder rowInkWell(String name) => find.widgetWithText(InkWell, name);
+
   testWidgets('the pantry screen lists identities and marks one', (
     tester,
   ) async {
@@ -5661,50 +5750,107 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.text(pantryDisclaimer), findsOneWidget);
-    expect(find.byType(SwitchListTile), findsNWidgets(2));
-    expect(find.text('Your ingredient'), findsOneWidget);
+    expect(
+      find.text(pantryNothingMarkedCopy),
+      findsOneWidget,
+      reason: 'both fixture entries start unmarked',
+    );
 
-    await tester.tap(find.widgetWithText(SwitchListTile, 'chickpeas'));
+    await tester.enterText(find.byType(TextField), 'chickpeas');
+    await tester.pumpAndSettle();
+    expect(rowInkWell('chickpeas'), findsOneWidget);
+    expect(find.text('Your ingredient'), findsNothing);
+
+    await tester.tap(rowInkWell('chickpeas'));
     await tester.pumpAndSettle();
     expect(sent, [('h-1', chickpeasRef, true)]);
     expect(
-      tester
-          .widget<SwitchListTile>(
-            find.widgetWithText(SwitchListTile, 'chickpeas'),
-          )
-          .value,
-      isTrue,
+      find.bySemanticsLabel(pantryRowLabel('chickpeas', true)),
+      findsOneWidget,
     );
   });
 
+  /// Unmarking via the row toggle routes through the same combined unmark+restock-flag
+  /// transaction "Used up" uses (OPT-006 gate 4's safety net must hold on every path to "not
+  /// marked", not only the smaller "Used up" chip).
   testWidgets('unmarking sends marked false and the row returns to unmarked', (
     tester,
   ) async {
     useTallView(tester);
-    final sent = <bool>[];
+    var usedUpCalls = 0;
     await tester.pumpWidget(
       harness(
         initial: '/pantry',
         pantry: () => [pantryEntryMarked(chickpeasRef, true)],
-        setMark: (_, ingredient, marked) async {
-          sent.add(marked);
-          return pantryEntryMarked(ingredient, marked);
+        usedUp: (_, ingredient) async {
+          usedUpCalls++;
+          return PantryEntryDto(
+            ingredient: ingredient,
+            name: 'chickpeas',
+            aliases: const ['garbanzo beans'],
+            marked: false,
+            restockRequested: true,
+            storeCategory: 'pantry',
+          );
         },
       ),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(SwitchListTile, 'chickpeas'));
+    // Visible on the default My Shelves view while marked; search keeps it visible once
+    // unmarking removes it from that grouped view, so the row itself can still be checked.
+    await tester.enterText(find.byType(TextField), 'chickpeas');
     await tester.pumpAndSettle();
-    expect(sent, [false]);
+    await tester.tap(rowInkWell('chickpeas'));
+    await tester.pumpAndSettle();
+    expect(usedUpCalls, 1);
     expect(
-      tester
-          .widget<SwitchListTile>(
-            find.widgetWithText(SwitchListTile, 'chickpeas'),
-          )
-          .value,
-      isFalse,
+      find.bySemanticsLabel(pantryRowLabel('chickpeas', false)),
+      findsOneWidget,
+    );
+    // The safety net actually landed: the row now shows the restock flag as set, not just an
+    // unmarked have-state (gate 4 — this is what distinguishes the fix from a plain unmark).
+    expect(
+      find.bySemanticsLabel(pantryRestockChipLabel('chickpeas', true)),
+      findsOneWidget,
     );
   });
+
+  /// Adversarial (HIGH-tier, gate 4 safety net): a failed unmark-via-toggle must not silently
+  /// leave the household believing the safety net fired when it didn't — the row must stay at
+  /// its stored (marked) value and the failure must be reported, exactly as a failed plain mark
+  /// already is.
+  testWidgets(
+    'a failed unmark via the row toggle reports the reason and leaves the row marked',
+    (tester) async {
+      useTallView(tester);
+      await tester.pumpWidget(
+        harness(
+          initial: '/pantry',
+          pantry: () => [pantryEntryMarked(chickpeasRef, true)],
+          usedUp: (_, _) async => throw const KimattaError.notOpen(),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField), 'chickpeas');
+      await tester.pumpAndSettle();
+      await tester.tap(rowInkWell('chickpeas'));
+      await tester.pumpAndSettle();
+      expect(
+        find.descendant(
+          of: find.byType(SnackBar),
+          matching: find.text(
+            describeFailure(const KimattaError.notOpen(), subject: 'Pantry'),
+          ),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.bySemanticsLabel(pantryRowLabel('chickpeas', true)),
+        findsOneWidget,
+        reason: 'a failed write must leave the row at its stored value',
+      );
+    },
+  );
 
   testWidgets('the pantry search filters by name', (tester) async {
     useTallView(tester);
@@ -5713,13 +5859,13 @@ void main() {
 
     await tester.enterText(find.byType(TextField), 'nana');
     await tester.pumpAndSettle();
-    expect(find.byType(SwitchListTile), findsOneWidget);
     expect(find.text("nana's mix"), findsOneWidget);
+    expect(find.text('chickpeas'), findsNothing);
 
     await tester.enterText(find.byType(TextField), 'zzz');
     await tester.pumpAndSettle();
-    expect(find.byType(SwitchListTile), findsNothing);
     expect(find.text(pantryNoMatchCopy('zzz')), findsOneWidget);
+    expect(find.text("nana's mix"), findsNothing);
   });
 
   /// Edge: `ingredient_alias` ships names that are not substrings of their canonical name, so
@@ -5733,9 +5879,153 @@ void main() {
 
     await tester.enterText(find.byType(TextField), 'garbanzo');
     await tester.pumpAndSettle();
-    expect(find.byType(SwitchListTile), findsOneWidget);
     expect(find.text('chickpeas'), findsOneWidget);
   });
+
+  /// Gate 2: the default view groups marked rows by `store_category`, one header per category.
+  testWidgets('My Shelves groups marked rows by store category', (
+    tester,
+  ) async {
+    useTallView(tester);
+    await tester.pumpWidget(
+      harness(
+        initial: '/pantry',
+        pantry: () => [
+          PantryEntryDto(
+            ingredient: chickpeasRef,
+            name: 'chickpeas',
+            aliases: const [],
+            marked: true,
+            restockRequested: false,
+            storeCategory: 'pantry',
+          ),
+          PantryEntryDto(
+            ingredient: houseMixRef,
+            name: "nana's mix",
+            aliases: const [],
+            marked: true,
+            restockRequested: false,
+            storeCategory: 'dairy',
+          ),
+        ],
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('pantry'), findsOneWidget);
+    expect(find.text('dairy'), findsOneWidget);
+    expect(find.text('chickpeas'), findsOneWidget);
+    expect(find.text("nana's mix"), findsOneWidget);
+    expect(
+      find.text('uncategorised'),
+      findsNothing,
+      reason: 'gate 5: no fallback bucket, anywhere',
+    );
+  });
+
+  /// Gate 5 remediation: a marked row with no category is excluded from the grouped list and
+  /// surfaces via the categorize banner instead — never silently dropped, never grouped under
+  /// a catch-all.
+  testWidgets(
+    'a marked row with no category triggers the categorize banner, not a grouped bucket',
+    (tester) async {
+      useTallView(tester);
+      await tester.pumpWidget(
+        harness(
+          initial: '/pantry',
+          pantry: () => [
+            const PantryEntryDto(
+              ingredient: houseMixRef,
+              name: "nana's mix",
+              aliases: [],
+              marked: true,
+              restockRequested: false,
+              storeCategory: null,
+            ),
+          ],
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text(pantryNeedsCategoryCopy(1)), findsOneWidget);
+      expect(
+        find.text("nana's mix"),
+        findsNothing,
+        reason: 'not rendered grouped while uncategorised',
+      );
+    },
+  );
+
+  /// Edge case, gate 5: the categorize sheet must show exactly what the banner counted — an
+  /// unmarked custom ingredient missing a category is invisible on My Shelves at all, so it
+  /// must not appear in the sheet either, even though it's also missing a category.
+  testWidgets(
+    'the categorize sheet shows exactly the marked rows the banner counted, no more',
+    (tester) async {
+      useTallView(tester);
+      const otherCustomRef = IngredientRefDto.custom(id: 'c-2');
+      await tester.pumpWidget(
+        harness(
+          initial: '/pantry',
+          pantry: () => const [
+            PantryEntryDto(
+              ingredient: houseMixRef,
+              name: "nana's mix",
+              aliases: [],
+              marked: true,
+              restockRequested: false,
+              storeCategory: null,
+            ),
+            PantryEntryDto(
+              ingredient: otherCustomRef,
+              name: 'unmarked extra',
+              aliases: [],
+              marked: false,
+              restockRequested: false,
+              storeCategory: null,
+            ),
+          ],
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.text(pantryNeedsCategoryCopy(1)),
+        findsOneWidget,
+        reason: 'banner counts only the marked-and-uncategorised row',
+      );
+
+      await tester.tap(find.text(pantryNeedsCategoryCopy(1)));
+      await tester.pumpAndSettle();
+      expect(find.text("nana's mix"), findsOneWidget);
+      expect(
+        find.text('unmarked extra'),
+        findsNothing,
+        reason: "the sheet must not show more than the banner's own count",
+      );
+    },
+  );
+
+  /// The no-match search affordance opens the custom-ingredient creation screen (Step 17),
+  /// pre-filled with the search text — no new route, no FAB, per gate 2.
+  testWidgets(
+    "a no-match search offers 'Add as a new ingredient', opening the creation form",
+    (tester) async {
+      useTallView(tester);
+      await tester.pumpWidget(harness(initial: '/pantry'));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(find.byType(TextField), 'quinoa');
+      await tester.pumpAndSettle();
+      expect(find.text("Add 'quinoa' as a new ingredient"), findsOneWidget);
+
+      await tester.tap(find.text("Add 'quinoa' as a new ingredient"));
+      await tester.pumpAndSettle();
+      expect(find.text('Add ingredient'), findsOneWidget);
+      expect(find.widgetWithText(TextField, 'Name'), findsOneWidget);
+      final nameField = tester.widget<TextField>(
+        find.widgetWithText(TextField, 'Name'),
+      );
+      expect(nameField.controller?.text, 'quinoa');
+    },
+  );
 
   /// AC-2: an empty pantry is a screen that still works and says what it does not know,
   /// never a claim that the household is out of anything.
@@ -5747,9 +6037,8 @@ void main() {
       harness(initial: '/pantry', pantry: () => const <PantryEntryDto>[]),
     );
     await tester.pumpAndSettle();
-    expect(title('Pantry'), findsOneWidget);
+    expect(title('My Shelves'), findsOneWidget);
     expect(find.text(pantryEmptyCopy), findsOneWidget);
-    expect(find.byType(SwitchListTile), findsNothing);
     expect(find.text(pantryDisclaimer), findsOneWidget);
   });
 
@@ -5765,14 +6054,13 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    expect(title('Pantry'), findsOneWidget);
+    expect(title('My Shelves'), findsOneWidget);
     expect(
       find.text(
         describeFailure(const KimattaError.notOpen(), subject: 'Pantry'),
       ),
       findsOneWidget,
     );
-    expect(find.byType(SwitchListTile), findsNothing);
   });
 
   testWidgets('a failed pantry mark reports the reason in a snackbar and '
@@ -5785,7 +6073,9 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(SwitchListTile, 'chickpeas'));
+    await tester.enterText(find.byType(TextField), 'chickpeas');
+    await tester.pumpAndSettle();
+    await tester.tap(rowInkWell('chickpeas'));
     await tester.pumpAndSettle();
     expect(
       find.descendant(
@@ -5797,12 +6087,8 @@ void main() {
       findsOneWidget,
     );
     expect(
-      tester
-          .widget<SwitchListTile>(
-            find.widgetWithText(SwitchListTile, 'chickpeas'),
-          )
-          .value,
-      isFalse,
+      find.bySemanticsLabel(pantryRowLabel('chickpeas', false)),
+      findsOneWidget,
       reason: 'a failed write must leave the row at its stored value',
     );
   });
@@ -5877,12 +6163,18 @@ void main() {
       await expectLater(tester, meetsGuideline(androidTapTargetGuideline));
       await expectLater(tester, meetsGuideline(labeledTapTargetGuideline));
       await expectLater(tester, meetsGuideline(textContrastGuideline));
+      // Both fixture entries start unmarked, so the default "My Shelves" view shows neither —
+      // search surfaces each in turn to check its label carries its meaning exactly.
       for (final entry in pantryEntries) {
+        await tester.enterText(find.byType(TextField), entry.name);
+        await tester.pumpAndSettle();
         expect(
           find.bySemanticsLabel(pantryRowLabel(entry.name, entry.marked)),
           findsOneWidget,
           reason: '${entry.name} must carry its meaning as its exact label',
         );
+        await expectLater(tester, meetsGuideline(androidTapTargetGuideline));
+        await expectLater(tester, meetsGuideline(labeledTapTargetGuideline));
       }
     }
     handle.dispose();
@@ -5983,12 +6275,13 @@ void main() {
         initial: '/pantry',
         pantry: () {
           reads++;
-          return reads == 1 ? const <PantryEntryDto>[] : pantryEntries;
+          return reads == 1 ? const <PantryEntryDto>[] : pantryEntriesAllMarked();
         },
       ),
     );
     await tester.pumpAndSettle();
-    expect(find.byType(SwitchListTile), findsNWidgets(2));
+    expect(find.text('chickpeas'), findsOneWidget);
+    expect(find.text("nana's mix"), findsOneWidget);
   });
 
   /// MVP-032 step 14: the recipe half of the same hazard. The install now writes recipes —
@@ -6074,7 +6367,8 @@ void main() {
       harness(
         initial: '/pantry',
         starterInstall: (_) async => noCatalogStarterReport,
-        pantry: () => installed ? pantryEntries : const <PantryEntryDto>[],
+        pantry: () =>
+            installed ? pantryEntriesAllMarked() : const <PantryEntryDto>[],
       ),
     );
     await tester.pumpAndSettle();
@@ -6083,7 +6377,8 @@ void main() {
     installed = true;
     await tester.fling(find.byType(ListView), const Offset(0, 300), 1000);
     await tester.pumpAndSettle();
-    expect(find.byType(SwitchListTile), findsNWidgets(2));
+    expect(find.text('chickpeas'), findsOneWidget);
+    expect(find.text("nana's mix"), findsOneWidget);
   });
 
   testWidgets('the pantry error arm retries', (tester) async {
@@ -6094,7 +6389,7 @@ void main() {
         initial: '/pantry',
         starterInstall: (_) async => noCatalogStarterReport,
         pantry: () {
-          if (installed) return pantryEntries;
+          if (installed) return pantryEntriesAllMarked();
           throw const KimattaError.notOpen();
         },
       ),
@@ -6110,7 +6405,8 @@ void main() {
     installed = true;
     await tester.tap(find.text('Try again'));
     await tester.pumpAndSettle();
-    expect(find.byType(SwitchListTile), findsNWidgets(2));
+    expect(find.text('chickpeas'), findsOneWidget);
+    expect(find.text("nana's mix"), findsOneWidget);
   });
 
   /// The other half of `refresh`: a pull-to-refresh that fails over a list the user is already
@@ -6127,7 +6423,7 @@ void main() {
         starterInstall: (_) async => noCatalogStarterReport,
         pantry: () {
           reads++;
-          if (reads == 1) return pantryEntries;
+          if (reads == 1) return pantryEntriesAllMarked();
           throw const KimattaError.notOpen();
         },
       ),
@@ -6145,10 +6441,11 @@ void main() {
       findsOneWidget,
     );
     expect(
-      find.byType(SwitchListTile),
-      findsNWidgets(2),
+      find.text('chickpeas'),
+      findsOneWidget,
       reason: 'a failed refresh must not cost the user the list',
     );
+    expect(find.text("nana's mix"), findsOneWidget);
   });
 
   /// AC-3's accessible half on the *second* pantry control. This is the only
@@ -7697,15 +7994,8 @@ void main() {
       await tester.tap(tab('Pantry'));
       await tester.pumpAndSettle();
       expect(
-        tester
-            .widget<SwitchListTile>(
-              find.ancestor(
-                of: find.text('chickpeas'),
-                matching: find.byType(SwitchListTile),
-              ),
-            )
-            .value,
-        isTrue,
+        find.bySemanticsLabel(pantryRowLabel('chickpeas', true)),
+        findsOneWidget,
       );
 
       await tester.tap(tab('Shopping'));
@@ -8101,12 +8391,9 @@ void main() {
 
     await tester.tap(tab('Pantry'));
     await tester.pumpAndSettle();
-    await tester.tap(
-      find.ancestor(
-        of: find.text('chickpeas'),
-        matching: find.byType(SwitchListTile),
-      ),
-    );
+    await tester.enterText(find.byType(TextField), 'chickpeas');
+    await tester.pumpAndSettle();
+    await tester.tap(rowInkWell('chickpeas'));
     await tester.pump();
     await tester.tap(tab('Shopping'));
     await tester.pump();
@@ -8117,6 +8404,127 @@ void main() {
     pending.complete(shoppingView(items: [batteries]));
     await tester.pumpAndSettle();
     expect(find.text('batteries'), findsOneWidget);
+  });
+
+  group('PantryNotifier.setRestockFlag / setUsedUp', () {
+    ProviderContainer containerWith(_FakePantryNotifier notifier) {
+      final container = ProviderContainer(
+        overrides: [
+          healthReportProvider.overrideWith((_) => okReport),
+          householdProvider.overrideWith(
+            () => _FakeHouseholdNotifier(() => okHousehold, null, null),
+          ),
+          pantryProvider.overrideWith(() => notifier),
+        ],
+      );
+      addTearDown(container.dispose);
+      return container;
+    }
+
+    test('setRestockFlag patches the matching row in place', () async {
+      final notifier = _FakePantryNotifier(
+        () => pantryEntries,
+        null,
+        setRestockFlag: (_, ref, flagged) async {
+          final entry = pantryEntries.firstWhere((e) => e.ingredient == ref);
+          return PantryEntryDto(
+            ingredient: entry.ingredient,
+            name: entry.name,
+            aliases: entry.aliases,
+            marked: entry.marked,
+            restockRequested: flagged,
+            storeCategory: entry.storeCategory,
+          );
+        },
+      );
+      final container = containerWith(notifier);
+      await container.read(pantryProvider.future);
+      final stored = await notifier.setRestockFlag(
+        okHousehold.id,
+        chickpeasRef,
+        true,
+      );
+      expect(stored.restockRequested, isTrue);
+      final list = container.read(pantryProvider).requireValue;
+      expect(
+        list.firstWhere((e) => e.ingredient == chickpeasRef).restockRequested,
+        isTrue,
+      );
+      // Untouched rows keep their prior state — only the flagged identity changed.
+      expect(
+        list.firstWhere((e) => e.ingredient == houseMixRef).restockRequested,
+        isFalse,
+      );
+    });
+
+    test('setUsedUp clears the mark and sets the flag on the same row', () async {
+      final notifier = _FakePantryNotifier(
+        () => [pantryEntryMarked(chickpeasRef, true), pantryEntries[1]],
+        null,
+        setUsedUp: (_, ref) async {
+          final entry = pantryEntries.firstWhere((e) => e.ingredient == ref);
+          return PantryEntryDto(
+            ingredient: entry.ingredient,
+            name: entry.name,
+            aliases: entry.aliases,
+            marked: false,
+            restockRequested: true,
+            storeCategory: entry.storeCategory,
+          );
+        },
+      );
+      final container = containerWith(notifier);
+      await container.read(pantryProvider.future);
+      final stored = await notifier.setUsedUp(okHousehold.id, chickpeasRef);
+      expect(stored.marked, isFalse);
+      expect(stored.restockRequested, isTrue);
+      final list = container.read(pantryProvider).requireValue;
+      final row = list.firstWhere((e) => e.ingredient == chickpeasRef);
+      expect(row.marked, isFalse);
+      expect(row.restockRequested, isTrue);
+    });
+
+    test(
+      'a write for an identity the list has never seen falls back to a re-list',
+      () async {
+        var fetches = 0;
+        final newRef = const IngredientRefDto.catalog(id: 'i-new');
+        final notifier = _FakePantryNotifier(
+          () {
+            fetches++;
+            return fetches == 1
+                ? pantryEntries
+                : [
+                    ...pantryEntries,
+                    PantryEntryDto(
+                      ingredient: newRef,
+                      name: 'new item',
+                      aliases: const [],
+                      marked: false,
+                      restockRequested: true,
+                      storeCategory: 'pantry',
+                    ),
+                  ];
+          },
+          null,
+          setRestockFlag: (_, ref, flagged) async => PantryEntryDto(
+            ingredient: ref,
+            name: 'new item',
+            aliases: const [],
+            marked: false,
+            restockRequested: flagged,
+            storeCategory: 'pantry',
+          ),
+        );
+        final container = containerWith(notifier);
+        await container.read(pantryProvider.future);
+        expect(fetches, 1);
+        await notifier.setRestockFlag(okHousehold.id, newRef, true);
+        expect(fetches, 2, reason: 'an unseen identity triggers a re-list');
+        final list = container.read(pantryProvider).requireValue;
+        expect(list.any((e) => e.ingredient == newRef), isTrue);
+      },
+    );
   });
 
   testWidgets('a planner save re-reads shopping', (tester) async {

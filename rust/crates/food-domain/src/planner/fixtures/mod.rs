@@ -157,6 +157,7 @@ pub fn shopping_input_of(f: &PlannerFixture, result: &PlanningResult) -> Shoppin
         recipes: f.recipes.clone(),
         identities,
         pantry_marked: f.snapshot.pantry_marked.clone(),
+        restock_flagged: Vec::new(),
     }
 }
 

@@ -78,7 +78,7 @@ This is the durable operational source of truth after the MVP as well as during 
 | PRE-003 | Draft | iOS toolchain readiness (post-launch) | PRE-002, DEC-005 |
 | OPT-001 | Draft | Structured URL recipe import | MVP-008 |
 | OPT-002 | Draft | Messy recipe import (photo/screenshot/URL via model, candidates only) | MVP-008, MVP-018, DEC-006 |
-| OPT-003 | Draft — folding into OPT-006 pending its grill-me gate 6 | Staples: quantity-free keep-stocked items reach the list without a planned meal | MVP-014, MVP-015, MVP-016; after MVP-034 |
+| OPT-003 | Superseded by OPT-006 | Staples: quantity-free keep-stocked items reach the list without a planned meal | MVP-014, MVP-015, MVP-016; after MVP-034 |
 | OPT-004 | Draft | Breakfast and lunch planning: slot suitability, a scope control, and the held-back owner recipes | MVP-013, MVP-023, MVP-024, MVP-032 |
 | OPT-005 | Draft | Branded first-run arrival and optional orientation | MVP-033, MVP-034 |
 | FIX-001 | Verify | Beta feedback fixes I: list naming, line removal, ingredient entry, Accept feedback | MVP-016, MVP-024, MVP-032, MVP-033 |

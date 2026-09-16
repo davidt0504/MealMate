@@ -15,7 +15,7 @@ use crate::{
 };
 
 /// Bump when a rule below changes what a given snapshot derives to (invariant 17).
-pub const SHOPPING_ALGORITHM_VERSION: u32 = 1;
+pub const SHOPPING_ALGORITHM_VERSION: u32 = 2;
 
 // Same shape as `recipe.rs`'s and `planned_meal.rs`'s: each module carries its own copy
 // because a `macro_rules!` is textually scoped and neither is exported.
@@ -191,6 +191,10 @@ pub struct ShoppingLine {
     pub status: LineStatus,
     pub separate_reason: Option<SeparateReason>,
     pub contributions: Vec<Contribution>,
+    /// Independent of `status`/`optional` — an identity flagged for restock (OPT-006), decoupled
+    /// from the have/none pantry mark. Set on an existing line when one is already emitted for
+    /// the identity, so the signal never spawns a duplicate line.
+    pub restock: bool,
 }
 
 /// Lines sharing one store category; `None` is "uncategorised" and sorts last.
@@ -231,6 +235,8 @@ pub struct ShoppingInput {
     pub recipes: Vec<Recipe>,
     pub identities: Vec<(IngredientRef, IdentityInfo)>,
     pub pantry_marked: Vec<IngredientRef>,
+    /// Identities flagged for restock (OPT-006), independent of `pantry_marked`.
+    pub restock_flagged: Vec<IngredientRef>,
 }
 
 /// One line × one component, before grouping. `scaled` is `None` when the scale multiplied the
@@ -401,6 +407,15 @@ fn merged_key_prefix(ingredient_key: &str) -> String {
     format!("m:{ingredient_key}:")
 }
 
+/// The whole key for an identity's restock line (OPT-006) — one line per identity, so the key
+/// is also its own prefix. The trailing `:` matches `merged_key_prefix`'s shape: `ref_key`'s
+/// escaping only escapes `:`/`\`, not length, so without it `r:catalog:onion` would be a
+/// literal string-prefix of `r:catalog:onion-powder` and prefix-based overlay clearing would
+/// cross-contaminate siblings.
+pub fn restock_line_key(ingredient: &IngredientRef) -> String {
+    format!("r:{}:", ref_key(ingredient))
+}
+
 impl GroupKey {
     fn line_key(&self) -> String {
         format!(
@@ -444,6 +459,7 @@ fn separate_line(raw: Raw, reason: SeparateReason, identities: &Identities<'_>) 
         status: identities.status(raw.ingredient.as_ref()),
         separate_reason: Some(reason),
         contributions: vec![raw.contribution],
+        restock: false,
     }
 }
 
@@ -618,7 +634,43 @@ pub fn derive_shopping_list(input: &ShoppingInput) -> ShoppingList {
             status: identities.status(ingredient.as_ref()),
             separate_reason: reason_for(key),
             contributions: raws.iter().map(|raw| raw.contribution.clone()).collect(),
+            restock: false,
         });
+    }
+
+    // Restock-line rule (OPT-006 gate 1): decoupled from the have/none mark, so a flagged ref
+    // gets its signal whether or not it is marked. When an identity already has an emitted
+    // (non-restock) line, that signal rides on every such line instead of spawning a second
+    // one — `restock` is set `true` on all of them, never an arbitrary single pick, since
+    // `GroupKey`'s split can legitimately produce more than one line for one identity.
+    for flagged in &input.restock_flagged {
+        let key = ref_key(flagged);
+        let mut found = false;
+        for line in lines.iter_mut() {
+            if line.ingredient.as_ref().map(ref_key).as_deref() == Some(key.as_str()) {
+                line.restock = true;
+                found = true;
+            }
+        }
+        if !found {
+            let name = identities
+                .info
+                .get(&key)
+                .map(|i| i.name.clone())
+                .unwrap_or_else(|| key.clone());
+            lines.push(ShoppingLine {
+                key: restock_line_key(flagged),
+                name,
+                ingredient: Some(flagged.clone()),
+                quantity: Quantity::Unknown,
+                unit: Unit::None,
+                optional: false,
+                status: LineStatus::Needed,
+                separate_reason: None,
+                contributions: Vec::new(),
+                restock: true,
+            });
+        }
     }
 
     // `Option<String>` orders `None` first; the wrapper flips it so uncategorised is last.
@@ -653,9 +705,9 @@ pub fn derive_shopping_list(input: &ShoppingInput) -> ShoppingList {
 #[cfg(test)]
 mod tests {
     use crate::{
-        derive_shopping_list, line_key_prefix, CivilDate, CustomIngredientId, IdentityInfo,
-        IngredientId, IngredientLine, IngredientRef, LineStatus, MealComponent, MealSlot,
-        PlannedMeal, PlannedMealId, Quantity, QuantityRange, Rational, Recipe, RecipeId,
+        derive_shopping_list, line_key_prefix, restock_line_key, CivilDate, CustomIngredientId,
+        IdentityInfo, IngredientId, IngredientLine, IngredientRef, LineStatus, MealComponent,
+        MealSlot, PlannedMeal, PlannedMealId, Quantity, QuantityRange, Rational, Recipe, RecipeId,
         SeparateReason, ShoppingInput, ShoppingLine, ShoppingList, Unit, UnitFamily, UnitKind,
         SHOPPING_ALGORITHM_VERSION,
     };
@@ -755,6 +807,16 @@ mod tests {
         identities: Vec<(IngredientRef, IdentityInfo)>,
         pantry_marked: Vec<IngredientRef>,
     ) -> ShoppingInput {
+        input_with_restock(meals, recipes, identities, pantry_marked, Vec::new())
+    }
+
+    fn input_with_restock(
+        meals: Vec<PlannedMeal>,
+        recipes: Vec<Recipe>,
+        identities: Vec<(IngredientRef, IdentityInfo)>,
+        pantry_marked: Vec<IngredientRef>,
+        restock_flagged: Vec<IngredientRef>,
+    ) -> ShoppingInput {
         ShoppingInput {
             from: date("2026-08-29"),
             to: date("2026-09-04"),
@@ -762,6 +824,7 @@ mod tests {
             recipes,
             identities,
             pantry_marked,
+            restock_flagged,
         }
     }
 
@@ -1866,7 +1929,7 @@ mod tests {
         let list = derive_shopping_list(&input(vec![], vec![], vec![], vec![]));
         assert_eq!(list.from, date("2026-08-29"));
         assert_eq!(list.to, date("2026-09-04"));
-        assert_eq!(list.algorithm_version, 1);
+        assert_eq!(list.algorithm_version, 2);
         assert!(list.groups.is_empty());
     }
 
@@ -1939,6 +2002,7 @@ mod tests {
             recipes,
             identities,
             pantry_marked: vec![cat("i0")],
+            restock_flagged: Vec::new(),
         };
         let started = std::time::Instant::now();
         let list = derive_shopping_list(&snapshot);
@@ -2016,6 +2080,109 @@ mod tests {
             assert!(l.key.starts_with(&prefix), "{} lacks {prefix}", l.key);
         }
         assert!(!line_key_prefix(&cat("onion2")).starts_with(&line_key_prefix(&cat("onion"))));
+    }
+
+    // --- OPT-006: restock-line rule, independent of the have/none mark -------------------
+
+    #[test]
+    fn unmarked_unflagged_yields_no_restock_line() {
+        let list = derive_shopping_list(&input(vec![], vec![], vec![], vec![]));
+        assert!(all_lines(&list).iter().all(|l| !l.restock));
+    }
+
+    #[test]
+    fn unmarked_flagged_yields_one_restock_line() {
+        let list = derive_shopping_list(&input_with_restock(
+            vec![],
+            vec![],
+            vec![identity("onion", "onion", Some("produce"))],
+            vec![],
+            vec![cat("onion")],
+        ));
+        let lines = all_lines(&list);
+        assert_eq!(lines.len(), 1);
+        assert!(lines[0].restock);
+        assert_eq!(lines[0].key, restock_line_key(&cat("onion")));
+        assert_eq!(lines[0].quantity, Quantity::Unknown);
+        assert_eq!(lines[0].contributions.len(), 0);
+        assert_eq!(lines[0].name, "onion");
+    }
+
+    #[test]
+    fn marked_and_flagged_still_yields_a_restock_line() {
+        // Gate 1: the restock line is decoupled from the have/none mark — flagging while
+        // still marked "have" must not be silently suppressed until "Used up".
+        let list = derive_shopping_list(&input_with_restock(
+            vec![],
+            vec![],
+            vec![identity("onion", "onion", Some("produce"))],
+            vec![cat("onion")],
+            vec![cat("onion")],
+        ));
+        let lines = all_lines(&list);
+        assert_eq!(lines.len(), 1);
+        assert!(lines[0].restock);
+    }
+
+    #[test]
+    fn used_up_yields_exactly_one_restock_line_not_two() {
+        // "Used up" = mark cleared + flag set: still exactly one line for the identity.
+        let list = derive_shopping_list(&input_with_restock(
+            vec![],
+            vec![],
+            vec![identity("onion", "onion", Some("produce"))],
+            vec![],
+            vec![cat("onion")],
+        ));
+        assert_eq!(all_lines(&list).len(), 1);
+    }
+
+    #[test]
+    fn a_flagged_and_recipe_demanded_identity_gets_the_signal_on_every_emitted_line() {
+        // A single identity can legitimately produce more than one line via `GroupKey`'s
+        // (ingredient, optional, unit_class, known) split — a required and an optional
+        // contribution of the same ingredient. Flagging it must set `restock` on every such
+        // line, not push a duplicate `r:` line, and not pick just one arbitrarily.
+        let list = single(
+            vec![
+                line("onion", Some(cat("onion")), exact(1, 1), Unit::None, false),
+                line("onion", Some(cat("onion")), exact(1, 1), Unit::None, true),
+            ],
+            vec![identity("onion", "onion", Some("produce"))],
+        );
+        // Sanity: two distinct lines before restock is even considered (required vs optional).
+        assert_eq!(all_lines(&list).len(), 2);
+
+        let flagged = derive_shopping_list(&input_with_restock(
+            vec![meal(
+                "pm-1",
+                "2026-08-29",
+                MealSlot::Dinner,
+                vec![component("r", None)],
+            )],
+            vec![recipe(
+                "r",
+                vec![
+                    line("onion", Some(cat("onion")), exact(1, 1), Unit::None, false),
+                    line("onion", Some(cat("onion")), exact(1, 1), Unit::None, true),
+                ],
+            )],
+            vec![identity("onion", "onion", Some("produce"))],
+            vec![],
+            vec![cat("onion")],
+        ));
+        let lines = all_lines(&flagged);
+        assert_eq!(lines.len(), 2, "no duplicate r: line — the signal rides the existing lines");
+        assert!(lines.iter().all(|l| l.restock), "every emitted line for the identity carries it");
+        assert!(lines.iter().all(|l| !l.key.starts_with("r:")));
+    }
+
+    #[test]
+    fn restock_line_keys_do_not_collide_with_a_same_prefix_sibling() {
+        assert!(
+            !restock_line_key(&cat("onion-powder")).starts_with(&restock_line_key(&cat("onion")))
+        );
+        assert_ne!(restock_line_key(&cat("onion")), restock_line_key(&cat("onion-powder")));
     }
 
     /// Escaping has to be injective over `\` as well as `:`. The first pair below collides with

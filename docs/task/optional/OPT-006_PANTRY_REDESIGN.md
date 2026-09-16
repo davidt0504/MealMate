@@ -29,9 +29,16 @@ reference implementation for the staple *flag*; its list-interaction model is re
 ## Workflow gate
 
 Before planning, read `docs/ROADMAP.md` and apply the mandatory planning gate in
-`docs/task/README.md` for `OPT-006`. **Planning may not start until every decision gate below
-records an owner answer** from a `grill-me` session; a plan against an unresolved gate is stale by
-definition.
+`docs/task/README.md` for `OPT-006`. **Resolved 2026-09-15** — all six gates below record an owner
+answer from a `grill-me` session; `plan-task` may proceed. **`plan-task` has run** (2026-09-16):
+`feature/opt-006` already carries an uncommitted, apparently complete implementation (storage
+migration + bridge + domain derivation across `kimatta-storage`/`food-domain`/`rust/src/api`, and
+`lib/features/pantry/` rewritten with the My Shelves screen, chip row controls, and the
+categorization-remediation and custom-ingredient-creation flows) with `cargo test --workspace`
+and `flutter test` green. **Outstanding before sign-off:** the Evidence plan's "owner review on
+device of at least two visual candidates" (below) has not happened — only one candidate exists,
+already built — so AC-1/AC-2 are implemented but not yet evidenced per this card's own
+requirement.
 
 ## What already exists — read before designing
 
@@ -47,25 +54,65 @@ definition.
 - **No free-text "keep 3" note on a staple.** OPT-003 rejection stands.
 - **No inference of stock from checks, time or planned meals.** OPT-003 rejections stand.
 
-## Decision gates (the grill-me agenda)
+## Decision gates — resolved 2026-09-15 (grill-me)
 
-1. **What is a staple, and how does it reach the list?** Candidates, in the order the owner leaned on 2026-09-08 (undecided):
-   - *M2 running low:* mark becomes have / running low / none. "Low" on a staple emits the restock line while stock remains. No numbers. Invariant 6 reworded from "binary" to "coarse". Risk: a third state on a screen whose one toggle already confuses.
-   - *M4 standing list:* a staple appears on every trip's list regardless of mark; check or skip each time. Simplest derivation; right for eggs and bread, noisy for oil and rice. Implies "staple" means "things I check every trip".
-   - *M1 as recorded in OPT-003:* unmark triggers restock. Fallback. Weakness: restock appears only after the last box is gone and only if someone remembers to unmark.
-   The answer must be tested against "never a chore": how many taps per week does each model cost a household of four?
-2. **What does the screen show by default?** Candidates: only marked and staple items grouped by `store_category` ("my shelves"), with search/browse to add; or a two-tab Have / Everything; or the current flat list with better labels. Lean: my-shelves default, because 160 unmarked rows are the complaint.
-3. **What replaces the toggle?** A labeled state chip (Have · Low · Staple) vs a swipe vs a per-row menu. Must be understood without a tooltip.
-4. **"Used it up".** PRD §5.2 names a one-tap remove. Where does it live and does it differ from unmark?
-5. **Custom ingredients.** Do they get store categories at creation so they land on a shelf, or stay uncategorised?
-6. **OPT-003 disposition.** Fold entirely into this card (recommended: its register row becomes *Superseded by OPT-006*) or keep as a separate card sequenced first.
+1. **Staple model: M2-lite.** Mark stays binary (have/none, per OPT-003/M1) — this is the sole
+   truth state. A separate, independent one-tap "flag for restock" action emits the existing
+   `r:<ref>` restock line immediately, decoupled from the have/none mark; one new boolean
+   (`restock_requested`), no tri-state column. This *is* a gating-condition change from OPT-003's
+   original derivation rule, not merely an added source: the restock line now fires on
+   `restock_requested` alone, independent of any staple concept, whereas OPT-003's rule was
+   staple-scoped. Rejected: full M2 tri-state (most code, UI risk on an
+   already-flagged-confusing screen); M4 standing list (per-trip tap tax scales with
+   trip-frequency × staple-count, and "always on the list" isn't a truthful stock statement —
+   conflicts invariants 6 and 19).
+2. **Default screen: My Shelves, single screen, inline add.** Default view shows only rows with
+   `marked = true` (post-gate-1, "staple" is not a stored concept — see gate 1), grouped by
+   `store_category`; a persistent search field expands the same screen to the full catalog in
+   place (no FAB — no precedent for one in this app, and a plain search box does the job; no
+   second route, no tab bar) and collapses back on select. Rejected: My
+   Shelves with a separate search/browse route (extra nav cost, no truth-value gain); two-tab
+   Have/Everything (persistent chrome + a which-tab decision on every open, against
+   "never a chore").
+3. **Row control: shelf-tag chip buttons.** Two always-visible, worded buttons per row ("Low",
+   "Used up") styled as small shelf-sticker/tag chips rather than generic icon-buttons — same
+   interaction and tap-count as plain labeled buttons, all added value is visual/tactile styling
+   reinforcing the pantry metaphor. Satisfies AC-2 literally (words stay on the row). Rejected:
+   3-dot overflow menu (generic, adds a tap to the common action); swipe actions (fails the
+   no-tooltip requirement); row-tap-to-remove hybrid (accidental-tap risk, no literal word on the
+   row for the action — revisit only if row density becomes a real problem later).
+4. **"Used it up": unmark + auto-restock.** Tapping "Used up" clears the have-mark AND fires the
+   same `r:<ref>` restock line as the "Low" chip — restores OPT-003/M1's safety net (zero-stock
+   always reaches the list) while "Low" remains an optional earlier heads-up; no household
+   discipline required to avoid silent drift. **The safety net must hold on every path to "not
+   marked," not only the "Used up" chip** — the plain have-mark toggle also present on the row
+   reaches the same "don't have it" state, so unmarking through *either* control routes through
+   the same combined unmark+restock-flag transaction; "Used up" is not the sole gate to the
+   safety net. The restock command must be idempotent so a prior "Low" tap followed by an unmark
+   doesn't duplicate the line. Recipe-linked/planned-meal consumption was raised and explicitly
+   **not** adopted — it collides with the closed decision banning inference from planned meals
+   (line above); dropped rather than reopened. Revisit only as a separate future card if manual
+   tapping proves to be a real weekly burden after real usage.
+5. **Custom ingredients: store_category required at creation.** A dropdown reusing the catalog's
+   existing `store_category` enum is a required field on the custom-ingredient creation form.
+   Every custom item lands on a real shelf; one grouping code path, no "Other"/uncategorised
+   fallback bucket anywhere on My Shelves. Pre-existing custom ingredients whose `store_category`
+   is still `NULL` (created before this requirement) are handled by a one-time categorization
+   remediation flow, scoped to have-marked rows only (an unmarked custom ingredient missing a
+   category blocks nothing visible yet, so it waits until marked, at which point it enters the
+   same list the categorize banner counts) — never a fallback bucket, never force-migrated to a
+   default. The banner's count and the flow it opens must draw from the same scoped list, never
+   two independently-computed sets.
+6. **OPT-003 disposition: folded, superseded.** OPT-003's register row in `docs/ROADMAP.md`
+   becomes *Superseded by OPT-006* in the same edit that lands this card's implementation — no
+   OPT-003 scope remains outside what is decided above.
 
 ## Load-bearing constraints
 
 - Invariant 6 (coarse, optional, never an audit) and 19 (a mark suppresses a purchase, never proves quantity) hold in whatever model is chosen.
 - The list stays a pure derivation; any new state is an explicit user statement with a bridge command that returns what was stored (invariant 21).
 - Planner scoring changes are out of scope; a truthful pantry is the lever.
-- Owner reviews visual candidates on both phones before the pick (owner preference recorded in memory: see UI variants in-app).
+- Owner reviews the built candidate on-device before sign-off, per the amended Evidence plan below (owner preference recorded in memory: see UI variants in-app).
 
 ## Scope (to be refined after the gates close)
 
@@ -79,14 +126,14 @@ definition.
 
 - **AC-1:** A household can see what it has and what it keeps stocked without scrolling past unmarked catalog rows.
 - **AC-2:** Every pantry state is labeled in words on the row; no unlabeled toggle remains.
-- **AC-3:** The chosen staple model's list behaviour is covered by domain tests for each row of its state table, and the list stays order-independent and snapshot-deterministic.
+- **AC-3:** The `marked`/`restock_requested` restock-line derivation is covered by domain tests for each row of its state table, and the list stays order-independent and snapshot-deterministic.
 - **AC-4:** No column, DTO field or command carries a count, target, package or timestamp.
 
 ## Evidence plan
 
 | Criterion | Required evidence |
 |---|---|
-| AC-1, AC-2 | Widget tests plus owner review on device of at least two visual candidates |
+| AC-1, AC-2 | Widget tests plus owner review on device of the one built candidate — **pending**: owner accepts it as-is or requests changes. A second full visual candidate is built only if that review rejects a core interaction choice (the chip row controls, the grouped-by-category layout, or the search-expand mechanism) — not for styling/polish requests, which are handled as changes to the existing candidate. (Amended 2026-09-16 from "at least two visual candidates" — the original two-candidate requirement was written during scoping, before an implementation existed; building a second full screen upfront would have been speculative duplication of a mostly-cosmetic difference against an already-built, fully-tested candidate.) |
 | AC-3 | `food-domain` tests extended from OPT-003's fixture set |
 | AC-4 | Bounded inspection at review |
 

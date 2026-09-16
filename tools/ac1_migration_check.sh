@@ -30,6 +30,13 @@ adb_() {
   fi
 }
 
+# Runs on every exit, including a failed test: `set -e` would otherwise stop the script before
+# the cleanup line and leave the fixture sitting on the device.
+cleanup() {
+  adb_ shell rm -f "$REMOTE_DIR/$FIXTURE_NAME" >/dev/null 2>&1 || true
+}
+trap cleanup EXIT
+
 say "Building the pre-FIX-001 v12 fixture"
 # Regenerated every run rather than committed: it is derived from the starter manifest, and a
 # stale checked-in copy would quietly stop matching the content it is supposed to predate.
@@ -44,20 +51,20 @@ adb_ shell mkdir -p "$REMOTE_DIR"
 adb_ push "$FIXTURE" "$REMOTE_DIR/$FIXTURE_NAME"
 
 say "Running the on-device migration test"
+# `flutter test` discovers devices with its own adb and cannot see the Windows-hosted server
+# unless it is handed the same socket. Derived exactly as tools/emulator.sh's socket() does,
+# so that script stays the one definition of how the bridge is reached.
+gateway=$(ip route | awk '/default/ {print $3; exit}')
+[ -n "$gateway" ] || { fail "no default route; is the bridge up?"; exit 1; }
+export ADB_SERVER_SOCKET="tcp:${gateway}:5037"
+
 cd "$ROOT"
 export PATH="$HOME/development/flutter/bin:$PATH"
-if [ -n "$SERIAL" ]; then
-  flutter test integration_test/migration_v12_test.dart -d "$SERIAL"
-else
-  flutter test integration_test/migration_v12_test.dart
-fi
-rc=$?
-
-say "Cleaning up"
-adb_ shell rm -f "$REMOTE_DIR/$FIXTURE_NAME" || true
-
-if [ $rc -ne 0 ]; then
+device_args=()
+[ -n "$SERIAL" ] && device_args=(-d "$SERIAL")
+if ! flutter test integration_test/migration_v12_test.dart "${device_args[@]}"; then
   fail "AC-1 migration check did not pass"
-  exit $rc
+  exit 1
 fi
+
 printf '\n  PASS  v12 -> v13 migrated in the app on this device\n'

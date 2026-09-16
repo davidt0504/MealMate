@@ -172,6 +172,10 @@ class ShoppingLineDto {
   final SeparateReasonDto? separateReason;
   final List<ContributionDto> contributions;
 
+  /// Independent of `status`/`optional` — flagged for restock (OPT-006 gate 1), decoupled
+  /// from the have/none pantry mark.
+  final bool restock;
+
   const ShoppingLineDto({
     required this.key,
     required this.name,
@@ -182,6 +186,7 @@ class ShoppingLineDto {
     required this.status,
     this.separateReason,
     required this.contributions,
+    required this.restock,
   });
 
   @override
@@ -194,7 +199,8 @@ class ShoppingLineDto {
       optional.hashCode ^
       status.hashCode ^
       separateReason.hashCode ^
-      contributions.hashCode;
+      contributions.hashCode ^
+      restock.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -209,7 +215,8 @@ class ShoppingLineDto {
           optional == other.optional &&
           status == other.status &&
           separateReason == other.separateReason &&
-          contributions == other.contributions;
+          contributions == other.contributions &&
+          restock == other.restock;
 }
 
 /// One derived line's user state. `changed` and `checked_against` are output only: `changed`

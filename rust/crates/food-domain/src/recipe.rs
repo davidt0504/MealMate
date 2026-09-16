@@ -33,6 +33,8 @@ pub enum RecipeError {
     InvalidVerifiedOn(String),
     #[error("prep minutes must be at least 1")]
     ZeroPrepMinutes,
+    #[error("unknown store category {0:?}")]
+    UnknownStoreCategory(String),
 }
 
 // Own copy of `household-core`'s macro: it is private there, and exporting a macro across
@@ -72,6 +74,14 @@ fn non_blank(value: String, field: &'static str) -> Result<String, RecipeError> 
         Ok(value)
     }
 }
+
+/// The vocabulary `CustomIngredient::new` validates `store_category` against (OPT-006 gate 5) —
+/// the same set catalog rows ship with (`docs/research/MVP-032_STARTER_PROVENANCE_MANIFEST.json`).
+/// Catalog `Ingredient.store_category` stays free-text/optional; only custom-ingredient creation
+/// is required and membership-checked, so a household never lands on an "Other" shelf.
+pub const KNOWN_STORE_CATEGORIES: &[&str] = &[
+    "bakery", "dairy", "frozen", "meat", "pantry", "produce", "seafood",
+];
 
 /// Catalog ingredient — global, not household-owned; seeded by MVP-011, matched by MVP-009.
 /// Private fields + `new`, like `Recipe`: a blank name is a domain error (`Empty{field}`), so
@@ -132,23 +142,30 @@ pub struct CustomIngredient {
     id: CustomIngredientId,
     household_id: HouseholdId,
     name: String,
-    store_category: Option<String>,
+    store_category: String,
 }
 
 impl CustomIngredient {
+    /// `store_category` is required and membership-checked against
+    /// [`KNOWN_STORE_CATEGORIES`] (OPT-006 gate 5) — every custom item lands on a real shelf,
+    /// never an "Other"/uncategorised fallback. A pre-existing row created before this
+    /// requirement may still carry `NULL` in storage; that is a remediation-flow concern
+    /// (OPT-006 Step 8a), not something this constructor can produce.
     pub fn new(
         id: CustomIngredientId,
         household_id: HouseholdId,
         name: impl Into<String>,
-        store_category: Option<String>,
+        store_category: impl Into<String>,
     ) -> Result<Self, RecipeError> {
+        let store_category = non_blank(store_category.into(), "store_category")?;
+        if !KNOWN_STORE_CATEGORIES.contains(&store_category.as_str()) {
+            return Err(RecipeError::UnknownStoreCategory(store_category));
+        }
         Ok(Self {
             id,
             household_id,
             name: non_blank(name.into(), "name")?,
-            store_category: store_category
-                .map(|c| non_blank(c, "store_category"))
-                .transpose()?,
+            store_category,
         })
     }
 
@@ -164,8 +181,8 @@ impl CustomIngredient {
         &self.name
     }
 
-    pub fn store_category(&self) -> Option<&str> {
-        self.store_category.as_deref()
+    pub fn store_category(&self) -> &str {
+        &self.store_category
     }
 }
 
@@ -813,7 +830,7 @@ mod tests {
             );
             let id = CustomIngredientId::new("c").unwrap();
             assert_eq!(
-                CustomIngredient::new(id, hid("h"), blank, None).unwrap_err(),
+                CustomIngredient::new(id, hid("h"), blank, "pantry").unwrap_err(),
                 RecipeError::Empty { field: "name" },
                 "{blank:?} must be rejected as a custom name"
             );
@@ -843,13 +860,13 @@ mod tests {
             CustomIngredientId::new("c").unwrap(),
             hid("h"),
             "nana's spice mix",
-            None,
+            "pantry",
         )
         .unwrap();
         assert_eq!(custom.id().as_str(), "c");
         assert_eq!(custom.household_id().as_str(), "h");
         assert_eq!(custom.name(), "nana's spice mix");
-        assert_eq!(custom.store_category(), None);
+        assert_eq!(custom.store_category(), "pantry");
     }
 
     // --- Step 2: Rational, Quantity, UnitKind, Unit --------------------------------------
@@ -1247,7 +1264,7 @@ mod tests {
                     CustomIngredientId::new("c").unwrap(),
                     hid("h"),
                     "nana's mix",
-                    Some(blank.to_owned()),
+                    blank.to_owned(),
                 )
                 .unwrap_err(),
                 RecipeError::Empty {
@@ -1255,6 +1272,34 @@ mod tests {
                 },
                 "{blank:?} custom store_category"
             );
+        }
+    }
+
+    #[test]
+    fn an_unknown_but_non_blank_custom_store_category_is_rejected() {
+        let err = CustomIngredient::new(
+            CustomIngredientId::new("c").unwrap(),
+            hid("h"),
+            "nana's mix",
+            "not-a-real-category",
+        )
+        .unwrap_err();
+        assert_eq!(
+            err,
+            RecipeError::UnknownStoreCategory("not-a-real-category".to_owned())
+        );
+    }
+
+    #[test]
+    fn every_known_store_category_is_accepted() {
+        for category in KNOWN_STORE_CATEGORIES {
+            CustomIngredient::new(
+                CustomIngredientId::new("c").unwrap(),
+                hid("h"),
+                "nana's mix",
+                *category,
+            )
+            .unwrap();
         }
     }
 

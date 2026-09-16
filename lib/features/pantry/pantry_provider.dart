@@ -3,6 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'package:meal_mate/features/household/household_provider.dart';
 import 'package:meal_mate/src/rust/api/pantry.dart';
+// Prefixed too: the notifier's own `setRestockFlag`/`setPantryUsedUp` methods share a name
+// with these bridge functions, and an unqualified call inside the class would resolve to the
+// method (member lookup wins over a top-level function of the same name), not the bridge.
+import 'package:meal_mate/src/rust/api/pantry.dart' as pantry_bridge;
 import 'package:meal_mate/src/rust/api/recipe.dart';
 
 class PantryNotifier extends AsyncNotifier<List<PantryEntryDto>> {
@@ -32,6 +36,26 @@ class PantryNotifier extends AsyncNotifier<List<PantryEntryDto>> {
     householdId: householdId,
     ingredient: ingredient,
     marked: marked,
+  );
+
+  @protected
+  Future<PantryEntryDto> writeRestockFlag(
+    String householdId,
+    IngredientRefDto ingredient,
+    bool flagged,
+  ) => pantry_bridge.setRestockFlag(
+    householdId: householdId,
+    ingredient: ingredient,
+    flagged: flagged,
+  );
+
+  @protected
+  Future<PantryEntryDto> writeUsedUp(
+    String householdId,
+    IngredientRefDto ingredient,
+  ) => pantry_bridge.setPantryUsedUp(
+    householdId: householdId,
+    ingredient: ingredient,
   );
 
   /// Re-reads the list from Rust and returns the failure, or `null`. `AsyncValue.guard`
@@ -68,8 +92,34 @@ class PantryNotifier extends AsyncNotifier<List<PantryEntryDto>> {
     String householdId,
     IngredientRefDto ingredient,
     bool marked,
+  ) => _applyWrite(householdId, writeMark(householdId, ingredient, marked));
+
+  /// Flags or unflags restock for one identity — same merge-into-state contract as [setMark],
+  /// independent of the have/none mark (OPT-006 gate 1).
+  Future<PantryEntryDto> setRestockFlag(
+    String householdId,
+    IngredientRefDto ingredient,
+    bool flagged,
+  ) => _applyWrite(
+    householdId,
+    writeRestockFlag(householdId, ingredient, flagged),
+  );
+
+  /// "Used it up" (OPT-006 gate 4): clears the have-mark and sets the restock flag together.
+  Future<PantryEntryDto> setUsedUp(
+    String householdId,
+    IngredientRefDto ingredient,
+  ) => _applyWrite(householdId, writeUsedUp(householdId, ingredient));
+
+  /// Shared by [setMark], [setRestockFlag] and [setUsedUp]: awaits the bridge write, then
+  /// republishes the list with the entry the bridge says was stored, so the UI shows persisted
+  /// truth. Only the touched entry is replaced — the pantry is edited one tap at a time, so
+  /// refetching the whole list per tap would cost a bridge read for nothing.
+  Future<PantryEntryDto> _applyWrite(
+    String householdId,
+    Future<PantryEntryDto> write,
   ) async {
-    final stored = await writeMark(householdId, ingredient, marked);
+    final stored = await write;
     final current = state.valueOrNull;
     if (current == null) return stored;
     if (current.any((e) => e.ingredient == stored.ingredient)) {
@@ -85,12 +135,36 @@ class PantryNotifier extends AsyncNotifier<List<PantryEntryDto>> {
       // A re-list that fails is discarded, not published: the write committed either way, and
       // publishing `AsyncError` over a usable list would strip the recipe detail's pantry
       // control entirely (`_lineTile` falls back to a plain tile whenever the list has no
-      // value) — losing a control as the result of a *successful* mark. Staying stale is what
+      // value) — losing a control as the result of a *successful* write. Staying stale is what
       // the caller already had.
       final relisted = await AsyncValue.guard(() => fetchPantry(householdId));
       if (relisted case AsyncData(:final value)) state = AsyncData(value);
     }
     return stored;
+  }
+
+  /// Custom ingredients this household has not yet categorized (OPT-006 gate 5 remediation).
+  @protected
+  Future<List<CustomIngredientMissingCategoryDto>> fetchMissingCategory(
+    String householdId,
+  ) => listCustomIngredientsMissingCategory(householdId: householdId);
+
+  /// Assigns a category to a pre-existing custom ingredient, then refreshes the pantry list so
+  /// it renders grouped. Unlike [setMark]/[setRestockFlag]/[setUsedUp], a full refetch is
+  /// correct here: categorizing changes which group the entry belongs to, and (per
+  /// `list_pantry_entries`) it may not have appeared in the list at all beforehand.
+  Future<void> categorize(
+    String householdId,
+    String customIngredientId,
+    String storeCategory,
+  ) async {
+    await setCustomIngredientCategory(
+      householdId: householdId,
+      id: customIngredientId,
+      storeCategory: storeCategory,
+    );
+    final error = await refresh();
+    if (error != null) throw error;
   }
 }
 
@@ -100,3 +174,9 @@ final pantryProvider =
     AsyncNotifierProvider<PantryNotifier, List<PantryEntryDto>>(
       PantryNotifier.new,
     );
+
+/// The store-category vocabulary (OPT-006 gate 5), read from Rust so the dropdown cannot drift
+/// from the domain (as `knownUnitKindsProvider` does for units).
+final knownStoreCategoriesProvider = FutureProvider<List<String>>(
+  (_) async => knownStoreCategories(),
+);

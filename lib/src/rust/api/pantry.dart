@@ -10,7 +10,7 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
 import 'recipe.dart';
 
-// These functions are ignored because they are not marked as `pub`: `list_in`, `set_in`, `set_many_in`, `to_dto`
+// These functions are ignored because they are not marked as `pub`: `list_in`, `set_in`, `set_many_in`, `set_restock_flag_in`, `set_used_up_in`, `to_dto`
 // These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `clone`, `eq`, `fmt`
 
 /// Everything this household can mark — the catalog plus its own custom ingredients — each
@@ -44,6 +44,28 @@ Future<List<IngredientRefDto>> setPantryMarks({
   marked: marked,
 );
 
+/// Flags or unflags one identity for restock, independent of `marked` (OPT-006 gate 1).
+/// Idempotent in both directions, same return-what-was-stored contract as `set_pantry_mark`.
+Future<PantryEntryDto> setRestockFlag({
+  required String householdId,
+  required IngredientRefDto ingredient,
+  required bool flagged,
+}) => RustLib.instance.api.crateApiPantrySetRestockFlag(
+  householdId: householdId,
+  ingredient: ingredient,
+  flagged: flagged,
+);
+
+/// Clears the have-mark and sets the restock flag in one transaction (OPT-006 gate 4, "Used
+/// it up") — restores the safety net that a plain unmark alone would drop.
+Future<PantryEntryDto> setPantryUsedUp({
+  required String householdId,
+  required IngredientRefDto ingredient,
+}) => RustLib.instance.api.crateApiPantrySetPantryUsedUp(
+  householdId: householdId,
+  ingredient: ingredient,
+);
+
 /// One browsable identity with this household's mark. `marked` means *the household marked this
 /// as one it has*; `false` means **no record** — unknown, never an assertion that the household
 /// lacks it (invariant 6, PRD §10). `MVP-015`/`MVP-016` must read it that way. `ingredient`
@@ -55,16 +77,31 @@ class PantryEntryDto {
   final List<String> aliases;
   final bool marked;
 
+  /// Independent of `marked` (OPT-006 gate 1): flagged for restock without necessarily ever
+  /// being marked "have".
+  final bool restockRequested;
+
+  /// `None` only for a pre-existing custom ingredient created before OPT-006's
+  /// required-category rule — never for a catalog row.
+  final String? storeCategory;
+
   const PantryEntryDto({
     required this.ingredient,
     required this.name,
     required this.aliases,
     required this.marked,
+    required this.restockRequested,
+    this.storeCategory,
   });
 
   @override
   int get hashCode =>
-      ingredient.hashCode ^ name.hashCode ^ aliases.hashCode ^ marked.hashCode;
+      ingredient.hashCode ^
+      name.hashCode ^
+      aliases.hashCode ^
+      marked.hashCode ^
+      restockRequested.hashCode ^
+      storeCategory.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -74,5 +111,7 @@ class PantryEntryDto {
           ingredient == other.ingredient &&
           name == other.name &&
           aliases == other.aliases &&
-          marked == other.marked;
+          marked == other.marked &&
+          restockRequested == other.restockRequested &&
+          storeCategory == other.storeCategory;
 }

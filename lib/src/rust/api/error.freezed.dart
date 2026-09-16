@@ -751,7 +751,7 @@ as String,
 
 class KimattaError_RecipeQuarantined extends KimattaError {
   const KimattaError_RecipeQuarantined(): super._();
-
+  
 
 
 

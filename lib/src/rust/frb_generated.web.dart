@@ -123,6 +123,10 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   CustomIngredientDto dco_decode_custom_ingredient_dto(dynamic raw);
 
   @protected
+  CustomIngredientMissingCategoryDto
+  dco_decode_custom_ingredient_missing_category_dto(dynamic raw);
+
+  @protected
   ExportReport dco_decode_export_report(dynamic raw);
 
   @protected
@@ -163,6 +167,10 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   List<CustomIngredientDto> dco_decode_list_custom_ingredient_dto(dynamic raw);
+
+  @protected
+  List<CustomIngredientMissingCategoryDto>
+  dco_decode_list_custom_ingredient_missing_category_dto(dynamic raw);
 
   @protected
   List<IngredientLineDto> dco_decode_list_ingredient_line_dto(dynamic raw);
@@ -479,6 +487,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  CustomIngredientMissingCategoryDto
+  sse_decode_custom_ingredient_missing_category_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   ExportReport sse_decode_export_report(SseDeserializer deserializer);
 
   @protected
@@ -527,6 +541,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   List<CustomIngredientDto> sse_decode_list_custom_ingredient_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  List<CustomIngredientMissingCategoryDto>
+  sse_decode_list_custom_ingredient_missing_category_dto(
     SseDeserializer deserializer,
   );
 
@@ -927,6 +947,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_custom_ingredient_missing_category_dto(
+    CustomIngredientMissingCategoryDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_export_report(ExportReport self, SseSerializer serializer);
 
   @protected
@@ -986,6 +1012,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_list_custom_ingredient_dto(
     List<CustomIngredientDto> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_custom_ingredient_missing_category_dto(
+    List<CustomIngredientMissingCategoryDto> self,
     SseSerializer serializer,
   );
 

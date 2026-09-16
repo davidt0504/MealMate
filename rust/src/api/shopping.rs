@@ -298,6 +298,9 @@ pub struct ShoppingLineDto {
     pub status: ShoppingLineStatusDto,
     pub separate_reason: Option<SeparateReasonDto>,
     pub contributions: Vec<ContributionDto>,
+    /// Independent of `status`/`optional` — flagged for restock (OPT-006 gate 1), decoupled
+    /// from the have/none pantry mark.
+    pub restock: bool,
 }
 
 /// `category` is the raw store category; `None` is "uncategorised" and comes last.
@@ -375,6 +378,7 @@ fn line_from_domain(l: &ShoppingLine) -> ShoppingLineDto {
             .iter()
             .map(contribution_from_domain)
             .collect(),
+        restock: l.restock,
     }
 }
 
@@ -575,7 +579,7 @@ mod tests {
             Some(ScaleDto { numer: 3, denom: 2 }),
         );
         let list = derive_in(&mut conn, "h", "2026-08-29", "2026-09-04").unwrap();
-        assert_eq!(list.algorithm_version, 1);
+        assert_eq!(list.algorithm_version, 2);
         assert_eq!(list.from_date, "2026-08-29");
         assert_eq!(list.to_date, "2026-09-04");
         assert_eq!(list.contribution_count, 2);

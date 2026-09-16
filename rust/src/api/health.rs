@@ -373,14 +373,14 @@ mod tests {
         let rig = rig();
         seed(&rig, "Casa");
         let report = export_database(rig.export_path.clone()).unwrap();
-        assert_eq!(report.schema_version, 13);
+        assert_eq!(report.schema_version, 14);
 
         let h = bootstrap_household().unwrap();
         rename_household(h.id, Some("Mutated".to_owned())).unwrap();
         assert_eq!(household_name().as_deref(), Some("Mutated"));
 
         let restored = restore_database(rig.export_path.clone(), rig.db_path.clone()).unwrap();
-        assert_eq!(restored.schema_version, 13);
+        assert_eq!(restored.schema_version, 14);
         assert_eq!(restored.db_path, rig.db_path);
         assert_eq!(household_name().as_deref(), Some("Casa"));
         // The overwritten database is kept aside, not destroyed (invariant 8).
@@ -417,7 +417,7 @@ mod tests {
         export_database(rig.export_path.clone()).unwrap();
         kimatta_storage::rusqlite::Connection::open(&rig.export_path)
             .unwrap()
-            .pragma_update(None, "user_version", 14)
+            .pragma_update(None, "user_version", 15)
             .unwrap();
 
         let err = restore_database(rig.export_path.clone(), rig.db_path.clone()).unwrap_err();
@@ -552,7 +552,7 @@ mod tests {
         std::fs::write(&journal, [b'j'; 512]).unwrap();
 
         let report = reset_database(rig.db_path.clone(), "20260902-120000".to_owned()).unwrap();
-        assert_eq!(report.schema_version, 13);
+        assert_eq!(report.schema_version, 14);
         bootstrap_household().unwrap();
 
         let aside = format!("{}.corrupt-20260902-120000", rig.db_path);
