@@ -9,6 +9,11 @@
 #
 # It needs the emulator (or a phone) up first:  bash tools/emulator.sh up
 # Every adb call goes through tools/emulator.sh, which owns the WSL->Windows bridge (D-033).
+#
+# Why not `flutter test integration_test/...`: that installs the app and then connects to it
+# through a port adb forwards. The adb server runs on Windows (D-022), so the port opens on the
+# Windows loopback and WSL is refused. Instead the test is built as the app's entrypoint,
+# launched on the device, and its verdict read back from logcat.
 
 set -euo pipefail
 
@@ -18,6 +23,7 @@ FIXTURE_NAME=v12_pre_fix001.db
 FIXTURE="$ROOT/build/ac1/$FIXTURE_NAME"
 REMOTE_DIR="/sdcard/Android/data/$APP_ID/files"
 SERIAL=${1:-}
+TIMEOUT_S=120
 
 say()  { printf '\n== %s\n' "$*"; }
 fail() { printf '  FAIL  %s\n' "$*" >&2; }
@@ -31,40 +37,51 @@ adb_() {
 }
 
 # Runs on every exit, including a failed test: `set -e` would otherwise stop the script before
-# the cleanup line and leave the fixture sitting on the device.
+# the cleanup and leave the fixture sitting on the device.
 cleanup() {
   adb_ shell rm -f "$REMOTE_DIR/$FIXTURE_NAME" >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
 
+export PATH="$HOME/development/flutter/bin:$HOME/.cargo/bin:$PATH"
+
 say "Building the pre-FIX-001 v12 fixture"
 # Regenerated every run rather than committed: it is derived from the starter manifest, and a
 # stale checked-in copy would quietly stop matching the content it is supposed to predate.
 mkdir -p "$ROOT/build/ac1"
-export PATH="$HOME/.cargo/bin:$PATH"
 (cd "$ROOT/rust" && cargo run --quiet -p kimatta-storage --example make_v12_fixture -- "$FIXTURE")
 
-say "Pushing it where the app can read it"
+say "Building the test as the app's entrypoint"
+cd "$ROOT"
+flutter build apk --debug -t integration_test/migration_v12_test.dart
+
+say "Installing and pushing the fixture"
+adb_ install -r build/app/outputs/flutter-apk/app-debug.apk
 # The app's external files directory: readable by the app without root, and outside the APK, so
-# no test data ships to users. Created here because it exists only after a first launch.
+# no test data ships to users.
 adb_ shell mkdir -p "$REMOTE_DIR"
 adb_ push "$FIXTURE" "$REMOTE_DIR/$FIXTURE_NAME"
 
-say "Running the on-device migration test"
-# `flutter test` discovers devices with its own adb and cannot see the Windows-hosted server
-# unless it is handed the same socket. Derived exactly as tools/emulator.sh's socket() does,
-# so that script stays the one definition of how the bridge is reached.
-gateway=$(ip route | awk '/default/ {print $3; exit}')
-[ -n "$gateway" ] || { fail "no default route; is the bridge up?"; exit 1; }
-export ADB_SERVER_SOCKET="tcp:${gateway}:5037"
+say "Running on the device"
+adb_ logcat -c
+# `am start -W` can report `Status: timeout` while the activity still starts, so the verdict
+# comes from the test's own output, never from this command's status.
+adb_ shell am start -W -n "$APP_ID/.MainActivity" >/dev/null 2>&1 || true
 
-cd "$ROOT"
-export PATH="$HOME/development/flutter/bin:$PATH"
-device_args=()
-[ -n "$SERIAL" ] && device_args=(-d "$SERIAL")
-if ! flutter test integration_test/migration_v12_test.dart "${device_args[@]}"; then
-  fail "AC-1 migration check did not pass"
-  exit 1
-fi
+log=$(mktemp)
+verdict=""
+for _ in $(seq 1 $((TIMEOUT_S / 2))); do
+  sleep 2
+  adb_ logcat -d -s flutter:I > "$log" 2>/dev/null || true
+  if grep -q 'All tests passed' "$log"; then verdict=pass; break; fi
+  if grep -q 'Some tests failed' "$log"; then verdict=fail; break; fi
+done
 
-printf '\n  PASS  v12 -> v13 migrated in the app on this device\n'
+sed -n 's/^.*flutter *: //p' "$log"
+rm -f "$log"
+
+case "$verdict" in
+  pass) printf '\n  PASS  schema 12 migrated to latest in the app on this device\n' ;;
+  fail) fail "AC-1 migration check failed -- see the test output above"; exit 1 ;;
+  *)    fail "no test verdict in logcat after ${TIMEOUT_S}s"; exit 1 ;;
+esac
