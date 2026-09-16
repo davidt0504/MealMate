@@ -102,11 +102,13 @@ jobs:
         run: flutter pub get
 
       # Regenerating is not verifying. The committed bindings must equal what the generator
-      # produces, or a stale or hand-edited binding ships unnoticed.
+      # produces, or a stale or hand-edited binding ships unnoticed. Whitespace is ignored: freezed
+      # emits whitespace-only lines that editors strip on save, and a stale binding always differs
+      # in real code too, so ignoring it loses nothing but the false alarm.
       - name: Verify generated bridge bindings
         run: |
           flutter_rust_bridge_codegen generate
-          if ! git diff --exit-code -- lib/src/rust rust/src/frb_generated*.rs; then
+          if ! git diff --exit-code -w --ignore-blank-lines -- lib/src/rust rust/src/frb_generated*.rs; then
             echo "::error::generated bindings differ from the committed ones; run 'flutter_rust_bridge_codegen generate' and commit the result"
             exit 1
           fi

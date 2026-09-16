@@ -54,11 +54,14 @@ void main() {
       // A fresh database first, as a reinstalled app holds, then the restore that brings the old
       // file in. `validate_export` passes an older schema deliberately: restore migrates the
       // staged copy forward, which is the upgrade path this check exists to exercise.
+      // Latest is read from a fresh database rather than hard-coded, so a later migration does
+      // not break a check that is only about getting past 12.
       final fresh = await openDatabase(dbPath: dbPath);
+      final latest = fresh.schemaVersion;
       expect(
-        fresh.schemaVersion,
-        13,
-        reason: 'a new database should already be at latest',
+        latest,
+        greaterThanOrEqualTo(13),
+        reason: 'this app predates the v13 remap it is meant to check',
       );
 
       final restored = await restoreDatabase(
@@ -67,9 +70,8 @@ void main() {
       );
       expect(
         restored.schemaVersion,
-        13,
-        reason:
-            'the schema 12 export must be migrated forward, not restored as-is',
+        latest,
+        reason: 'the schema 12 export must be migrated forward to latest, not restored as-is',
       );
 
       final summaries = await listRecipes(householdId: _householdId);
@@ -78,46 +80,48 @@ void main() {
         isNotEmpty,
         reason: 'the restored database should carry the fixture household\'s starter recipes',
       );
-      final chili = summaries.firstWhere(
-        (r) => r.title.toLowerCase().contains('chili'),
-        orElse: () => fail(
-          'no chili recipe among the ${summaries.length} restored recipes',
-        ),
-      );
+      // Every diced line in every recipe, not one recipe picked by title: the fixture holds two
+      // chili recipes, and only a full sweep proves no line was left behind on the old entry.
+      final diced = <String, IngredientLineDto>{};
+      for (final summary in summaries) {
+        final recipe = await loadRecipe(
+          householdId: _householdId,
+          recipeId: summary.id,
+        );
+        expect(
+          recipe,
+          isNotNull,
+          reason: '"${summary.title}" is listed but will not load',
+        );
+        for (final line in recipe!.lines) {
+          if (line.name.toLowerCase().contains('diced')) {
+            diced['${summary.title}: ${line.name}'] = line;
+          }
+        }
+      }
 
-      final recipe = await loadRecipe(
-        householdId: _householdId,
-        recipeId: chili.id,
-      );
+      // The five FIX-001 names: David's Chili, Taco Soup, Taco Pasta, Stuffed Pepper Casserole,
+      // and Black Bean and Lentil Soup. `make_v12_fixture` refuses to write a fixture with none.
       expect(
-        recipe,
-        isNotNull,
-        reason: 'the summary named a recipe that will not load',
+        diced.keys,
+        hasLength(5),
+        reason:
+            'expected the five FIX-001 diced tomato lines, found ${diced.keys}',
       );
 
-      final diced = recipe!.lines
-          .where((line) => line.name.toLowerCase().contains('diced'))
-          .toList();
-      expect(
-        diced,
-        isNotEmpty,
-        reason: 'no diced line survived the restore; the fixture or the migration changed',
-      );
-
-      for (final line in diced) {
+      diced.forEach((where, line) {
         final ingredient = line.ingredient;
         expect(
           ingredient,
           isA<IngredientRefDto_Catalog>(),
-          reason: '"${line.name}" resolved to no catalog ingredient',
+          reason: '$where resolved to no catalog ingredient',
         );
         expect(
           (ingredient! as IngredientRefDto_Catalog).id,
           'ing-diced-tomatoes',
-          reason:
-              '"${line.name}" still points at the pre-FIX-001 catalog entry',
+          reason: '$where still points at the pre-FIX-001 catalog entry',
         );
-      }
+      });
     },
   );
 }
