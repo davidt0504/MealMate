@@ -85,6 +85,7 @@ This is the durable operational source of truth after the MVP as well as during 
 | OPT-006 | Draft | Pantry that feels like a pantry, not a list (absorbs OPT-003; grill-me gate) | MVP-014, MVP-015, MVP-016, MVP-034 |
 | OPT-007 | Draft | Cover My Week actions: vocabulary, show me another, reshuffle, veto placement (grill-me gate) | MVP-023, MVP-024, MVP-025 |
 | OPT-008 | Draft | Leftovers: cook-once-eat-twice planning or leftovers off (grill-me gate; OPT-007 recommended first) | MVP-023, MVP-024, MVP-025 |
+| OPT-009 | Draft | Database import: bring an exported file back into the app (grill-me gate) | MVP-017 |
 
 MVP-010 was explicitly cut on 2026-08-29 under the PRD's photo deferral rule (owner decision at SEQUENCE step 17): no code, schema, or later card references recipe photos, and MVP-011 packages text-only starter content. It stays in the register as `Cut` and may return as a post-launch card. OPT-001 has no dependency path into MVP completion.
 

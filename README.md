@@ -77,16 +77,25 @@ older `build-N` from the Releases page: Android accepts it, but data a newer bui
 not open in the older app ("This data was written by a newer version of the app") until a newer APK
 is installed over it.
 
-CI signs with the same `~/.android/debug.keystore` as local builds (see Caveats), stored
-base64-encoded in the `SIGNING_KEYSTORE_B64` repository secret, and fails rather than publish an APK
-signed with any other key. To set or replace the secret:
+CI signs with the same dedicated release keystore as local builds (see Caveats) and fails rather
+than publish an APK signed with any other key. Three settings configure it — two secrets and one
+variable — and a run stops within seconds if any is missing:
 
 ```bash
-base64 -w0 ~/.android/debug.keystore | gh secret set SIGNING_KEYSTORE_B64
+base64 -w0 ~/.android/mealmate-release.jks | gh secret set SIGNING_KEYSTORE_B64
+gh secret set SIGNING_KEY_PASSWORD        # the keystore password, typed at the prompt
+
+keytool -list -v -keystore ~/.android/mealmate-release.jks \
+  | sed -n 's/^[[:space:]]*SHA256: //p' | head -1 | tr -d ':' | tr 'A-F' 'a-f'
+gh variable set SIGNING_CERT_SHA256 --body <the digest that printed>
 ```
 
-That is a debug key with a well-known password, so these downloads are appropriate for internal
-testing and sideloading, not public production distribution.
+Locally the same key comes from `android/key.properties` (gitignored), holding `storeFile`,
+`storePassword`, `keyAlias` and `keyPassword`. Without that file a release build falls back to the
+debug key so a fresh clone still builds; CI rejects an APK signed that way.
+
+These builds are for internal testing and sideloading, not public production distribution;
+`DEC-008` decides whether the production app moves to Play App Signing.
 
 **Updating a phone from the link:** install over the existing app. If Android says "App not
 installed", first work through the Path B prerequisites below (Auto Blocker, Install unknown apps,
@@ -161,13 +170,16 @@ still needs Developer options, and needs both devices on the same non-isolated n
 
 ### Caveats
 
-- The release build is signed with WSL's `~/.android/debug.keystore` (valid to 2056, so
-  expiry is not a concern) — but that key is **per-machine**. Building on a different machine,
-  or losing that file to a WSL reset, produces a different signature, and Android then refuses
-  the update: reinstalling means uninstalling first, which **erases the app's data**
-  (`allowBackup=false`, no cloud backup yet). **Back up `~/.android/debug.keystore`** — the
-  repository secret cannot be read back, so it is not a backup. The release build type is
-  not `debuggable` — this is a real release build that merely carries a debug *signature*.
+- The release build is signed with `~/.android/mealmate-release.jks` (valid 10000 days, so
+  expiry is not a concern), configured by `android/key.properties` locally and by the CI
+  settings above. Losing that file — a WSL reset, a new machine — produces a different
+  signature, and Android then refuses the update: reinstalling means uninstalling first, which
+  **erases the app's data** (`allowBackup=false`, no cloud backup yet). **Back up the keystore
+  and its password off this machine** — the repository secret cannot be read back, so it is not
+  a backup. Releases v1.0.0 through v1.0.3 each carry a different throwaway key that no longer
+  exists, so a build signed with this key will not install over one of those. The release build
+  type is not `debuggable` — this is a real release build that merely carries a sideload
+  *signature*.
 - The Settings export is the only sanctioned way data leaves the phone.
 - A phone plugged in *after* the host adb server started may not enumerate until
   `bash tools/emulator.sh down` and a fresh `up`.

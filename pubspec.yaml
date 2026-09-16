@@ -45,6 +45,10 @@ dependencies:
 dev_dependencies:
   flutter_test:
     sdk: flutter
+  # On-device tests (FIX-001 AC-1): the v12 to v13 migration has to be exercised by the real
+  # app on a real Android runtime, which a host-side widget test cannot do.
+  integration_test:
+    sdk: flutter
 
   # The "flutter_lints" package below contains a set of recommended lints to
   # encourage good coding practices. The lint set provided by the package is

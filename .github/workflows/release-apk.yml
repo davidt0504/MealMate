@@ -29,12 +29,35 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # Seconds rather than minutes. A missing secret or variable used to surface only after the
+  # test phase, which is how two consecutive runs were spent on one misconfiguration.
+  preflight:
+    name: Preflight
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check the signing configuration is present
+        env:
+          SIGNING_KEYSTORE_B64: ${{ secrets.SIGNING_KEYSTORE_B64 }}
+          SIGNING_KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
+          SIGNING_CERT_SHA256: ${{ vars.SIGNING_CERT_SHA256 }}
+        run: |
+          missing=""
+          [ -n "$SIGNING_KEYSTORE_B64" ] || missing="$missing SIGNING_KEYSTORE_B64(secret)"
+          [ -n "$SIGNING_KEY_PASSWORD" ] || missing="$missing SIGNING_KEY_PASSWORD(secret)"
+          [ -n "$SIGNING_CERT_SHA256" ] || missing="$missing SIGNING_CERT_SHA256(variable)"
+          if [ -n "$missing" ]; then
+            echo "::error::not configured:$missing -- see 'Downloading an APK from GitHub' in README.md"
+            exit 1
+          fi
+          echo "signing configuration present"
+
   build:
     name: Build APK
+    needs: preflight
     runs-on: ubuntu-latest
     env:
       RUSTUP_TOOLCHAIN: "1.98.0"
-      SIGNING_CERT_SHA256: f0d663498fb06a14a79e87f7ef090dbd6b6a697dbf1d815ae42cbb291dcfffe3
 
     steps:
       - name: Check out the release source
@@ -48,73 +71,93 @@ jobs:
           distribution: temurin
           java-version: "17"
 
+      # Pinned rather than `stable`: an upstream release must not be able to change what a
+      # release build compiles against between one run and the next. Matches the local SDK
+      # the recorded test counts were produced on.
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
-          channel: stable
+          flutter-version: "3.47.1"
           cache: true
 
       - name: Set up Rust and Android targets
         uses: dtolnay/rust-toolchain@1.98.0
         with:
           targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android
+          components: rustfmt
 
       # The Flutter native-assets hook invokes `rustup` directly.
       - name: Make Rust tools available to Flutter
         run: echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
 
+      # The bridge generator shells out to `cargo expand` and `rustfmt`. Without them it logs
+      # an error, skips that work and still exits 0, so the check below would pass on a
+      # generator that never really ran.
       - name: Install Flutter Rust Bridge code generator
-        run: cargo install flutter_rust_bridge_codegen --version 2.13.0 --locked
+        run: |
+          cargo install flutter_rust_bridge_codegen --version 2.13.0 --locked
+          cargo install cargo-expand --locked
 
       - name: Fetch Flutter dependencies
         run: flutter pub get
 
+      # Regenerating is not verifying. The committed bindings must equal what the generator
+      # produces, or a stale or hand-edited binding ships unnoticed.
       - name: Verify generated bridge bindings
-        run: flutter_rust_bridge_codegen generate
+        run: |
+          flutter_rust_bridge_codegen generate
+          if ! git diff --exit-code -- lib/src/rust rust/src/frb_generated*.rs; then
+            echo "::error::generated bindings differ from the committed ones; run 'flutter_rust_bridge_codegen generate' and commit the result"
+            exit 1
+          fi
 
       # Stale .so = false pass, so the Rust build always precedes the tests.
       - name: Run tests
         run: (cd rust && cargo test --workspace && cargo build --release) && flutter test
 
-      # Without the shared key, Gradle generates a fresh debug key per run, and phones refuse
-      # the update unless the app (and its local data) is uninstalled first.
-      # Installed late to shorten exposure; code from earlier steps in this job can still persist
-      # and read it.
-      - name: Install the shared signing key
+      # Decoded into the runner temp directory, never ~/.android: the build must read the key
+      # it was handed rather than whatever AGP finds on its own search path. Checked before the
+      # build, so a wrong key fails in seconds instead of after the APK is assembled.
+      - name: Install the release signing key
         env:
           SIGNING_KEYSTORE_B64: ${{ secrets.SIGNING_KEYSTORE_B64 }}
+          SIGNING_KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
+          SIGNING_CERT_SHA256: ${{ vars.SIGNING_CERT_SHA256 }}
         run: |
-          if [ -z "$SIGNING_KEYSTORE_B64" ]; then
-            echo "::error::SIGNING_KEYSTORE_B64 secret is not set"
-            exit 1
-          fi
-          mkdir -p "$HOME/.android"
-          printf '%s' "$SIGNING_KEYSTORE_B64" | base64 -d > "$HOME/.android/debug.keystore"
-          # Checked before the build: a wrong secret fails here in seconds, naming both digests.
-          env | grep '^ANDROID' || true
+          printf '%s' "$SIGNING_KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/release.jks"
           set -o pipefail
-          actual=$(keytool -list -v -keystore "$HOME/.android/debug.keystore" -storepass android \
-            | sed -n 's/^[[:space:]]*SHA256: //p' | tr -d ':' | tr 'A-F' 'a-f') || {
-            echo "::error::keytool could not read the keystore decoded from SIGNING_KEYSTORE_B64"
+          actual=$(keytool -list -v -keystore "$RUNNER_TEMP/release.jks" \
+            -storepass "$SIGNING_KEY_PASSWORD" \
+            | sed -n 's/^[[:space:]]*SHA256: //p' | head -1 | tr -d ':' | tr 'A-F' 'a-f') || {
+            echo "::error::keytool could not read the keystore decoded from SIGNING_KEYSTORE_B64 -- wrong SIGNING_KEY_PASSWORD, or the secret is not a keystore"
             exit 1
           }
-          if [ "$actual" != "$SIGNING_CERT_SHA256" ]; then
-            echo "::error::SIGNING_KEYSTORE_B64 decodes to certificate '${actual}', expected ${SIGNING_CERT_SHA256}"
+          expected=$(printf '%s' "$SIGNING_CERT_SHA256" | tr -d ':' | tr 'A-F' 'a-f')
+          if [ "$actual" != "$expected" ]; then
+            echo "::error::SIGNING_KEYSTORE_B64 decodes to certificate '${actual}', but SIGNING_CERT_SHA256 expects '${expected}'"
             exit 1
           fi
+          echo "signing key matches ${expected}"
 
       - name: Build universal release APK
+        env:
+          MEALMATE_KEYSTORE: ${{ runner.temp }}/release.jks
+          MEALMATE_KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
+          MEALMATE_KEY_ALIAS: mealmate
         run: flutter build apk --release
 
-      - name: Verify the APK carries the shared signing key
+      - name: Verify the APK carries the release signing key
         shell: bash
+        env:
+          SIGNING_CERT_SHA256: ${{ vars.SIGNING_CERT_SHA256 }}
         run: |
+          expected=$(printf '%s' "$SIGNING_CERT_SHA256" | tr -d ':' | tr 'A-F' 'a-f')
           apksigner=$(ls -d "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -1)
           "$apksigner" verify --print-certs build/app/outputs/flutter-apk/app-release.apk \
             > signers.txt
           cat signers.txt
-          if ! grep -q "SHA-256 digest: ${SIGNING_CERT_SHA256}" signers.txt; then
-            echo "::error::APK not signed with ${SIGNING_CERT_SHA256} although the installed key matched; the build read another keystore (see the ANDROID_* variables printed by the install step)"
+          if ! grep -q "SHA-256 digest: ${expected}" signers.txt; then
+            echo "::error::APK not signed with ${expected} although the installed key matched; the release signingConfig did not take effect and the build fell back to a debug key"
             exit 1
           fi
 

@@ -246,6 +246,6 @@ Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-master-2026-0
   **Status:** OPEN
 - **CI APK signing root cause unresolved; diagnostic in place** (`.github/workflows/release-apk.yml:96`) -- run 34869565167 signed with `3e98ef16…` instead of the pinned `f0d66349…`. The secret was re-issued from the local key as `SIGNING_KEYSTORE_B64`, and the install step now checks its fingerprint and prints `ANDROID_*`. If the verify step still fails, AGP reads another keystore location. The first green build must show `publish` skipped before `PUBLISH_APK` is set.
   Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-master-2026-09-15t0923-9f58-2026-09-15T0937-445b.md
-  **Status:** OPEN
+  **Status:** RESOLVED 2026-09-15 — root cause was the template default `signingConfig = signingConfigs.getByName("debug")` in `android/app/build.gradle.kts`: AGP resolves the debug keystore on its own search path and silently generates one where it finds none, which is also why v1.0.0–v1.0.3 each shipped under a different certificate. Release now uses an explicit `signingConfigs.create("release")` fed by `android/key.properties` locally and `MEALMATE_*` environment variables in CI, with the keystore decoded into `$RUNNER_TEMP` rather than `~/.android`, so no search path and no generated key remain. The project moved to a dedicated release keystore; the expected digest is the `SIGNING_CERT_SHA256` repository variable.
 
 ---
