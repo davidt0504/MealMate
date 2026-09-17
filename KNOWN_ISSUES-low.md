@@ -1088,3 +1088,20 @@ Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-fix-001-beta-
   **Status:** OPEN
 
 ---
+
+## feature/opt-006 -- 2026-09-17
+
+Source: /home/davidlinux/.claude/reviews/impl-handoff-feature-opt-006-2026-09-17T1037-5e24.md
+Full review: /home/davidlinux/.claude/reviews/redteam-opt-009-import-2026-09-17T1100-43b9.md
+
+### LOW
+
+- **Household-table heuristic not tied to migrations; overrides newer-schema gate** (`rust/crates/kimatta-storage/src/lib.rs:776`) -- a future migration renaming `household` makes older apps call newer exports "not a Kimatta export"; a foreign DB with a `household` table passes validation. Fix: invariant comment at `MIGRATION_ARRAY`; optionally require a second migration-1 table.
+  Full review: /home/davidlinux/.claude/reviews/redteam-opt-009-import-2026-09-17T1100-43b9.md
+  **Status:** OPEN
+
+- **Picker platform errors surface as raw PlatformException text** (`lib/features/settings/settings_screen.dart:159`) -- a throwing `FilePicker.pickFile()` reaches `describeFailure`'s `_` arm, showing `Import unavailable: PlatformException(...)`. Fix: catch around `pickImportFile` with fixed copy plus one widget test.
+  Full review: /home/davidlinux/.claude/reviews/redteam-opt-009-import-2026-09-17T1100-43b9.md
+  **Status:** OPEN
+
+---
