@@ -4,6 +4,7 @@
 pub mod controller;
 
 use std::collections::{HashMap, HashSet};
+use std::io::Read;
 use std::path::Path;
 
 pub use controller::*;
@@ -195,6 +196,13 @@ pub enum StorageError {
          supports {supported}). Update the app and try again."
     )]
     NewerSchema { found: u32, supported: u32 },
+    /// The file is not a Kimatta export at all: no SQLite header (an image, a text file, an
+    /// empty file, a file shorter than the header), or a SQLite database with no `household`
+    /// table — another app's, which no Kimatta build wrote. Distinct from `CorruptDatabase`
+    /// so the import copy can say "wrong file" rather than "damaged", and `Display` is user
+    /// prose for the same reason as `NewerSchema`'s.
+    #[error("This file is not a Kimatta export. Choose a file saved with Export data.")]
+    NotAnExport,
 }
 
 // Two consts: `M` has drop glue, so an inline `&[M::up(..)]` argument is not promoted
@@ -730,22 +738,48 @@ pub fn export_database(conn: &Connection, dest: impl AsRef<Path>) -> Result<u32,
     schema_version(conn)
 }
 
+const SQLITE_HEADER: &[u8] = b"SQLite format 3\0";
+
 /// Validates a file as a restorable export without writing to it or creating it: a
 /// read-only open (a missing or unreadable path is an error, never a silently created
 /// fresh database), a full `integrity_check`, and the same newer-schema gate as [`open`].
-/// An *older* version passes — restore migrates the staged copy forward. Returns the
-/// export's schema version.
+/// An *older* version passes — restore migrates the staged copy forward. A file that is not
+/// a Kimatta database at all is [`StorageError::NotAnExport`]. Returns the export's schema
+/// version.
 pub fn validate_export(path: impl AsRef<Path>) -> Result<u32, StorageError> {
+    let path = path.as_ref();
     let conn = Connection::open_with_flags(
         path,
         OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
     )
     .map_err(typed_sqlite)?;
+    // Before SQLite reads a page: it types a non-SQLite file as corrupt, and treats an empty
+    // file as a valid empty database.
+    let mut header = Vec::with_capacity(SQLITE_HEADER.len());
+    std::fs::File::open(path)?
+        .take(SQLITE_HEADER.len() as u64)
+        .read_to_end(&mut header)?;
+    if header != SQLITE_HEADER {
+        return Err(StorageError::NotAnExport);
+    }
     let verdict: String = conn
         .query_row("PRAGMA integrity_check", [], |r| r.get(0))
         .map_err(typed_sqlite)?;
     if verdict != "ok" {
         return Err(StorageError::CorruptDatabase { detail: verdict });
+    }
+    // Migration 1 creates `household`, so every export at any version has it. Without this an
+    // empty file or another app's database (whose `user_version` is its own) would migrate,
+    // or at the current version swap straight in, as a database with no household.
+    let kimatta: bool = conn
+        .query_row(
+            "SELECT EXISTS (SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'household')",
+            [],
+            |r| r.get(0),
+        )
+        .map_err(typed_sqlite)?;
+    if !kimatta {
+        return Err(StorageError::NotAnExport);
     }
     let found: u32 = conn
         .pragma_query_value(None, "user_version", |row| row.get(0))
@@ -3643,16 +3677,104 @@ mod tests {
         assert!(!path.exists(), "a read-only probe must not create the file");
     }
 
+    /// A file with no SQLite header is the wrong file, not a damaged export (OPT-009 AC-3).
     #[test]
-    fn validate_types_a_garbage_export_as_corrupt() {
+    fn validate_types_a_non_sqlite_file_as_not_an_export() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("garbage.db");
         std::fs::write(&path, [b'x'; 1024]).unwrap();
         let err = validate_export(&path).unwrap_err();
         assert!(
+            matches!(err, StorageError::NotAnExport),
+            "want NotAnExport, got {err:?}"
+        );
+    }
+
+    /// Adversarial: SQLite reads an empty file as a valid empty database, which restore would
+    /// otherwise migrate into a database with no household.
+    #[test]
+    fn validate_refuses_an_empty_file_as_not_an_export() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("empty.db");
+        std::fs::write(&path, []).unwrap();
+        let err = validate_export(&path).unwrap_err();
+        assert!(
+            matches!(err, StorageError::NotAnExport),
+            "want NotAnExport, got {err:?}"
+        );
+    }
+
+    /// Adversarial: a healthy SQLite database no Kimatta build wrote.
+    #[test]
+    fn validate_refuses_a_foreign_sqlite_file_as_not_an_export() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("foreign.db");
+        Connection::open(&path)
+            .unwrap()
+            .execute_batch("CREATE TABLE notes (x TEXT);")
+            .unwrap();
+        let err = validate_export(&path).unwrap_err();
+        assert!(
+            matches!(err, StorageError::NotAnExport),
+            "want NotAnExport, got {err:?}"
+        );
+    }
+
+    /// Adversarial: Android's `SQLiteOpenHelper` and Room stamp `user_version` with the app's
+    /// own version, so a foreign file can claim exactly the current schema and would otherwise
+    /// swap straight in with no migration to trip over.
+    #[test]
+    fn validate_refuses_a_foreign_sqlite_file_at_the_current_version() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("foreign.db");
+        let conn = Connection::open(&path).unwrap();
+        conn.execute_batch("CREATE TABLE notes (x TEXT);").unwrap();
+        conn.pragma_update(None, "user_version", MIGRATION_ARRAY.len() as u32)
+            .unwrap();
+        drop(conn);
+        let err = validate_export(&path).unwrap_err();
+        assert!(
+            matches!(err, StorageError::NotAnExport),
+            "want NotAnExport, got {err:?}"
+        );
+    }
+
+    /// Expected-to-pass pin: a real export whose pages are damaged stays `CorruptDatabase`, so
+    /// "damaged" and "wrong file" remain distinct.
+    #[test]
+    fn validate_types_a_damaged_export_as_corrupt() {
+        let dir = tempfile::tempdir().unwrap();
+        let conn = open(dir.path().join("kimatta.db")).unwrap();
+        let dest = dir.path().join("export.db");
+        export_database(&conn, &dest).unwrap();
+        let mut bytes = std::fs::read(&dest).unwrap();
+        for b in bytes.iter_mut().skip(100) {
+            *b = 0xFF;
+        }
+        std::fs::write(&dest, bytes).unwrap();
+        let err = validate_export(&dest).unwrap_err();
+        assert!(
             matches!(err, StorageError::CorruptDatabase { .. }),
             "want CorruptDatabase, got {err:?}"
         );
+    }
+
+    /// Expected-to-pass pin: an older export passes, since restore migrates it forward.
+    #[test]
+    fn validate_accepts_an_older_schema_export() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("v12.db");
+        let mut raw = Connection::open(&path).unwrap();
+        MIGRATIONS.to_version(&mut raw, 12).unwrap();
+        drop(raw);
+        assert_eq!(validate_export(&path).unwrap(), 12);
+    }
+
+    /// `describeFailure` renders `Storage.message` verbatim, so the refusal must be user prose.
+    #[test]
+    fn a_non_export_refusal_is_user_prose() {
+        let text = StorageError::NotAnExport.to_string();
+        assert!(text.contains("not a Kimatta export"), "got {text:?}");
     }
 
     #[test]

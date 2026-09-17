@@ -22,6 +22,17 @@ String restoreConfirmBody(String exportName) =>
     'Your current data will be replaced by "$exportName". '
     'The replaced database is kept on this device in case you need it back.';
 
+const importButtonLabel = 'Import from file';
+const importConfirmTitle = 'Import this file?';
+const importConfirmAction = 'Save a copy and replace my data';
+
+/// Names what is replaced and where the undo lives: the safety export taken first becomes the
+/// latest export, so the existing restore button brings the replaced data back (OPT-009 gate 2).
+String importConfirmBody(String fileName) =>
+    'Everything in the app now — recipes, plans, pantry and shopping list — will be '
+    'replaced by "$fileName". A copy of your current data is exported first, so '
+    '"$restoreButtonLabel" brings it back.';
+
 const startFreshConfirmTitle = 'Start fresh with no data?';
 
 /// States the data loss plainly and that the damaged file is kept, not destroyed.
@@ -32,6 +43,19 @@ const startFreshConfirmBody =
 
 String exportedCopy(String path) => 'Exported to $path';
 const restoredCopy = 'Restore complete.';
+
+/// Names the safety export rather than calling it "the latest": the stamp is local time, so a
+/// clock change can sort an older export after it.
+String importedCopy(String safetyExportName) =>
+    'Import complete. Your previous data was saved as "$safetyExportName".';
+
+/// The safety export failed, so the import stopped before anything was replaced.
+String importStoppedCopy(String detail) =>
+    'Import stopped — nothing was replaced. $detail';
+
+/// A backup `Corrupt` is about the chosen file, not the live database: restore validates the
+/// file before touching anything.
+const damagedFileCopy = "That file is damaged and can't be read.";
 const startedFreshCopy =
     'Started fresh. The damaged file was kept on this device.';
 

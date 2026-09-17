@@ -28,4 +28,30 @@ void main() {
     expect(restoreConfirmAction, 'Replace my data');
     expect(startFreshConfirmAction, 'Set data aside and start empty');
   });
+
+  test('the import confirm names the file, what it replaces and the undo', () {
+    final body = importConfirmBody('old.db');
+    expect(body, contains('replaced by "old.db"'));
+    expect(body, contains('recipes'));
+    expect(body, contains('"Restore latest export"'));
+    expect(importConfirmAction, 'Save a copy and replace my data');
+  });
+
+  test('import outcomes name the safety export and the refused file', () {
+    expect(
+      importedCopy('kimatta-export-20260916-101500.db'),
+      contains('"kimatta-export-20260916-101500.db"'),
+    );
+    expect(
+      importStoppedCopy('Export unavailable: disk full'),
+      contains('nothing was replaced'),
+    );
+    expect(
+      importStoppedCopy('Export unavailable: disk full'),
+      endsWith('disk full'),
+    );
+    // The chosen file is what is damaged, never the live database.
+    expect(damagedFileCopy, contains('file is damaged'));
+    expect(damagedFileCopy, isNot(contains('local database')));
+  });
 }

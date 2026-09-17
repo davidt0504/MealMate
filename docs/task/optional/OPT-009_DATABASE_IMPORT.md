@@ -84,7 +84,9 @@ All four resolved in the owner `grill-me` session of 2026-09-16; planning may pr
    307 KB; at an assumed 2 MB for heavy use, ten imports leave at most 20 MB, so pruning is
    deferred until it is measured to matter. Rejected: relying on `.pre-restore` alone (no in-app
    way back, lost after a second import) and a dedicated "Undo import" button (new UI covering
-   only the latest import).
+   only the latest import). **Planning note (2026-09-16):** because the safety export gates the
+   import, import is unavailable while the live database is damaged or not open; the route there
+   is Start fresh, then import.
 3. **Is import reachable before a household exists? — Moot (resolved from code).** There is no
    household-less state: `householdProvider` calls `bootstrapHousehold()` on first launch, so a
    fresh install already holds a household and Settings is reachable. Import replaces that
@@ -95,7 +97,11 @@ All four resolved in the owner `grill-me` session of 2026-09-16; planning may pr
    message "This data was written by a newer version of the app… Update the app and try again";
    both reach the user through `describeFailure`. The plan must confirm that a file which is not
    a SQLite database at all yields a truthful message rather than a raw SQLite string, and add a
-   copy rule if it does not.
+   copy rule if it does not. **Planning finding (2026-09-16):** it does not — a non-SQLite file maps
+   to `Corrupt`, whose copy blames the *local* database, and an empty file or another app's SQLite
+   database was accepted — at the current schema version it would swap in as a database with no
+   household. The plan adds `StorageError::NotAnExport` (no SQLite header, or no `household`
+   table) and a backup-specific `Corrupt` copy rule.
 
 ## Non-goals
 

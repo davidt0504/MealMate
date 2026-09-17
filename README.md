@@ -101,8 +101,8 @@ These builds are for internal testing and sideloading, not public production dis
 installed", first work through the Path B prerequisites below (Auto Blocker, Install unknown apps,
 Play Protect → *Install anyway*). If it still refuses, **do not uninstall** — that erases the app's
 data: the installed copy was signed with a different key, as earlier CI releases were. Keep using
-it, use Settings → **Export data** to keep a copy off the phone, and wait until an import path
-exists.
+it, use Settings → **Export data** to share a copy off the phone, then uninstall, install the new
+build, and bring the copy back with Settings → **Import from file**.
 
 **Build once.** One universal APK, all three ABIs, so it installs on any Android phone:
 

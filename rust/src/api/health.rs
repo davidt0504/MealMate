@@ -400,13 +400,79 @@ mod tests {
             "the probe must not create it"
         );
 
+        // Expected-to-pass since `validate_export` learned `NotAnExport` (OPT-009): a file with
+        // no SQLite header is the wrong file, refused in prose rather than as `Corrupt`.
         std::fs::write(&rig.export_path, [b'x'; 1024]).unwrap();
+        let err = restore_database(rig.export_path.clone(), rig.db_path.clone()).unwrap_err();
+        assert!(
+            matches!(err, KimattaError::Storage { ref message } if message.contains("not a Kimatta export")),
+            "want Storage naming a non-export, got {err:?}"
+        );
+        assert_eq!(household_name().as_deref(), Some("Casa"));
+    }
+
+    /// Expected-to-pass pin (OPT-009 AC-3): a real export with damaged pages is refused as
+    /// `Corrupt` before anything is moved aside.
+    #[test]
+    fn a_damaged_export_is_refused_as_corrupt_with_the_live_db_untouched() {
+        let _guard = TEST_DB_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let rig = rig();
+        seed(&rig, "Casa");
+        export_database(rig.export_path.clone()).unwrap();
+        let mut bytes = std::fs::read(&rig.export_path).unwrap();
+        for b in bytes.iter_mut().skip(100) {
+            *b = 0xFF;
+        }
+        std::fs::write(&rig.export_path, bytes).unwrap();
+
         let err = restore_database(rig.export_path.clone(), rig.db_path.clone()).unwrap_err();
         assert!(
             matches!(err, KimattaError::Corrupt { .. }),
             "want Corrupt, got {err:?}"
         );
         assert_eq!(household_name().as_deref(), Some("Casa"));
+        assert!(!Path::new(&format!("{}.pre-restore", rig.db_path)).exists());
+    }
+
+    /// Expected-to-pass pin (OPT-009): an empty file, which SQLite would read as a valid empty
+    /// database, is refused and the live household survives.
+    #[test]
+    fn an_empty_file_is_refused_with_the_live_db_untouched() {
+        let _guard = TEST_DB_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let rig = rig();
+        seed(&rig, "Casa");
+        std::fs::write(&rig.export_path, []).unwrap();
+
+        let err = restore_database(rig.export_path.clone(), rig.db_path.clone()).unwrap_err();
+        assert!(
+            matches!(err, KimattaError::Storage { ref message } if message.contains("not a Kimatta export")),
+            "want Storage naming a non-export, got {err:?}"
+        );
+        assert_eq!(household_name().as_deref(), Some("Casa"));
+    }
+
+    /// Expected-to-pass pin (OPT-009 AC-1): an export written at an older schema replaces the
+    /// live database and arrives migrated to the current one.
+    #[test]
+    fn an_older_schema_export_restores_and_migrates_forward() {
+        let _guard = TEST_DB_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let rig = rig();
+        {
+            let mut raw = kimatta_storage::rusqlite::Connection::open(&rig.export_path).unwrap();
+            kimatta_storage::MIGRATIONS
+                .to_version(&mut raw, 12)
+                .unwrap();
+            raw.execute(
+                "INSERT INTO household (id, name) VALUES ('old-h', 'Old')",
+                [],
+            )
+            .unwrap();
+        }
+        seed(&rig, "Casa");
+
+        let restored = restore_database(rig.export_path.clone(), rig.db_path.clone()).unwrap();
+        assert_eq!(restored.schema_version, 14);
+        assert_eq!(household_name().as_deref(), Some("Old"));
     }
 
     #[test]

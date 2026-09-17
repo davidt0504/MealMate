@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
@@ -54,6 +55,15 @@ class BackupActions {
             .toList()
           ..sort();
     return names.isEmpty ? null : names.last;
+  }
+
+  /// Opens the system document picker for a file to import, unfiltered: Android has no
+  /// reliable type for `.db`, and `validate_export` refuses anything that is not an export
+  /// (OPT-009 gate 1). On Android the picker copies the choice into the app cache, so the
+  /// result carries a local path. `null` when the user backs out.
+  Future<String?> pickImportFile() async {
+    final picked = await FilePicker.pickFile();
+    return picked?.path;
   }
 
   /// Opens the platform share sheet for a finished export — the sanctioned way to move

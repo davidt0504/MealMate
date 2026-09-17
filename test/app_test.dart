@@ -8682,11 +8682,11 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    expect(find.text(tryAgainLabel), findsOneWidget);
     // The recovery buttons sit below the diagnostics tile, off the Pixel-5
     // viewport; an off-screen tap silently misses.
-    await tester.ensureVisible(find.text(startFreshLabel));
+    await tester.scrollUntilVisible(find.text(startFreshLabel), 200);
     await tester.pumpAndSettle();
+    expect(find.text(tryAgainLabel), findsOneWidget);
     await tester.tap(find.text(startFreshLabel));
     await tester.pumpAndSettle();
     expect(find.text(startFreshConfirmBody), findsOneWidget);
@@ -8741,7 +8741,7 @@ void main() {
     await tester.pumpAndSettle();
     // The recovery buttons sit below the diagnostics tile, off the Pixel-5
     // viewport; an off-screen tap silently misses.
-    await tester.ensureVisible(find.text(startFreshLabel));
+    await tester.scrollUntilVisible(find.text(startFreshLabel), 200);
     await tester.pumpAndSettle();
     await tester.tap(find.text(startFreshLabel));
     await tester.pumpAndSettle();
@@ -8817,6 +8817,30 @@ void main() {
     },
   );
 
+  // OPT-009: restore validates the export before touching the live database, so a `Corrupt`
+  // here is the export's damage. The generic copy would tell the user their own data is broken.
+  testWidgets(
+    'a damaged export is reported as the file, not the live database',
+    (tester) async {
+      usePixel5(tester);
+      final backup = _FakeBackupActions(
+        latest: _fakeExportPath,
+        onRestore: () async => throw const KimattaError.corrupt(
+          message: 'database disk image is malformed',
+        ),
+      );
+      await tester.pumpWidget(harness(initial: '/settings', backup: backup));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(restoreButtonLabel));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(restoreConfirmAction));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Restore failed: $damagedFileCopy'), findsOneWidget);
+      expect(find.textContaining('local database is damaged'), findsNothing);
+    },
+  );
+
   testWidgets(
     'a failed start fresh reports it and re-fetches the health provider',
     (tester) async {
@@ -8837,7 +8861,7 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      await tester.ensureVisible(find.text(startFreshLabel));
+      await tester.scrollUntilVisible(find.text(startFreshLabel), 200);
       await tester.pumpAndSettle();
       await tester.tap(find.text(startFreshLabel));
       await tester.pumpAndSettle();
@@ -8919,6 +8943,259 @@ void main() {
     );
   });
 
+  // OPT-009: import runs pick → confirm → safety export → restore, and nothing past a refusal.
+  group('import from file', () {
+    const pickedPath = '/cache/file_picker/1/old.db';
+
+    Future<void> startImport(WidgetTester tester) async {
+      await tester.ensureVisible(find.text(importButtonLabel));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(importButtonLabel));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('imports the picked file after a safety export', (
+      tester,
+    ) async {
+      usePixel5(tester);
+      var healthFetches = 0;
+      final backup = _FakeBackupActions(picked: pickedPath);
+      await tester.pumpWidget(
+        harness(
+          initial: '/settings',
+          health: () {
+            healthFetches++;
+            return okReport;
+          },
+          backup: backup,
+        ),
+      );
+      await tester.pumpAndSettle();
+      await startImport(tester);
+      expect(find.text(importConfirmBody('old.db')), findsOneWidget);
+      await tester.tap(find.text(importConfirmAction));
+      await tester.pumpAndSettle();
+
+      expect(backup.calls, ['pick', 'export', 'restore:$pickedPath']);
+      expect(healthFetches, 2, reason: 'the generation advanced');
+      expect(
+        find.text(importedCopy('kimatta-export-20260902-010203.db')),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('backing out of the picker takes no export', (tester) async {
+      usePixel5(tester);
+      final backup = _FakeBackupActions();
+      await tester.pumpWidget(harness(initial: '/settings', backup: backup));
+      await tester.pumpAndSettle();
+      await startImport(tester);
+
+      expect(find.byType(AlertDialog), findsNothing);
+      expect(backup.calls, ['pick']);
+    });
+
+    testWidgets('cancelling the confirm takes no export', (tester) async {
+      usePixel5(tester);
+      var healthFetches = 0;
+      final backup = _FakeBackupActions(picked: pickedPath);
+      await tester.pumpWidget(
+        harness(
+          initial: '/settings',
+          health: () {
+            healthFetches++;
+            return okReport;
+          },
+          backup: backup,
+        ),
+      );
+      await tester.pumpAndSettle();
+      await startImport(tester);
+      await tester.tap(find.widgetWithText(TextButton, 'Cancel'));
+      await tester.pumpAndSettle();
+
+      expect(backup.calls, ['pick']);
+      expect(
+        healthFetches,
+        1,
+        reason: 'nothing was swapped, so nothing re-reads',
+      );
+    });
+
+    testWidgets('a failed safety export stops the import', (tester) async {
+      usePixel5(tester);
+      var healthFetches = 0;
+      const failure = KimattaError.storage(message: 'disk full');
+      final backup = _FakeBackupActions(
+        picked: pickedPath,
+        onExport: () async => throw failure,
+      );
+      await tester.pumpWidget(
+        harness(
+          initial: '/settings',
+          health: () {
+            healthFetches++;
+            return okReport;
+          },
+          backup: backup,
+        ),
+      );
+      await tester.pumpAndSettle();
+      await startImport(tester);
+      await tester.tap(find.text(importConfirmAction));
+      await tester.pumpAndSettle();
+
+      expect(backup.calls, ['pick', 'export']);
+      expect(healthFetches, 1);
+      expect(
+        find.text(
+          importStoppedCopy(describeFailure(failure, subject: 'Export')),
+        ),
+        findsOneWidget,
+      );
+    });
+
+    // One refusal per test: snack bars queue, so a second message in the same test would
+    // wait behind the first and never be on screen to assert.
+    Future<String> refusalCopy(
+      WidgetTester tester,
+      KimattaError failure,
+    ) async {
+      usePixel5(tester);
+      final backup = _FakeBackupActions(
+        picked: pickedPath,
+        onRestore: () async => throw failure,
+      );
+      await tester.pumpWidget(harness(initial: '/settings', backup: backup));
+      await tester.pumpAndSettle();
+      await startImport(tester);
+      await tester.tap(find.text(importConfirmAction));
+      await tester.pumpAndSettle();
+      expect(backup.calls, ['pick', 'export', 'restore:$pickedPath']);
+      final snack = tester.widget<SnackBar>(find.byType(SnackBar));
+      final text = (snack.content as Text).data!;
+      expect(text, isNot(contains('local database')));
+      return text;
+    }
+
+    testWidgets('a damaged file is refused as damaged', (tester) async {
+      final text = await refusalCopy(
+        tester,
+        const KimattaError.corrupt(message: 'database disk image is malformed'),
+      );
+      expect(text, 'Import failed: $damagedFileCopy');
+    });
+
+    testWidgets('a file that is not an export is refused as the wrong file', (
+      tester,
+    ) async {
+      final text = await refusalCopy(
+        tester,
+        const KimattaError.storage(
+          message: 'This file is not a Kimatta export. Choose a file saved with Export data.',
+        ),
+      );
+      expect(text, contains('not a Kimatta export'));
+      expect(text, isNot(contains(damagedFileCopy)));
+    });
+
+    testWidgets('a newer export is refused with the update advice', (
+      tester,
+    ) async {
+      final text = await refusalCopy(
+        tester,
+        const KimattaError.storage(
+          message:
+              'This data was written by a newer version of the app (schema 15, this app '
+              'supports 14). Update the app and try again.',
+        ),
+      );
+      expect(text, contains('Update the app'));
+      expect(text, isNot(contains(damagedFileCopy)));
+      expect(text, isNot(contains('not a Kimatta export')));
+    });
+
+    // AC-4 at the UI seam only: the fakes switch on the swap, so this proves the generation
+    // cascade re-reads the household and the library. The data itself is proven on device.
+    testWidgets('import replaces the bootstrapped household', (tester) async {
+      usePixel5(tester);
+      const importedHousehold = HouseholdDto(
+        id: 'h-9',
+        name: 'Imported home',
+        members: [MemberDto(id: 'm-9', displayName: 'Ada')],
+        onboarded: true,
+      );
+      const importedSummary = RecipeSummaryDto(
+        id: 'r-9',
+        title: 'Imported stew',
+        assessment: emptyAssessment,
+      );
+      var imported = false;
+      final backup = _FakeBackupActions(
+        picked: pickedPath,
+        onRestore: () async {
+          imported = true;
+          return okReport;
+        },
+      );
+      await tester.pumpWidget(
+        harness(
+          initial: '/settings',
+          household: () => imported ? importedHousehold : okHousehold,
+          recipes: () => imported ? [importedSummary] : [okSummary],
+          backup: backup,
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.textContaining(unnamedHousehold), findsOneWidget);
+      await startImport(tester);
+      await tester.tap(find.text(importConfirmAction));
+      await tester.pumpAndSettle();
+
+      // Reaching the Import button scrolled the household tile away.
+      await tester.drag(find.byType(ListView), const Offset(0, 2000));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Imported home'), findsOneWidget);
+      await tester.tap(tab('Recipes'));
+      await tester.pumpAndSettle();
+      expect(find.text('Imported stew'), findsOneWidget);
+      expect(find.text('Pancakes'), findsNothing);
+    });
+
+    testWidgets('import is disabled while a restore runs', (tester) async {
+      usePixel5(tester);
+      final pending = Completer<HealthReport>();
+      final backup = _FakeBackupActions(
+        latest: _fakeExportPath,
+        picked: pickedPath,
+        onRestore: () => pending.future,
+      );
+      await tester.pumpWidget(harness(initial: '/settings', backup: backup));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(restoreButtonLabel));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(restoreConfirmAction));
+      await tester.pump();
+
+      expect(
+        tester
+            .widget<FilledButton>(
+              find.widgetWithText(FilledButton, importButtonLabel),
+            )
+            .onPressed,
+        isNull,
+      );
+      await tester.tap(find.text(importButtonLabel), warnIfMissed: false);
+      await tester.pump();
+      expect(backup.calls, [
+        'restore:$_fakeExportPath',
+      ], reason: 'no import started');
+
+      pending.complete(okReport);
+      await tester.pumpAndSettle();
+    });
+  });
+
   // Keep this test last: the assertion it provokes leaves the element tree
   // half-updated, and every test pumped after it in the same file fails on a
   // framework "dependent is not our descendant" assertion (measured).
@@ -8953,12 +9230,18 @@ const _fakeExportPath = '/x/exports/kimatta-export-20260902-010203.db';
 class _FakeBackupActions extends BackupActions {
   _FakeBackupActions({
     this.latest,
+    this.picked,
+    this.onExport,
     this.onRestore,
     this.onStartFresh,
     this.onShareExport,
   });
 
   final String? latest;
+
+  /// What the import picker returns; `null` is the user backing out.
+  final String? picked;
+  final Future<void> Function()? onExport;
   final Future<HealthReport> Function()? onRestore;
   final Future<HealthReport> Function()? onStartFresh;
   final Future<void> Function()? onShareExport;
@@ -8967,10 +9250,22 @@ class _FakeBackupActions extends BackupActions {
   final List<String> restores = [];
   int freshes = 0;
 
+  /// Import, export and restore calls in order, so a test can prove the safety export came
+  /// before the restore — separate counters cannot.
+  final List<String> calls = [];
+
   @override
   Future<ExportReport> export() async {
     exports++;
+    calls.add('export');
+    await (onExport ?? () async {})();
     return ExportReport(path: _fakeExportPath, schemaVersion: 5);
+  }
+
+  @override
+  Future<String?> pickImportFile() async {
+    calls.add('pick');
+    return picked;
   }
 
   @override
@@ -8985,6 +9280,7 @@ class _FakeBackupActions extends BackupActions {
   @override
   Future<HealthReport> restore(String exportPath) async {
     restores.add(exportPath);
+    calls.add('restore:$exportPath');
     return (onRestore ?? () async => okReport)();
   }
 

@@ -14,6 +14,14 @@ import 'package:meal_mate/features/settings/backup_copy.dart';
 import 'package:meal_mate/features/settings/backup_provider.dart';
 import 'package:meal_mate/features/settings/health_provider.dart';
 import 'package:meal_mate/src/rust/api/error.dart';
+import 'package:meal_mate/src/rust/api/health.dart' show ExportReport;
+
+/// Backup operations validate the chosen file before replacing anything, so a `Corrupt` there
+/// is about that file — `describeFailure`'s copy for it blames the live database.
+String describeBackupFailure(Object error, {required String subject}) =>
+    error is KimattaError_Corrupt
+    ? '$subject failed: $damagedFileCopy'
+    : describeFailure(error, subject: subject);
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
@@ -90,7 +98,65 @@ class SettingsScreen extends ConsumerWidget {
       }
     } catch (e) {
       if (context.mounted) {
-        _showSnack(context, describeFailure(e, subject: 'Restore'));
+        _showSnack(context, describeBackupFailure(e, subject: 'Restore'));
+      }
+    } finally {
+      busy.end();
+    }
+  }
+
+  Future<void> _import(BuildContext context, WidgetRef ref) async {
+    final actions = ref.read(backupActionsProvider);
+    // As in `_restore`: read before the first await, released whatever the screen does.
+    final busy = ref.read(backupBusyProvider.notifier);
+    if (!busy.begin()) {
+      return;
+    }
+    try {
+      final picked = await actions.pickImportFile();
+      if (picked == null || !context.mounted) {
+        return;
+      }
+      final name = picked.split(RegExp(r'[/\\]')).last;
+      final confirmed = await _confirm(
+        context,
+        title: importConfirmTitle,
+        body: importConfirmBody(name),
+        action: importConfirmAction,
+      );
+      if (!confirmed) {
+        return;
+      }
+      // The safety export gates the restore (OPT-009 gate 2): if it fails, nothing is replaced.
+      final ExportReport safety;
+      try {
+        safety = await actions.export();
+      } catch (e) {
+        if (context.mounted) {
+          _showSnack(
+            context,
+            importStoppedCopy(describeFailure(e, subject: 'Export')),
+          );
+        }
+        return;
+      }
+      try {
+        await actions.restore(picked);
+      } finally {
+        // As in `_restore`: a failed restore may still have emptied the connection slot.
+        if (context.mounted) {
+          ref.read(databaseGenerationProvider.notifier).advanceAfterSwap();
+        }
+      }
+      if (context.mounted) {
+        _showSnack(
+          context,
+          importedCopy(safety.path.split(RegExp(r'[/\\]')).last),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        _showSnack(context, describeBackupFailure(e, subject: 'Import'));
       }
     } finally {
       busy.end();
@@ -223,7 +289,7 @@ class SettingsScreen extends ConsumerWidget {
           ListTile(
             title: const Text('Backup'),
             subtitle: const Text(
-              'Export a copy of your data, or restore the latest export.',
+              'Export a copy of your data, restore the latest export, or import an export file.',
             ),
           ),
           Padding(
@@ -238,6 +304,10 @@ class SettingsScreen extends ConsumerWidget {
                 FilledButton.tonal(
                   onPressed: busy ? null : () => _restore(context, ref),
                   child: const Text(restoreButtonLabel),
+                ),
+                FilledButton.tonal(
+                  onPressed: busy ? null : () => _import(context, ref),
+                  child: const Text(importButtonLabel),
                 ),
               ],
             ),
