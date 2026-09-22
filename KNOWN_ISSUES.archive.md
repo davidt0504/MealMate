@@ -90,3 +90,51 @@ Full review: /home/davidlinux/.claude/reviews/arch-dir-src-2026-08-25T0900-9639.
 
 - **`insert_household` accepts a member belonging to a different existing household** (`rust/crates/kimatta-storage/src/lib.rs`, `insert_household`) -- **moved here from `KNOWN_ISSUES-low.md` on 2026-08-25 and re-rated MEDIUM**; originally raised 2026-08-25 by the MVP-002 redteam fix pass, re-rated by the arch review above, which classes it MEDIUM as the only data-integrity finding in its set. The foreign key only tests existence, so a member whose `household_id` names another *existing* household is inserted successfully even though the function's name and position imply the members are that household's. `orphan_member_rejected` cannot detect it: it uses a household id that does not exist at all, so it proves foreign-key enforcement rather than the pairing invariant. The 2213 review's MEDIUM was closed on its doc half only -- the doc comment now states that callers own the parent/child pairing. The arch review adds two things: (a) a characterization test for the mis-parented case needs no `StorageError` variant and no caller, so the "wait for the caller" reasoning does not by itself reach the missing test; (b) it offers a second fix option alongside the guard -- verbatim, *"drop `household_id` from the member parameter entirely and derive it from `household.id` at insert time, which makes the class of bug unrepresentable"*. Fix: either enforce `m.household_id == household.id`, or take the parameter-shape option, plus the two-household test either way. Deferred: both options change `insert_household`'s contract -- the guard by adding a `StorageError` variant, the parameter-shape option by changing what a caller passes -- and MVP-004's write path is what determines the right shape, so choosing now settles that caller's contract prematurely. Resolve with MVP-004's write path; add the test in the same pass.
   **Status:** RESOLVED 2026-08-28 -- MVP-004: guard `m.household_id == household.id` before any write, `StorageError::MemberHouseholdMismatch`, and the two-household test `mismatched_member_rejected`.
+
+## Archived 2026-09-20
+
+### integration -- 2026-08-29
+
+Full review: /home/davidlinux/.claude/reviews/redteam-mvp003-integration-verify-2026-08-28T1904-03fd.md
+
+#### MEDIUM
+
+- **`#[frb(ignore)]` was needed on a private struct before codegen could run** (`rust/src/api/health.rs:68`) -- `struct Aside` is internal to the restore path and appears in no `pub fn` signature, but flutter_rust_bridge generated bindings naming it, and the crate then failed to compile with `error[E0603]: struct \`Aside\` is private`. The committed generated files had been stale since the struct was added, so the breakage was latent: any card re-running `flutter_rust_bridge_codegen generate` would have hit it. Found and fixed by MVP-032, which had to regenerate for a DTO doc change. No further action; recorded so the class is visible -- a new non-`pub` type in `rust/src/api/**` needs `#[frb(ignore)]` or codegen will try to bridge it.
+  **Status:** RESOLVED 2026-09-05 (MVP-032)
+
+### orch/33 -- 2026-09-02
+
+Source: /home/davidlinux/.claude/reviews/impl-handoff-orch-33-2026-09-02T1146-243b.md
+Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-orch-33-2026-09-02T1158-e249.md
+
+#### MEDIUM
+
+- **`selected_action` cannot record a declined apply** (`rust/crates/kimatta-application/src/lib.rs:68`) -- `will_apply = req.apply && status != NeedsAttention`, and the ledger writes `ACTION_APPLY` or `ACTION_PROPOSE` from that single bool (:90-95), so "the user asked to automate and the controller refused" and "the user asked for a preview" produce byte-identical rows in the column that records intent. Pinned by the crate's own `apply_under_needs_attention_records_and_does_not_write` (:413, :433). No wrong output; the ledger loses the most diagnostic event it exists to capture. Deferred: a third stored token needs the kernel token-table treatment (`ALL`/`as_str`/`parse` plus a `CorruptLedgerEntry` case in `list_ledger_entries`) and a ledger-schema decision belonging with MVP-024's explain surface, the first consumer of the distinction. Fix: an `ACTION_DECLINED` token on the `req.apply && !will_apply` path.
+  Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-orch-33-2026-09-02T1158-e249.md
+  **Status:** RESOLVED 2026-09-02 (MVP-024) -- the token already ships: `ACTION_DECLINED = "declined"` written on the `req.apply && !will_apply` path (`kimatta-application/src/lib.rs`), pinned by `a_declined_apply_is_distinguishable_from_a_preview`. Residual ("declined distinction never surfaced in any UI") recorded as a new low entry in `KNOWN_ISSUES-low.md`, not a re-defer of this one.
+
+- **`offset_cycles` is unvalidated at the bridge and surfaces a pure input error as a database failure** (`rust/src/api/planner.rs:352`) -- the rustdoc at :341-342 promises "dates are parsed before storage is touched, so a malformed `today` is a typed `Planning` error" and :347 honours it, but the sibling input `offset_cycles` is passed through untouched and validated only inside `load_planning_snapshot` -> `window_containing` -> `CycleWindowOverflow` -> `StorageError::Planning` -> `KimattaError::Storage`. `coverCycle(offsetCycles: 2147483647)` therefore reads as "Household unavailable: ..." (`lib/features/household/household_screen.dart:27`). No panic -- `window_containing` is overflow-safe. `today`'s half is pinned by `test/bridge_native_test.dart:586-596`; this half is not. Deferred: wrong error *category*, no data effect; pairs with MVP-024's error-surface work where the Dart copy is decided. Fix: range-check `offset_cycles` beside the `today` parse and return the `Planning` variant, plus a mirroring Dart test.
+  Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-orch-33-2026-09-02T1158-e249.md
+  **Status:** RESOLVED 2026-09-02 (MVP-024) -- `cover_in` and `record_in` reject `|offset_cycles| > 520` with `KimattaError::Planning` before storage is touched (`rust/src/api/planner.rs`, `MAX_OFFSET_CYCLES`); pinned by `offset_cycles_beyond_the_bound_is_a_typed_planning_error` and the mirroring Dart assertion in `test/bridge_native_test.dart`.
+
+### orch/37 -- 2026-09-02
+
+Source: /home/davidlinux/.claude/reviews/impl-handoff-orch-37-2026-09-02T1936-1e59.md
+Full review: ~/.claude/reviews/redteam-impl-handoff-orch-37-2026-09-02T1949-115e.md
+
+#### MEDIUM
+
+- **Swap outside the assessed window records evidence about a window it did not change** (`rust/crates/kimatta-application/src/lib.rs:203`) -- `record_decision` snapshots `(today, offset_cycles)` but `PlanDecision::Swap` writes at `decision.date`, unchecked against that window; `save_planned_meal_in` checks household/cycle/slot, never the date. A far-dated swap commits a locked row beside a `correct` row whose hash and statuses say nothing changed. Deferred: unreachable from the UI (dates come from rendered slots). Fix: derive the window as `cover_in` does and reject an out-of-window date, or snapshot the window containing `date`.
+  Full review: ~/.claude/reviews/redteam-impl-handoff-orch-37-2026-09-02T1949-115e.md
+  **Status:** RESOLVED 2026-09-02 -- `record_decision` now derives the window from the `before` snapshot (`PlanningSnapshot::dates()`) and refuses a `Swap` outside it with `ApplicationError::DecisionOutsideWindow`, before any write, so the transaction rolls back. `Veto`/`RestrictionsReviewed` stay un-gated: their `date` is ledger-only.
+
+### orch/39 -- 2026-09-03
+
+Source: /home/davidlinux/.claude/reviews/impl-handoff-orch-39-2026-09-03T0005-e036.md
+Full review: ~/.claude/reviews/redteam-impl-handoff-orch-39-2026-09-03T0012-89d3.md
+
+#### MEDIUM
+
+- **No guard against two concurrent restores sharing one staging path** (`rust/src/api/health.rs:71`) -- `{db_path}.restore-staging` is a fixed path and everything before `db::swap` runs outside the `DB` mutex, so a double tap on Restore (the button is never disabled in flight) lets one call's `fs::copy` truncate a staged file another call already verified and is about to commit. Fix: unique per-call staging name, or hold the mutex for all of `restore_database`.
+  Full review: ~/.claude/reviews/redteam-impl-handoff-orch-39-2026-09-03T0012-89d3.md
+  **Status:** RESOLVED 2026-09-03 -- the whole of `restore_database` runs inside `crate::db::swap`, and both destructive buttons are disabled while an operation is in flight (`BackupBusy`): serialising alone would still let a second confirmed restore overwrite the single kept generation with the first restore's result.

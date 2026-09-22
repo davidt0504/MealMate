@@ -327,3 +327,99 @@ Full review: /home/davidlinux/.claude/reviews/redteam-api-shopping-2026-08-29T23
 - **Dead `pub(crate)` widening with a false "Shared with `shopping.rs`" doc** (`rust/src/api/recipe.rs:210`) -- `quantity_to_domain` and `unit_to_domain` (also `recipe.rs:244`) were widened and documented as shared, but grep shows their only call sites are `recipe.rs:292`/`:293`; `shopping.rs` imports only the `_from_domain` pair and computes the token from the domain line. Rust does not warn on unused visibility. Fix: revert both to private and drop the two doc lines.
   Full review: /home/davidlinux/.claude/reviews/redteam-api-shopping-2026-08-29T2300-7c38.md
   **Status:** RESOLVED 2026-08-29 -- both reverted to private and the two doc lines dropped (MVP-016 Flutter round).
+
+## Archived 2026-09-20
+
+### orch/33 -- 2026-09-02
+
+Source: /home/davidlinux/.claude/reviews/impl-handoff-orch-33-2026-09-02T1146-243b.md
+Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-orch-33-2026-09-02T1158-e249.md
+
+#### LOW
+
+- **`KimattaError::Planner` is a dead variant already frozen into the FFI contract** (`rust/src/api/error.rs:23`) -- nothing constructs it: grepping `rust/src/` and `lib/features/` returns the definition plus three machine-generated `frb_generated.rs` arms (:1764, :3382, :4460) and nothing else, and the `From<ApplicationError>` impl at :30-36 is exhaustive over a one-variant enum with no catch-all. Its own doc concedes it is "reserved for planner-specific failures the application layer may grow". It generated ~60 lines of freezed Dart and an unreachable arm in `describeFailure` (`lib/features/household/household_screen.dart:43-45`). Fix: delete the variant and its Dart arm and regenerate -- cheap now, a breaking change to a Dart surface once MVP-024 ships against it.
+  Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-orch-33-2026-09-02T1158-e249.md
+  **Status:** RESOLVED 2026-09-02 (MVP-024) -- already fixed before this card: `rust/src/api/error.rs` carries no `Planner` variant (verified by grep; variants are InvalidPath/NotOpen/Storage/Planning/Recipe/Restriction/PlannedMeal/Shopping) and `describeFailure` has no such arm.
+
+### orch/35 -- 2026-09-02
+
+Source: /home/davidlinux/.claude/reviews/impl-handoff-orch-35-2026-09-02T1722-7e0f.md
+Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-orch-35-2026-09-02T1736-f8f4.md
+
+#### LOW
+
+- **Dead statements written to satisfy the compiler, not to assert** (`rust/crates/food-domain/src/planner/invariant_tests.rs:166`) -- `history_ids.clear()` exists only to justify the `mut` binding; `let _ = lines;` (line 648) discards a counter `assert_well_formed` computes and never asserts; `fixtures/mod.rs:798` re-assigns `pantry_marked = vec![]` that `base()` already set at `mod.rs:291`. Reads as configuration, is tautology. Fix: drop the `mut`+`clear()`, assert a floor on `lines` or delete it, delete the redundant assignment.
+  Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-orch-35-2026-09-02T1736-f8f4.md
+  **Status:** RESOLVED 2026-09-02 -- all three deleted; the `lines` counter went rather than gaining a floor (the caller's `lines_seen > 0` already covers it), and `sparse_pantry`'s pinned hash was unchanged by the assignment's removal, confirming it was a tautology.
+
+- **Exploratory B×K grid skips `multiple_strong_dislikes`, the only fixture with a strictly-better cell** (`rust/crates/food-domain/examples/beam_width.rs:19`) -- `SEARCH_HEAVY` is an undocumented four-name list that includes 3-recipe `leftovers_fallback_heavy` but excludes the 8-recipe fixture that produced the recorded headroom cell (`docs/ROADMAP.md:322`), so no intermediate-B data exists where the evidence says shipped params leave quality on the table. Non-blocking: `beam.rs:85-108` is monotone in B and K, so `(64, cap)` upper-bounds every cell. Fix: derive the list from `feasible_cap`, or add the fixture and record the monotonicity argument.
+  Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-orch-35-2026-09-02T1736-f8f4.md
+  **Status:** RESOLVED 2026-09-02 -- fixture added (`SEARCH_HEAVY` now 5), selection criterion recorded on the const and the monotonicity argument in the module doc; benchmark re-run resolved the open question — the headroom is a beam-width effect reached at B>=16 for every swept K (and at B=8/K=2), verdict still SURVIVES.
+
+- **ROADMAP evidence row overstates invariant 4's parameter coverage** (`docs/ROADMAP.md:322`) -- the AC-2 cell claims invariants "1-4 ... quantified over all 11 fixtures x (B,K) in {(1,1),(8,12),(64,64)}", but `invariant_tests.rs:570-577` runs invariant 4 over `[(1,1), default]` only, as its own doc comment states. The row is what a verifier reads to grant PASS. Materially small: the subset check is parameter-independent, only the corollary is affected. Fix: narrow the parenthetical to invariants 1-3, or annotate invariant 4's two cells.
+  Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-orch-35-2026-09-02T1736-f8f4.md
+  **Status:** RESOLVED 2026-09-02 -- the AC-2 cell now reads "invariants 1-3 ... x (B,K)", with invariant 4 recorded separately as parameter-independent subset checks plus a corollary at (1,1) and (8,12); appended rather than narrowed, so invariant 4 keeps its place in the evidence sentence.
+
+- **`by_name` rebuilds every fixture per call; the skipped-restrictions variant is never planned** (`rust/crates/food-domain/src/planner/fixtures/mod.rs:64`) -- `by_name` calls `all()` (line 65), so `fixture_shapes_hold`'s eleven lookups build 121 fixtures including 48-recipe `high_variety_household`. Separately `restrictions_skipped_variant` (line 96) has one caller (`invariant_tests.rs:286`) that only asserts its own shape; no invariant and not `beam_width.rs` ever plans it, so `fixtures/README.md:22`'s "tests, bench, §22" reuse cell overstates it. Fix: match-then-build or `OnceLock` in `by_name`; run one invariant over the variant or narrow the README cell.
+  Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-orch-35-2026-09-02T1736-f8f4.md
+  **Status:** RESOLVED 2026-09-02 -- `by_name` builds once via `OnceLock` (chosen over match-then-build, which would duplicate the eleven-name list; `all()` stays uncached so `fixtures_are_deterministic` still compares two independent builds), and the README's reuse and shape cells for that row now say the skipped variant is shape-asserted only.
+
+### orch/37 -- 2026-09-02
+
+Source: /home/davidlinux/.claude/reviews/impl-handoff-orch-37-2026-09-02T2033-1a2c.md
+Full review: ~/.claude/reviews/redteam-impl-handoff-orch-37-2026-09-02T2041-c699.md
+
+#### LOW
+
+- **`?offset=` outside i32 truncates silently past the ±520 bound** (`lib/app/router.dart:78`) -- `int.tryParse` yields a 64-bit int that reaches `sse_encode_i_32` -> `putInt32`, which keeps the low 32 bits without throwing, so `?offset=4294967297` narrows to `1`, passes `MAX_OFFSET_CYCLES`, and previews a window the URL did not ask for. Fix: clamp the parsed offset to `[-520, 520]` in the route builder.
+  Full review: ~/.claude/reviews/redteam-impl-handoff-orch-37-2026-09-02T2041-c699.md
+  **Status:** RESOLVED 2026-09-02 -- `coverOffset` in `lib/app/router.dart` saturates the parsed value to the i32 range before it crosses, so an out-of-range deep link can no longer narrow into an unrelated in-range window. Deliberately *not* the clamp to `[-520, 520]` this entry proposed: clamping to the bound would silently move the user to week 520, whereas saturating hands the intent to the bound, which now refuses in prose ("that week is too far away to plan"). Pinned by the `coverOffset` group in `test/app_test.dart`, including a case asserting `'1000'` is *not* clamped.
+
+### orch/37 -- 2026-09-02
+
+Source: /home/davidlinux/.claude/reviews/impl-handoff-orch-37-2026-09-02T2117-c7db.md
+Full review: ~/.claude/reviews/redteam-impl-handoff-orch-37-2026-09-02T2127-eb06.md
+
+#### LOW
+
+- **The Cover screen's decision-failure snackbar is untested** (`lib/features/planning/cover_screen.dart:334`) -- no test makes the `decide:` hook throw, so `_decide`/`_accept`'s `catch -> _report` and the `_busy` release in `finally` are never exercised, on a screen whose three refusals (`BlankVetoSubject`, `DecisionOutsideWindow`, `LockedPlannedMeal`) are all user-visible. Fix: one widget test with a throwing `decide:` hook asserting `find.byType(SnackBar)` carries `describeFailure`'s prose, as the pantry and household screens already do.
+  Full review: ~/.claude/reviews/redteam-impl-handoff-orch-37-2026-09-02T2127-eb06.md
+  **Status:** RESOLVED 2026-09-02 -- `a refused decision surfaces as a snackbar and frees the screen` (`test/app_test.dart`) throws from the `decide:` hook, asserts the snackbar carries `describeFailure`'s prose, and asserts the tile's Swap is re-enabled afterwards (the `finally` half). Two of the three refusals this entry names have since changed identity in the same pass: `BlankVetoSubject` is now `UnmatchableVetoSubject`, and `LockedPlannedMeal` no longer reaches this screen -- the locked swap is refused as `ApplicationError::SwapOntoLockedSlot` and mapped to prose.
+
+- **One user-facing sentence lives in the widget, outside the sampled copy surface** (`lib/features/planning/cover_screen.dart:381`) -- `'Your recipe library could not be read.'` is prose, not a control label, yet it is neither in `cover_copy.dart` nor in `coverCopySamples`, so none of the three invariant-19 whole-surface regexes ever sees it and the count guard cannot detect a string that was never a constant. Distinct from the `coverCopySamples` entry above, which is scoped to unsampled constants *in* `cover_copy.dart`. Fix: move it to `cover_copy.dart` as a named constant and add it to `coverCopySamples`.
+  Full review: ~/.claude/reviews/redteam-impl-handoff-orch-37-2026-09-02T2127-eb06.md
+  **Status:** RESOLVED 2026-09-02 -- the sentence is now `swapLibraryUnavailableCopy` in `cover_copy.dart` and sampled, so all three whole-surface regexes see it. `questionLockedCopy` was added in the same pass and sampled with it; the count guard moved 29 -> 31.
+
+### orch/39 -- 2026-09-02
+
+Source: /home/davidlinux/.claude/reviews/impl-handoff-orch-39-2026-09-02T2310-dff6.md
+Full review: ~/.claude/reviews/redteam-impl-handoff-orch-39-2026-09-02T2320-5b75.md
+
+#### LOW
+
+- **`commit_swap` destroys the previous `.pre-restore` before anything replaces it** (`rust/src/api/health.rs:118`) -- the one-generation cleanup runs before `rename(db_path, pre)` at line 125, so a restore that fails anywhere up to line 140 deletes the earlier backup generation without creating a new one; on Unix the rename would have replaced it atomically anyway. Fix: drop `remove_file(pre)` and let the rename replace it (keep the explicit `pre_journal` removal), or move both removals after the rename succeeds.
+  Full review: ~/.claude/reviews/redteam-impl-handoff-orch-39-2026-09-02T2320-5b75.md
+  **Status:** RESOLVED 2026-09-03 -- `remove_file(pre)` is gone and the rename replaces `pre` atomically; the `pre_journal` removal and the journal move now sit inside the `db_path`-exists branch, with an `else` arm that removes a journal orphaned by an absent database rather than mispairing it with the kept generation.
+
+- **Export failures bypass corrupt-error typing** (`rust/crates/kimatta-storage/src/lib.rs:610`) -- `VACUUM INTO` (line 610) and `schema_version` (line 581) use a bare `?` rather than `typed_sqlite`, so page-level damage found during an export surfaces as `KimattaError::Storage` with the raw SQLite string instead of the honest `Corrupt` copy `household_screen.dart` supplies. Fix: `.map_err(typed_sqlite)` on both, matching `open` and `validate_export` in the same file.
+  Full review: ~/.claude/reviews/redteam-impl-handoff-orch-39-2026-09-02T2320-5b75.md
+  **Status:** RESOLVED 2026-09-03 -- both sites now route through `typed_sqlite`, pinned by `an_export_of_a_damaged_database_is_typed_as_corrupt`.
+
+- **The live database path is constructed independently in two places** (`lib/features/settings/backup_provider.dart:29`) -- `BackupActions._dbPath()` and `healthReportProvider` (`lib/features/settings/health_provider.dart:13`) each build `'${dir.path}${Platform.pathSeparator}kimatta.db'`; if one is ever changed, restore/start-fresh act on a file the app never opens and report success while nothing visible changes. Fix: one exported `localDatabasePath()` called by both.
+  Full review: ~/.claude/reviews/redteam-impl-handoff-orch-39-2026-09-02T2320-5b75.md
+  **Status:** RESOLVED 2026-09-03 -- `localDatabasePath()` in `health_provider.dart` is the single spelling; `healthReportProvider`, `restore` and `startFresh` all call it and `BackupActions._dbPath()` is gone.
+
+### orch/39 -- 2026-09-03
+
+Source: /home/davidlinux/.claude/reviews/impl-handoff-orch-39-2026-09-03T0005-e036.md
+Full review: ~/.claude/reviews/redteam-impl-handoff-orch-39-2026-09-03T0012-89d3.md
+
+#### LOW
+
+- **Post-verify staging cleanup is swallowed and covers only `-journal`** (`rust/src/api/health.rs:99`) -- `let _ = remove_file("{staging}-journal")` is the mirror of the strict three-suffix loop at line 79, but swallows failure and omits `-wal`/`-shm`; `commit_swap`'s assertion checks `{db_path}-wal`, not `{staging}-wal`, so nothing downstream notices. Fix: reuse the `ignore_not_found` + `?` loop shape here.
+  Full review: ~/.claude/reviews/redteam-impl-handoff-orch-39-2026-09-03T0012-89d3.md
+  **Status:** RESOLVED 2026-09-03 -- both staging clears are the same strict loop over one `const SIDECARS` list, which every clear/move/put-back site in `health.rs` now drives off; pinned by `a_restore_leaves_no_staging_artefact_behind`.
+
+- **Failed `pre_journal` removal mispairs the kept generation** (`rust/src/api/health.rs:136`) -- the `exists` branch renames `db_path` onto `pre` before removing `{pre}-journal`; a non-`NotFound` failure there leaves generation N's database beside generation N-1's journal, which `recover_original`'s unconditional put-back (line 183) then moves next to the restored database (R0). Fix: remove `{pre}-journal` before the rename, so a failure aborts with nothing moved.
+  Full review: ~/.claude/reviews/redteam-impl-handoff-orch-39-2026-09-03T0012-89d3.md
+  **Status:** RESOLVED 2026-09-03 -- not by that reorder, which plan review showed destroys the kept generation's journal when the rename then fails. Instead each `{pre}` sidecar is replaced-or-removed *after* the rename (its database is gone by then), and `recover_original` puts back only the sidecars this restore moved, so a foreign journal cannot reach the restored original; pinned by `a_foreign_pre_journal_is_not_carried_back_to_the_original`.
