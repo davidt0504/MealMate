@@ -46,7 +46,7 @@ void main() {
     );
   });
 
-  test('open_database migrates a real database to schema v13', () async {
+  test('open_database migrates a real database to the latest schema', () async {
     final report = await openDatabase(dbPath: await tempDb());
     expect(report.schemaVersion, 14);
   });

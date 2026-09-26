@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# FIX-001 AC-1: exercise the v12 -> v13 migration inside the real app on a real Android runtime.
+# FIX-001 AC-1: exercise the v12 -> latest migration inside the real app on a real Android runtime.
 #
 #   bash tools/ac1_migration_check.sh [serial]
 #

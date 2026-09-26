@@ -58,6 +58,9 @@ jobs:
     runs-on: ubuntu-latest
     env:
       RUSTUP_TOOLCHAIN: "1.98.0"
+      # One definition, read by both the pre-build keystore check and the build itself: two
+      # literals that must agree is the bug this check exists to catch, one level up.
+      MEALMATE_KEY_ALIAS: mealmate
 
     steps:
       - name: Check out the release source
@@ -117,6 +120,13 @@ jobs:
       - name: Run tests
         run: (cd rust && cargo test --workspace && cargo build --release) && flutter test
 
+      # Its own step so a formatting failure reads as one, rather than as a test failure; after
+      # the tests so a cosmetic hunk never preempts a real signal, and before the build so it
+      # stops a release rather than wasting an APK assembly. `components: rustfmt` is already
+      # installed above for the bridge generator.
+      - name: Check Rust formatting
+        run: cd rust && cargo fmt --all --check
+
       # Decoded into the runner temp directory, never ~/.android: the build must read the key
       # it was handed rather than whatever AGP finds on its own search path. Checked before the
       # build, so a wrong key fails in seconds instead of after the APK is assembled.
@@ -129,9 +139,10 @@ jobs:
           printf '%s' "$SIGNING_KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/release.jks"
           set -o pipefail
           actual=$(keytool -list -v -keystore "$RUNNER_TEMP/release.jks" \
+            -alias "$MEALMATE_KEY_ALIAS" \
             -storepass "$SIGNING_KEY_PASSWORD" \
             | sed -n 's/^[[:space:]]*SHA256: //p' | head -1 | tr -d ':' | tr 'A-F' 'a-f') || {
-            echo "::error::keytool could not read the keystore decoded from SIGNING_KEYSTORE_B64 -- wrong SIGNING_KEY_PASSWORD, or the secret is not a keystore"
+            echo "::error::keytool could not read alias '${MEALMATE_KEY_ALIAS}' in the keystore decoded from SIGNING_KEYSTORE_B64 -- wrong SIGNING_KEY_PASSWORD, no such alias, or the secret is not a keystore"
             exit 1
           }
           expected=$(printf '%s' "$SIGNING_CERT_SHA256" | tr -d ':' | tr 'A-F' 'a-f')
@@ -145,7 +156,6 @@ jobs:
         env:
           MEALMATE_KEYSTORE: ${{ runner.temp }}/release.jks
           MEALMATE_KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
-          MEALMATE_KEY_ALIAS: mealmate
         run: flutter build apk --release
 
       - name: Verify the APK carries the release signing key

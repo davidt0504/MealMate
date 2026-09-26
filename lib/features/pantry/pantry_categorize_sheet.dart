@@ -9,15 +9,19 @@ import 'package:meal_mate/features/pantry/pantry_provider.dart';
 import 'package:meal_mate/src/rust/api/pantry.dart';
 import 'package:meal_mate/src/rust/api/recipe.dart';
 
-/// OPT-006 gate 5 remediation: lets a household assign a shelf to each pre-existing,
-/// have-marked custom ingredient whose `store_category` is still `NULL`. Opened from the "My
-/// Shelves" screen's categorize banner.
+/// OPT-006 gate 5 remediation: lets a household assign a shelf to each have-marked custom
+/// ingredient the app cannot place — one whose `store_category` is absent, or holds a value from
+/// outside the app's own vocabulary, which `list_pantry_entries` reports as absent for exactly
+/// this reason. Opened from the "My Shelves" screen's categorize banner.
 ///
-/// Scoped to have-marked rows only, matching the banner's own count exactly — `entries` is the
-/// same `needsCategory` list the banner counted, passed straight through rather than re-queried,
-/// so the two can never disagree about how many items there are. An unmarked custom ingredient
-/// missing a category is not blocking anything visible yet, so it waits until the household
-/// marks it "have" (at which point it enters this same list).
+/// `entries` is the same `needsCategory` list the banner counted, passed straight through rather
+/// than re-queried, so the two can never disagree about how many items there are. That list is
+/// narrowed to have-marked, custom, non-blank-named rows: an unmarked one is not blocking
+/// anything visible yet and waits until the household marks it "have"; a catalog row has no
+/// write path from here; and a blank-named row cannot be repaired here at all, because
+/// `set_custom_ingredient_category` re-validates the stored name and would reject every Save.
+/// Note this is *not* the same set as Rust's `list_custom_ingredients_missing_category`, which
+/// is household-wide and unconcerned with marks.
 class CategorizeMissingIngredientsSheet extends ConsumerStatefulWidget {
   const CategorizeMissingIngredientsSheet({
     super.key,
@@ -70,26 +74,32 @@ class _CategorizeMissingIngredientsSheetState
   @override
   Widget build(BuildContext context) {
     return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              pantryCategorizeHeading,
-              style: Theme.of(context).textTheme.titleLarge,
-            ),
-            const SizedBox(height: 8),
-            if (_remaining.isEmpty)
-              const Text('All set — nothing left to categorize.')
-            else
-              for (final entry in _remaining) _Row(
-                entry: entry,
-                busy: _writing.contains(_customId(entry)),
-                onSave: (category) => _categorize(entry, category),
+      // The population is "every uncategorised custom ingredient this household ever made",
+      // which has no small upper bound; `isScrollControlled: true` at the call site lets the
+      // sheet grow to the viewport, and this lets it scroll once it gets there.
+      child: SingleChildScrollView(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                pantryCategorizeHeading,
+                style: Theme.of(context).textTheme.titleLarge,
               ),
-          ],
+              const SizedBox(height: 8),
+              if (_remaining.isEmpty)
+                const Text('All set — nothing left to categorize.')
+              else
+                for (final entry in _remaining)
+                  _Row(
+                    entry: entry,
+                    busy: _writing.contains(_customId(entry)),
+                    onSave: (category) => _categorize(entry, category),
+                  ),
+            ],
+          ),
         ),
       ),
     );

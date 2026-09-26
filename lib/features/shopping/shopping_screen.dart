@@ -430,7 +430,11 @@ class _ShoppingScreenState extends ConsumerState<ShoppingScreen> {
     final removed = <ShoppingLineDto>[];
     for (final group in list.groups) {
       for (final line in group.lines) {
-        switch (sectionFor(line.status, view.stateFor(line.key))) {
+        switch (sectionFor(
+          line.status,
+          view.stateFor(line.key),
+          restock: line.restock,
+        )) {
           case Section.needed:
             needed.putIfAbsent(group, () => []).add(line);
           case Section.alreadyHave:
@@ -548,11 +552,16 @@ class _ShoppingScreenState extends ConsumerState<ShoppingScreen> {
     final busy = _writing.contains(line.key);
     final subtitle = [
       describeQuantity(line.quantity, line.unit),
+      if (line.restock) restockFlagCopy,
       if (line.optional) optionalCopy,
       if (changed)
         changedCopy(describeCheckedAgainst(state?.checkedAgainst ?? '')),
     ].join(' · ');
+    // `!line.restock` on both this and `_explain`'s `canReturnToPantry`: "Back to pantry" clears
+    // `restored`, but a flagged line is filed under To buy by the flag regardless, so on one the
+    // move would be a visible no-op.
     final addedAnyway =
+        !line.restock &&
         line.status == ShoppingLineStatusDto.omittedPantryMarked &&
         (state?.restored ?? false);
     // The label goes *inside* the tile, for the reason the pantry row gives: the tile's
@@ -583,7 +592,11 @@ class _ShoppingScreenState extends ConsumerState<ShoppingScreen> {
           Expanded(
             child: CheckboxListTile(
               title: Semantics(
-                label: lineLabel(line.name, checked),
+                // The visible note sits in the subtitle, which is inside `ExcludeSemantics`,
+                // so the flag reaches a screen reader only if the name carries it too.
+                label: line.restock
+                    ? restockLineLabel(line.name, checked)
+                    : lineLabel(line.name, checked),
                 child: ExcludeSemantics(child: Text(line.name)),
               ),
               subtitle: ExcludeSemantics(child: Text(subtitle)),
@@ -604,9 +617,12 @@ class _ShoppingScreenState extends ConsumerState<ShoppingScreen> {
             onSelected: (action) {
               switch (action) {
                 case _LineAction.alreadyHave:
-                  _markInPantry([
-                    line.ingredient!,
-                  ], (_) => alreadyHaveItCopy(line.name));
+                  _markInPantry(
+                    [line.ingredient!],
+                    (_) => line.restock
+                        ? alreadyHaveItFlaggedCopy(line.name)
+                        : alreadyHaveItCopy(line.name),
+                  );
                 case _LineAction.backToPantry:
                   _backToPantry(line, state);
                 case _LineAction.skip:
@@ -623,7 +639,11 @@ class _ShoppingScreenState extends ConsumerState<ShoppingScreen> {
                   value: _LineAction.backToPantry,
                   child: Text('Back to pantry'),
                 )
-              else if (line.ingredient != null)
+              // Not offered on a line whose identity is already marked: the write would be a
+              // no-op, and the snackbar would promise the line drops off a list the flag keeps
+              // it on. Reaches a restock line too, since both shapes now report the mark.
+              else if (line.ingredient != null &&
+                  line.status != ShoppingLineStatusDto.omittedPantryMarked)
                 const PopupMenuItem(
                   value: _LineAction.alreadyHave,
                   child: Text('Already have it'),
@@ -645,6 +665,7 @@ class _ShoppingScreenState extends ConsumerState<ShoppingScreen> {
 
   void _explain(ShoppingLineDto line, ShoppingLineStateDto? state) {
     final canReturnToPantry =
+        !line.restock &&
         line.status == ShoppingLineStatusDto.omittedPantryMarked &&
         (state?.restored ?? false);
     // A skip's or a mark's Undo snackbar would otherwise sit over the sheet's buttons; the
@@ -664,7 +685,12 @@ class _ShoppingScreenState extends ConsumerState<ShoppingScreen> {
                 padding: const EdgeInsets.only(top: 8),
                 child: Text(separateReasonCopy(reason)),
               ),
-            if (line.status == ShoppingLineStatusDto.omittedPantryMarked)
+            if (line.restock)
+              const Padding(
+                padding: EdgeInsets.only(top: 8),
+                child: Text(restockExplainCopy),
+              )
+            else if (line.status == ShoppingLineStatusDto.omittedPantryMarked)
               const Padding(
                 padding: EdgeInsets.only(top: 8),
                 child: Text(omittedCopy),

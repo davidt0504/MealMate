@@ -70,10 +70,17 @@ requirement.
    `marked = true` (post-gate-1, "staple" is not a stored concept — see gate 1), grouped by
    `store_category`; a persistent search field expands the same screen to the full catalog in
    place (no FAB — no precedent for one in this app, and a plain search box does the job; no
-   second route, no tab bar) and collapses back on select. Rejected: My
+   second route, no tab bar). Rejected: My
    Shelves with a separate search/browse route (extra nav cost, no truth-value gain); two-tab
    Have/Everything (persistent chrome + a which-tab decision on every open, against
    "never a chore").
+
+   **Amended 2026-09-24 — "collapses back on select" is dropped.** Marking from the search
+   results leaves the query in place. Clearing it on every mark breaks the flow that matters
+   most on a fresh install, where a household adds staples one after another and would have to
+   retype after each; and the feedback the collapse was there to provide already exists, since
+   the row's checkbox flips in place. Raised by `/review-diff` as a code-vs-card deviation and
+   settled in favour of the code.
 3. **Row control: shelf-tag chip buttons.** Two always-visible, worded buttons per row ("Low",
    "Used up") styled as small shelf-sticker/tag chips rather than generic icon-buttons — same
    interaction and tap-count as plain labeled buttons, all added value is visual/tactile styling

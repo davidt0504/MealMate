@@ -31,6 +31,7 @@ class _CustomIngredientFormScreenState
   late final _name = TextEditingController(text: widget.initialName);
   String? _category;
   String? _nameError;
+  String? _categoryError;
   bool _saving = false;
 
   @override
@@ -41,14 +42,19 @@ class _CustomIngredientFormScreenState
 
   Future<void> _save() async {
     final name = _name.text.trim();
-    if (name.isEmpty) {
-      setState(() => _nameError = 'Name is required');
+    final category = _category;
+    // Both checked before returning, so a submit with neither filled reports both rather than
+    // sending the household round the form one field at a time.
+    if (name.isEmpty || category == null) {
+      setState(() {
+        _nameError = name.isEmpty ? 'Name is required' : null;
+        _categoryError = category == null ? 'Category is required' : null;
+      });
       return;
     }
-    final category = _category;
-    if (category == null) return;
     setState(() {
       _nameError = null;
+      _categoryError = null;
       _saving = true;
     });
     try {
@@ -85,6 +91,13 @@ class _CustomIngredientFormScreenState
             TextField(
               controller: _name,
               autofocus: true,
+              // Mirrors the dropdown's `onChanged` below: a rejected submit's error clears the
+              // moment the field is corrected, rather than sitting under a now-valid field
+              // until the next Save. Guarded so a keystroke on an error-free field costs no
+              // rebuild.
+              onChanged: (_) {
+                if (_nameError != null) setState(() => _nameError = null);
+              },
               decoration: InputDecoration(
                 labelText: 'Name',
                 errorText: _nameError,
@@ -93,7 +106,11 @@ class _CustomIngredientFormScreenState
             const SizedBox(height: 16),
             CategoryDropdownField(
               value: _category,
-              onChanged: (value) => setState(() => _category = value),
+              errorText: _categoryError,
+              onChanged: (value) => setState(() {
+                _category = value;
+                _categoryError = null;
+              }),
             ),
             const SizedBox(height: 24),
             FilledButton(

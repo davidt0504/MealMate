@@ -154,6 +154,12 @@ String addedToPantryCopy(int n) => n == 1
 /// The tooltip of a To buy row's menu — its own labelled node, outside the checkbox's.
 const lineOptionsTooltip = 'Line options';
 
+/// The accessible name for a flagged line. The visible "Flagged low" note rides the subtitle,
+/// which `_neededRow` wraps in `ExcludeSemantics`, so the flag would otherwise never reach a
+/// screen reader — the accessible name is where it has to live.
+String restockLineLabel(String name, bool checked) =>
+    '${lineLabel(name, checked)}, flagged low';
+
 /// Says what a skip touched and what it did not, because "delete from the list" was feared to
 /// reach the recipes (FIX-001 item 2). The line returns with the next cycle's list.
 String skippedCopy(String name) =>
@@ -163,6 +169,22 @@ String skippedCopy(String name) =>
 /// said at the moment it is made.
 String alreadyHaveItCopy(String name) =>
     '$name marked as in your pantry, so it stays off your lists until you unmark it.';
+
+/// The same move on a line flagged Low. The mark still lands, but the promise the unflagged
+/// copy makes would be false one frame later: a flagged line stays on this list by design, so
+/// saying it will drop off it would contradict the screen the household is looking at.
+String alreadyHaveItFlaggedCopy(String name) =>
+    '$name marked as in your pantry; it stays on this list because you flagged it Low.';
+
+/// Said on a line the household flagged Low on My Shelves (OPT-006 gate 1) — the flag is why
+/// the line is here, independently of whether a recipe asked for it.
+const restockFlagCopy = 'Flagged low';
+
+/// Why a flagged line is on the list, for the explain sheet. Stated instead of `omittedCopy`,
+/// which would say the line was skipped for a pantry mark while the household reads it under
+/// "To buy".
+const restockExplainCopy =
+    'Here because you flagged it Low. A pantry mark does not keep a flagged item off the list.';
 
 const resetTitle = 'Start over?';
 
@@ -202,10 +224,21 @@ String countsCopy(int needed, int alreadyHave, int removed) =>
 enum Section { needed, alreadyHave, removed }
 
 /// One rule for where a derived line renders (MVP-016 decision 6): hidden wins over
-/// everything; a pantry-omitted line sits under Already have until restored; the rest is
-/// needed. `null` state is "no record", which is needed unless the derivation omitted it.
-Section sectionFor(ShoppingLineStatusDto status, ShoppingLineStateDto? state) {
+/// everything; a restock-flagged line is needed whatever the mark says; a pantry-omitted line
+/// sits under Already have until restored; the rest is needed. `null` state is "no record",
+/// which is needed unless the derivation omitted it.
+///
+/// `restock` outranks the mark because the household set it *knowing* they have the item —
+/// "I have some, I am low" is a purchase instruction, and filing it under "Already have" would
+/// hide the very thing the flag was raised about. `status` is untouched by this: the mark still
+/// decides what the line reports, which is why both restock line shapes agree on it.
+Section sectionFor(
+  ShoppingLineStatusDto status,
+  ShoppingLineStateDto? state, {
+  required bool restock,
+}) {
   if (state?.hidden ?? false) return Section.removed;
+  if (restock) return Section.needed;
   if (status == ShoppingLineStatusDto.omittedPantryMarked &&
       !(state?.restored ?? false)) {
     return Section.alreadyHave;

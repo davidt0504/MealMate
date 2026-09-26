@@ -67,10 +67,9 @@ class _PantryScreenState extends ConsumerState<PantryScreen> {
   Future<void> _toggleMark(String householdId, PantryEntryDto entry) => _write(
     entry,
     () => entry.marked
-        ? ref.read(pantryProvider.notifier).setUsedUp(
-            householdId,
-            entry.ingredient,
-          )
+        ? ref
+              .read(pantryProvider.notifier)
+              .setUsedUp(householdId, entry.ingredient)
         : ref
               .read(pantryProvider.notifier)
               .setMark(householdId, entry.ingredient, true),
@@ -90,10 +89,9 @@ class _PantryScreenState extends ConsumerState<PantryScreen> {
 
   Future<void> _usedUp(String householdId, PantryEntryDto entry) => _write(
     entry,
-    () => ref.read(pantryProvider.notifier).setUsedUp(
-      householdId,
-      entry.ingredient,
-    ),
+    () => ref
+        .read(pantryProvider.notifier)
+        .setUsedUp(householdId, entry.ingredient),
   );
 
   /// Both refresh affordances. `PantryNotifier.refresh` returns the failure rather than
@@ -206,8 +204,13 @@ class _PantryScreenState extends ConsumerState<PantryScreen> {
       for (final entry in entries)
         if (_matches(entry, folded)) entry,
     ];
+    // Aliases count as an exact hit, the same way they count for filtering: `ingredient_alias`
+    // ships names like `garbanzo beans` that are not substrings of their canonical name, so a
+    // name-only test offers "add it as new" for a catalog row the user is looking straight at.
     final hasExactMatch = entries.any(
-      (e) => e.name.toLowerCase() == folded,
+      (e) =>
+          e.name.toLowerCase() == folded ||
+          e.aliases.any((a) => a.toLowerCase() == folded),
     );
     return [
       if (shown.isEmpty)
@@ -227,9 +230,21 @@ class _PantryScreenState extends ConsumerState<PantryScreen> {
   }
 
   /// Gate 2's default view: only have-marked rows, grouped by `store_category`. A marked row
-  /// with no category (a pre-existing custom ingredient predating OPT-006's required-category
-  /// rule) is excluded from the grouped list and surfaced via the categorize banner instead —
-  /// never a grouped "uncategorised" bucket (gate 5's closed decision).
+  /// with no category is excluded from the grouped list and surfaced via the categorize banner
+  /// instead — never a grouped "uncategorised" bucket (gate 5's closed decision).
+  ///
+  /// The banner's list is narrowed three ways, and each clause is load-bearing. Custom refs
+  /// only, because the sheet writes through `set_custom_ingredient_category`, which reaches no
+  /// catalog row; a catalog row with no category is therefore absent from the grouped view and
+  /// reachable only by search, which is import-only in practice — all 161 rows of the shipped
+  /// manifest carry a category. Non-blank names only, because the sheet re-validates the stored
+  /// name on Save, so a blank-named row would render nameless above a button that always fails.
+  /// That clause is not a duplicate of the Rust rule and must not be deleted as one: Rust drops
+  /// blank-named rows from the two custom-ingredient *list* reads, while these entries come from
+  /// `list_pantry_entries`, which classifies nothing and hands back every row it can build.
+  /// `store_category` itself arrives already normalised: `list_pantry_entries` maps a custom
+  /// category outside the app's vocabulary to `null`, so one rule decides "uncategorised" here
+  /// and in Rust.
   List<Widget> _myShelves(List<PantryEntryDto> entries, String householdId) {
     final marked = [
       for (final entry in entries)
@@ -237,7 +252,10 @@ class _PantryScreenState extends ConsumerState<PantryScreen> {
     ];
     final needsCategory = [
       for (final entry in marked)
-        if (entry.storeCategory == null) entry,
+        if (entry.storeCategory == null &&
+            entry.ingredient is IngredientRefDto_Custom &&
+            entry.name.trim().isNotEmpty)
+          entry,
     ];
     final grouped = <String, List<PantryEntryDto>>{};
     for (final entry in marked) {
@@ -264,10 +282,12 @@ class _PantryScreenState extends ConsumerState<PantryScreen> {
 
   Widget _row(PantryEntryDto entry, String householdId) {
     final busy = _writing.contains(entry.ingredient);
-    // The have-mark's label goes *inside* the tappable node, not around it, for the reason
-    // `SwitchListTile` used to enforce here via its own `MergeSemantics`: a wrapper outside the
-    // tappable node becomes a separate parent with no name of its own
-    // (`labeledTapTargetGuideline` catches exactly that).
+    final onTap = busy ? null : () => _toggleMark(householdId, entry);
+    // Label, `button` and the tap action all sit on one node. `ExcludeSemantics` drops every
+    // descendant semantic — the `InkWell`'s tap action included — so without `onTap` here the
+    // node would carry a name and no way to activate it, and the guidelines below would skip it
+    // for having no action rather than pass it for being correct. The `onTap` local keeps the
+    // semantics action and the hit-test action from ever drifting apart.
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Column(
@@ -276,26 +296,32 @@ class _PantryScreenState extends ConsumerState<PantryScreen> {
           Semantics(
             label: pantryRowLabel(entry.name, entry.marked),
             button: true,
+            onTap: onTap,
             child: ExcludeSemantics(
               child: InkWell(
-                onTap: busy ? null : () => _toggleMark(householdId, entry),
-                child: Row(
-                  children: [
-                    Icon(
-                      entry.marked
-                          ? Icons.check_box
-                          : Icons.check_box_outline_blank,
-                    ),
-                    const SizedBox(width: 4),
-                    const Text('Have'),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        entry.name,
-                        style: Theme.of(context).textTheme.bodyLarge,
+                onTap: onTap,
+                // An `Icon` beside `bodyLarge` text is about 24px; the node's rect is this
+                // `InkWell`'s, and `androidTapTargetGuideline` wants 48.
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(minHeight: 48),
+                  child: Row(
+                    children: [
+                      Icon(
+                        entry.marked
+                            ? Icons.check_box
+                            : Icons.check_box_outline_blank,
                       ),
-                    ),
-                  ],
+                      const SizedBox(width: 4),
+                      const Text('Have'),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          entry.name,
+                          style: Theme.of(context).textTheme.bodyLarge,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -359,6 +385,7 @@ class _ShelfChip extends StatelessWidget {
     return Semantics(
       label: semanticLabel,
       button: true,
+      onTap: onPressed,
       child: ExcludeSemantics(
         child: ActionChip(
           label: Text(label),

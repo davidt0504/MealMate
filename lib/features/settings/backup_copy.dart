@@ -26,12 +26,14 @@ const importButtonLabel = 'Import from file';
 const importConfirmTitle = 'Import this file?';
 const importConfirmAction = 'Save a copy and replace my data';
 
-/// Names what is replaced and where the undo lives: the safety export taken first becomes the
-/// latest export, so the existing restore button brings the replaced data back (OPT-009 gate 2).
+/// Names what is replaced and where the undo lives: the safety export taken first becomes
+/// the latest export, so the existing restore button brings the replaced data back
+/// (OPT-009 gate 2) — but only until the next export or import makes a newer one the
+/// latest.
 String importConfirmBody(String fileName) =>
     'Everything in the app now — recipes, plans, pantry and shopping list — will be '
     'replaced by "$fileName". A copy of your current data is exported first, so '
-    '"$restoreButtonLabel" brings it back.';
+    '"$restoreButtonLabel" brings it back until you export or import again.';
 
 const startFreshConfirmTitle = 'Start fresh with no data?';
 

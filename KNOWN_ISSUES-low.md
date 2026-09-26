@@ -2,6 +2,20 @@
 
 - **Accept does not visibly settle after a covered week is accepted** (`lib/features/planning/cover_screen.dart`, `docs/bugs/MVP-033_ACCEPT_FEEDBACK.md`) — on Samsung Galaxy S20 FE / Android 13, release `v1.0.1+2`, the first-run proposal accepted in one tap and exposed the shopping-list route, but the enabled-looking **Accept** button stayed in place with no explicit success acknowledgement. The result is ambiguous feedback, not a failed write or blocked navigation. Fix: after a successful `_notifier.accept()`, replace or disable the primary action and retain the calm shopping-list route; cover success, failure, and repeat-tap behavior in widget tests. **Status:** OPEN.
 
+## feature/opt-006 -- 2026-09-24 (OPT-006 / OPT-009 review-diff)
+
+Full review: `~/.claude/reviews/review-diff-master-2026-09-22T1813-20e8.md`
+
+### LOW
+
+- **CI feeds one secret to both `storePassword` and `keyPassword`, so a keystore with distinct passwords cannot be used from CI** (`android/app/build.gradle.kts:58`, `:60`; `.github/workflows/release-apk.yml:150`) -- the local `key.properties` branch reads two separate properties, while the CI branch passes `MEALMATE_KEY_PASSWORD` to both. A keystore whose key password differs from its store password therefore works locally and fails in CI with no message naming the cause. Not reachable with the current key, which uses one password for both. Fix: either add a second repository secret and a `MEALMATE_STORE_PASSWORD` variable read by `storePassword`, or drop the local two-property support so both paths agree on one password -- the first is the owner's to create, which is why this is deferred rather than done. Full review: `~/.claude/reviews/review-diff-master-2026-09-22T1813-20e8.md`
+  **Status:** OPEN
+
+- **A restock flag cannot be cleared from the shopping screen** (`lib/features/shopping/shopping_screen.dart:433`) -- after OPT-006 a flagged line renders under To buy whatever the pantry mark says, and its explain sheet says why, but the only way to clear the flag is the "Low" chip back on My Shelves. A household that decides mid-shop it does not need the item has to leave the list to say so. Surfaced by the plan redteam rather than by the review itself. Fix: a "Clear the Low flag" action in the line menu, gated on `line.restock`, writing through the same `setRestockFlag` path the pantry chip uses; note it interacts with the deferred My Shelves flagged section above, so decide the two together. Full review: `~/.claude/reviews/review-diff-master-2026-09-22T1813-20e8.md`
+  **Status:** OPEN
+
+---
+
 ## orch/4 -- 2026-08-28
 
 Full review: (lost) `wt/4/.orch/redteam-app-dart-2026-08-28T1845.md` was removed with the step-4 worktree before the orchestrator relayed it; the entries below are the only surviving record. Follow-up review: /home/davidlinux/.claude/reviews/redteam-mvp003-integration-verify-2026-08-28T1904-03fd.md
@@ -1024,6 +1038,86 @@ Full review: /home/davidlinux/.claude/reviews/redteam-opt-009-import-2026-09-17T
 
 - **Picker platform errors surface as raw PlatformException text** (`lib/features/settings/settings_screen.dart:159`) -- a throwing `FilePicker.pickFile()` reaches `describeFailure`'s `_` arm, showing `Import unavailable: PlatformException(...)`. Fix: catch around `pickImportFile` with fixed copy plus one widget test.
   Full review: /home/davidlinux/.claude/reviews/redteam-opt-009-import-2026-09-17T1100-43b9.md
+  **Status:** OPEN
+
+---
+
+## feature/opt-006 -- 2026-09-24
+
+Source: rust/crates/kimatta-storage/src/lib.rs
+Full review: /home/davidlinux/.claude/reviews/redteam-custom-category-classification-2026-09-24T0933-7259.md
+
+### LOW
+
+- **The two custom-ingredient list reads duplicate their query and collect boilerplate verbatim** (`rust/crates/kimatta-storage/src/lib.rs:1509`, `:1545`) -- since the remediation read was widened off `store_category IS NULL`, both run byte-identical SQL and the same ~22 lines of `query_map`/`collect`, differing only in which `CustomRowClass` they keep; a change to one silently breaks the documented disjointness. Fix: one private `classified_custom_rows()` both filter over.
+  Full review: /home/davidlinux/.claude/reviews/redteam-custom-category-classification-2026-09-24T0933-7259.md
+  **Status:** OPEN
+
+- **`list_custom_ingredients_missing_category` bridge export has no production caller** (`rust/src/api/recipe.rs:206`) -- the FFI export, its DTO, `missing_category_in` and the generated wire code serve only `test/bridge_native_test.dart:609`; the categorize sheet reads `list_pantry_entries` instead. The storage function itself is used by `load_shopping_input`. Fix: decide — keep and document as the household-wide read, or drop the export and regenerate.
+  Full review: /home/davidlinux/.claude/reviews/redteam-custom-category-classification-2026-09-24T0933-7259.md
+  **Status:** OPEN
+
+---
+
+## feature/opt-006 -- 2026-09-24 (fix-findings handoff redteam)
+
+Source: /home/davidlinux/.claude/reviews/impl-handoff-feature-opt-006-fix-findings-2026-09-24T0929-d1f6.md
+Full review: /home/davidlinux/.claude/reviews/redteam-feature-opt-006-fix-findings-2026-09-24T0939-1a82.md
+
+### LOW
+
+- **A marked, blank-named, uncategorised custom row renders on no pantry surface** (`lib/features/pantry/pantry_screen.dart:250`) -- dropped from the grouped view by its null category, from the categorize banner by the new name filter, and unmatchable by search (a blank name contains no non-empty query), while still producing a `custom:c-x` shopping line. Reachable via OPT-009's unvalidated import. Fix: surface it with a name-repair affordance, or record the drop in `_myShelves`.
+  - Sibling, same disposition, different trigger: a blank-**id** custom row is now skipped by all four pantry reads (`classify_custom_row`, `list_pantry_entries`, `list_marked_pantry_refs`, `list_restock_flagged_refs`) rather than hard-erroring them, so it too is invisible on every surface. Unlike the blank-name case it produces no shopping line at all, because the restock read drops it before the ref-key fallback runs.
+  - Not closed by that change: a **recipe line** referencing a blank custom id still hard-errors `load_recipe` (`rust/crates/kimatta-storage/src/lib.rs:2457`) and `list_recipe_candidate_info` (`controller.rs:463`), so it still takes the whole shopping derivation and plan generation down. It is the *same* corrupt row the four pantry reads now skip -- one row, two dispositions, not two unrelated defects. Carve-out reason: a recipe is a document the household authored, where silently dropping an unreadable line changes the dish without saying so; a pantry row is a bare fact, where dropping it costs only visibility. Changing a recipe read's failure mode is a separate decision with its own blast radius, and neither OPT-006 review cited these sites.
+    - Correction: an earlier version of this entry justified the carve-out as "a recipe line has its own `StorageError::CorruptIngredientRef` vocabulary". That is false. `CorruptIngredientRef` (`lib.rs:74`) reads "recipe {0} has a line with both a catalog and a custom ingredient" and is constructed only at `:2460`, the both-columns arm. The blank-id path at `:2457` propagates through `Id(#[from] IdError)` (`:50`), which is `#[error(transparent)]`, so the household sees a bare id error with no recipe id, no line position and no column. That missing context is itself worth fixing whichever way the carve-out is decided.
+    - Remediation is better than the above implies but is not a full answer: `list_recipes` (`:2657`) parses no refs, so the recipe list still loads and the offending recipe can be archived -- but `load_shopping_input` loads planned recipes with no `archived_at` filter, so archiving alone does not restore the derivation.
+  Full review: /home/davidlinux/.claude/reviews/redteam-feature-opt-006-fix-findings-2026-09-24T0939-1a82.md
+  **Status:** OPEN
+
+- **`CategoryDropdownField`'s `AsyncError` arm ignores the caller's `errorText`** (`lib/features/pantry/pantry_category_field.dart:38`) -- the loading arm was reshaped this pass so a submit-time error has somewhere to render; the error arm still hard-codes 'Categories unavailable -- try again', so a Save with no category chosen while the list has failed changes nothing on screen. Fix: `errorText ?? 'Categories unavailable -- try again'`.
+  Full review: /home/davidlinux/.claude/reviews/redteam-feature-opt-006-fix-findings-2026-09-24T0939-1a82.md
+  **Status:** OPEN
+
+---
+
+## feature/opt-006 -- 2026-09-24 (custom-row skip uniformity, pass 2)
+
+Source: rust/crates/kimatta-storage/src/lib.rs
+Full review: /home/davidlinux/.claude/reviews/redteam-custom-row-skip-uniformity-2026-09-24T1548-71b5.md
+
+### LOW
+
+- **`classify_custom_row` can no longer fail; its `Result` and both call-site `?` are dead** (`rust/crates/kimatta-storage/src/lib.rs:1469`) -- every path now returns `Ok` (id parse falls to `Skip`, `known_category` is infallible, `CustomIngredient::new`'s `Err` maps to `Skip`), so the `Result` and the `?` at both list reads are leftover plumbing clippy will not flag. Fix: return `CustomRowClass` directly and drop the two `?`.
+  Full review: /home/davidlinux/.claude/reviews/redteam-custom-row-skip-uniformity-2026-09-24T1548-71b5.md
+  **Status:** OPEN
+
+- **The marked and flagged skip tests never assert a valid sibling ref survives the same read** (`rust/crates/kimatta-storage/src/lib.rs:9948`, `:9973`) -- `seed_for_shopping` creates no marks or flags, so the corrupt row is the only row and both `.all(...)` assertions are vacuous over an empty vec; they pin "no longer raises" but not invariant 6's "skip the row, keep the rest". Fix: mark and flag the seeded `c-{household}` ingredient too and assert the vec contains exactly that ref.
+  Full review: /home/davidlinux/.claude/reviews/redteam-custom-row-skip-uniformity-2026-09-24T1548-71b5.md
+  **Status:** OPEN
+
+---
+
+## feature/opt-006 -- 2026-09-26 (skip-uniformity handoff redteam)
+
+Source: /home/davidlinux/.claude/reviews/impl-handoff-feature-opt-006-skip-uniformity-2026-09-26T1142-3a2d.md
+Full review: /home/davidlinux/.claude/reviews/redteam-opt-006-skip-uniformity-2026-09-26T1201-864e.md
+
+### LOW
+
+- **My Shelves can render nothing at all, with the empty-state message suppressed** (`lib/features/pantry/pantry_screen.dart:273`) -- a marked row that fails the new `needsCategory` clauses (catalog ref, or blank name) *and* has `storeCategory == null` is in neither `needsCategory` nor `grouped`; when such rows are the only marked rows, `marked.isEmpty` is false so `pantryNothingMarkedCopy` is suppressed and the screen shows a bare heading. Fix: key the empty state on `categories.isEmpty && needsCategory.isEmpty` instead of on `marked`.
+  Full review: /home/davidlinux/.claude/reviews/redteam-opt-006-skip-uniformity-2026-09-26T1201-864e.md
+  **Status:** OPEN
+
+- **The four blank-name/blank-id list tests assert over an empty `missing_category` vector** (`rust/crates/kimatta-storage/src/lib.rs:9851`, `:9874`, `:9897`, `:9923`) -- `seed_for_shopping` seeds only `c-h`, whose helper hard-codes `store_category: "pantry"`, so `list_custom_ingredients_missing_category` returns `[]` and every `missing.iter().all(...)` passes vacuously; a read that returned nothing unconditionally would leave all four green. Distinct from the marked/flagged entry above (different reads, different lines). Fix: seed one valid uncategorised sibling and assert `missing` contains exactly it.
+  Full review: /home/davidlinux/.claude/reviews/redteam-opt-006-skip-uniformity-2026-09-26T1201-864e.md
+  **Status:** OPEN
+
+- **A flagged line is checkable under To buy but never counts toward "Add checked to pantry"** (`lib/features/shopping/shopping_screen.dart:177`) -- `_eligible` requires `status == needed`, and a flagged line for an already-marked identity now reports `omittedPantryMarked`, so `:390` disables the action with no reason shown; before the `status` change a synthesized flagged line did count. Fix: keep the button enabled and let `_addToPantry` report "already in your pantry", or note the mark in the flagged row's subtitle.
+  Full review: /home/davidlinux/.claude/reviews/redteam-opt-006-skip-uniformity-2026-09-26T1201-864e.md
+  **Status:** OPEN
+
+- **`SHOPPING_ALGORITHM_VERSION` 3 records no derivation rule row** (`rust/crates/food-domain/src/shopping.rs:18`) -- OPT-006's Scope requires the OPT-003 rule table be extended alongside any bump; the bump landed, the row did not, so nothing records which rule changed at 3. No runtime effect: the shopping version is never persisted and every assertion now reads the constant. Fix: one row saying a synthesized restock line's `status` follows the pantry mark from version 3.
+  Full review: /home/davidlinux/.claude/reviews/redteam-opt-006-skip-uniformity-2026-09-26T1201-864e.md
   **Status:** OPEN
 
 ---

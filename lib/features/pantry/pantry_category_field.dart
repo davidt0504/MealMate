@@ -43,7 +43,16 @@ class CategoryDropdownField extends ConsumerWidget {
         ),
         child: const SizedBox.shrink(),
       ),
-      _ => const LinearProgressIndicator(),
+      // Same `InputDecorator` shape as the error arm: the categories are still loading, but
+      // Save is live throughout, so a submit in that window needs somewhere to render its
+      // error — a bare progress bar would reproduce the silent no-op this field exists to fix.
+      _ => InputDecorator(
+        decoration: InputDecoration(
+          labelText: pantryCategoryFieldLabel,
+          errorText: errorText,
+        ),
+        child: const LinearProgressIndicator(),
+      ),
     };
   }
 }

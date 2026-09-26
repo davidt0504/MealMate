@@ -17,9 +17,8 @@ pub use food_domain::starter::{
 pub use food_domain::{
     assess, base_factor, derive_shopping_list, format_civil_date, line_key_prefix,
     parse_civil_date, quantity_token, restock_line_key, CivilDate, Conflict, Contribution,
-    CustomIngredient,
-    CustomIngredientId, HouseholdRestrictions, IdentityInfo, Ingredient, IngredientId,
-    IngredientLine, IngredientRef, LineStatus, MealComponent, MealScope, MealSlot,
+    CustomIngredient, CustomIngredientId, HouseholdRestrictions, IdentityInfo, Ingredient,
+    IngredientId, IngredientLine, IngredientRef, LineStatus, MealComponent, MealScope, MealSlot,
     MemberPreference, MemberPreferences, PlannedMeal, PlannedMealError, PlannedMealId,
     PlanningCycle, PlanningError, PreferenceError, ProvenanceKind, Quantity, QuantityRange,
     Rational, Recipe, RecipeError, RecipeId, RecipeProvenance, RecipeRights, Restriction,
@@ -742,7 +741,8 @@ const SQLITE_HEADER: &[u8] = b"SQLite format 3\0";
 
 /// Validates a file as a restorable export without writing to it or creating it: a
 /// read-only open (a missing or unreadable path is an error, never a silently created
-/// fresh database), a full `integrity_check`, and the same newer-schema gate as [`open`].
+/// fresh database), a `household`-table check, a full `integrity_check`, and the same
+/// newer-schema gate as [`open`].
 /// An *older* version passes — restore migrates the staged copy forward. A file that is not
 /// a Kimatta database at all is [`StorageError::NotAnExport`]. Returns the export's schema
 /// version.
@@ -762,15 +762,12 @@ pub fn validate_export(path: impl AsRef<Path>) -> Result<u32, StorageError> {
     if header != SQLITE_HEADER {
         return Err(StorageError::NotAnExport);
     }
-    let verdict: String = conn
-        .query_row("PRAGMA integrity_check", [], |r| r.get(0))
-        .map_err(typed_sqlite)?;
-    if verdict != "ok" {
-        return Err(StorageError::CorruptDatabase { detail: verdict });
-    }
     // Migration 1 creates `household`, so every export at any version has it. Without this an
     // empty file or another app's database (whose `user_version` is its own) would migrate,
     // or at the current version swap straight in, as a database with no household.
+    // Runs before `integrity_check` so a large foreign database is refused without a full
+    // page walk under the swap mutex; a damaged schema page still errors corrupt-class here
+    // via `typed_sqlite`.
     let kimatta: bool = conn
         .query_row(
             "SELECT EXISTS (SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'household')",
@@ -780,6 +777,12 @@ pub fn validate_export(path: impl AsRef<Path>) -> Result<u32, StorageError> {
         .map_err(typed_sqlite)?;
     if !kimatta {
         return Err(StorageError::NotAnExport);
+    }
+    let verdict: String = conn
+        .query_row("PRAGMA integrity_check", [], |r| r.get(0))
+        .map_err(typed_sqlite)?;
+    if verdict != "ok" {
+        return Err(StorageError::CorruptDatabase { detail: verdict });
     }
     let found: u32 = conn
         .pragma_query_value(None, "user_version", |row| row.get(0))
@@ -1442,12 +1445,71 @@ pub fn upsert_custom_ingredient(
     Ok(())
 }
 
-/// Every custom ingredient of exactly `household`, ordered by name then id, that already has a
-/// valid `store_category` — `CustomIngredient::new` requires and membership-checks one (OPT-006
-/// gate 5), and a pre-existing row created before that requirement may still carry `NULL`.
+/// A `store_category` the app's own vocabulary knows, or `None` — the single membership rule,
+/// so the list read, the remediation read and the pantry reads can never disagree about what
+/// "uncategorised" means. Catalog categories are deliberately free text (`Ingredient` keeps them
+/// `Option<String>` unchecked), so this is only ever applied to custom-ingredient rows.
+fn known_category(raw: Option<String>) -> Option<String> {
+    raw.filter(|c| KNOWN_STORE_CATEGORIES.contains(&c.as_str()))
+}
+
+/// How one `custom_ingredient` row is classified.
+///
+/// The two lists below are disjoint over this: [`list_custom_ingredients`] takes `Listable`,
+/// [`list_custom_ingredients_missing_category`] takes `NeedsCategory`. `Skip` is in neither and
+/// is silent by design — a row the household cannot remediate from the categorize sheet, because
+/// assigning a category would not make it constructible.
+enum CustomRowClass {
+    Listable(CustomIngredient),
+    NeedsCategory(CustomIngredientId, String),
+    Skip,
+}
+
+/// Classifies one row for the two list reads. Both corrupt shapes — an id the newtype rejects
+/// and a blank name — are `Skip` rather than `Err`: raising would take a whole list down over one
+/// row (invariant 6), and neither can be repaired from any screen, since a blank id cannot be
+/// passed to [`set_custom_ingredient_category`] and the categorize sheet re-validates the stored
+/// name, so a Save there would always fail.
+///
+/// Scope, because it is narrower than it looks: the id rule is shared by the two reads that do
+/// not route through here ([`list_pantry_entries`], [`list_marked_pantry_refs`] and
+/// [`list_restock_flagged_refs`] each apply it inline), but the *name* rule is this function's
+/// alone. [`list_pantry_entries`] guards only the id and still yields a blank-named row; the
+/// pantry banner filters those out Dart-side, in `pantry_categorize_sheet.dart`.
+fn classify_custom_row(
+    household: &HouseholdId,
+    id: String,
+    name: String,
+    store_category: Option<String>,
+) -> Result<CustomRowClass, StorageError> {
+    let Ok(id) = CustomIngredientId::new(id.as_str()) else {
+        return Ok(CustomRowClass::Skip);
+    };
+    let Some(store_category) = known_category(store_category) else {
+        if name.trim().is_empty() {
+            return Ok(CustomRowClass::Skip);
+        }
+        return Ok(CustomRowClass::NeedsCategory(id, name));
+    };
+    // A blank name still fails the domain constructor, which is the same rule the arm above
+    // applies by hand — `CustomIngredient::new` is simply the one that can enforce it here.
+    Ok(
+        match CustomIngredient::new(id, household.clone(), name, store_category) {
+            Ok(item) => CustomRowClass::Listable(item),
+            Err(_) => CustomRowClass::Skip,
+        },
+    )
+}
+
+/// Every custom ingredient of exactly `household`, ordered by name then id, whose
+/// `store_category` is one [`KNOWN_STORE_CATEGORIES`] holds — `CustomIngredient::new` requires
+/// and membership-checks one (OPT-006 gate 5), and a pre-existing row created before that
+/// requirement may still carry `NULL` or a value from outside that set.
 /// Such a row is skipped here rather than erroring the whole read (invariant 6: coarse, never
-/// an audit that halts on one bad row) — it stays visible via
-/// [`list_custom_ingredients_missing_category`] until the household remediates it.
+/// an audit that halts on one bad row), and stays visible via
+/// [`list_custom_ingredients_missing_category`] until the household remediates it — unless it is
+/// corrupt rather than merely uncategorised, in which case [`classify_custom_row`] drops it from
+/// both lists, because no category the household could assign would make it listable.
 pub fn list_custom_ingredients(
     conn: &Connection,
     household: &HouseholdId,
@@ -1467,39 +1529,49 @@ pub fn list_custom_ingredients(
         .collect::<Result<Vec<_>, _>>()?;
     let mut items = Vec::with_capacity(rows.len());
     for (id, name, store_category) in rows {
-        let Some(store_category) = store_category else {
-            continue;
-        };
-        if let Ok(item) = CustomIngredient::new(
-            CustomIngredientId::new(id)?,
-            household.clone(),
-            name,
-            store_category,
-        ) {
+        if let CustomRowClass::Listable(item) =
+            classify_custom_row(household, id, name, store_category)?
+        {
             items.push(item);
         }
     }
     Ok(items)
 }
 
-/// Custom ingredients of `household` with no `store_category` yet — the read side of the
-/// OPT-006 gate 5 remediation flow. Never returns a row `list_custom_ingredients` also returns.
+/// Custom ingredients of `household` whose `store_category` is absent or outside
+/// [`KNOWN_STORE_CATEGORIES`] — the read side of the OPT-006 gate 5 remediation flow.
+///
+/// Disjoint from [`list_custom_ingredients`]: no row is returned by both, and every row is
+/// returned by one of them *except* a corrupt row (`CustomRowClass::Skip`), which neither claims
+/// because assigning a category would not make it listable. Widened from a bare `IS NULL` test
+/// so that a row carrying an out-of-vocabulary category has a way back rather than falling out
+/// of both lists unseen.
 pub fn list_custom_ingredients_missing_category(
     conn: &Connection,
     household: &HouseholdId,
 ) -> Result<Vec<(CustomIngredientId, String)>, StorageError> {
     let mut stmt = conn.prepare(
-        "SELECT id, name FROM custom_ingredient
-         WHERE household_id = ?1 AND store_category IS NULL ORDER BY name, id",
+        "SELECT id, name, store_category FROM custom_ingredient
+         WHERE household_id = ?1 ORDER BY name, id",
     )?;
     let rows = stmt
         .query_map(params![household.as_str()], |r| {
-            Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?))
+            Ok((
+                r.get::<_, String>(0)?,
+                r.get::<_, String>(1)?,
+                r.get::<_, Option<String>>(2)?,
+            ))
         })?
         .collect::<Result<Vec<_>, _>>()?;
-    rows.into_iter()
-        .map(|(id, name)| Ok((CustomIngredientId::new(id)?, name)))
-        .collect()
+    let mut items = Vec::new();
+    for (id, name, store_category) in rows {
+        if let CustomRowClass::NeedsCategory(id, name) =
+            classify_custom_row(household, id, name, store_category)?
+        {
+            items.push((id, name));
+        }
+    }
+    Ok(items)
 }
 
 /// Sets `store_category` on an existing custom ingredient (OPT-006 gate 5 remediation) —
@@ -1555,8 +1627,11 @@ pub struct PantryEntry {
     /// Independent of `marked` (OPT-006 gate 1) — a household can flag a low/never-had
     /// ingredient for restock without ever marking it "have".
     pub restock_requested: bool,
-    /// From the catalog or custom-ingredient row; `None` only for a pre-existing custom
-    /// ingredient created before OPT-006's required-category rule, never for a catalog row.
+    /// From the catalog or custom-ingredient row. `None` has three producers: a custom row
+    /// created before OPT-006's required-category rule, a custom row whose stored value is
+    /// outside [`KNOWN_STORE_CATEGORIES`] and is normalised away by `known_category` on the way
+    /// out, and a catalog row whose `store_category` column is simply `NULL` — the catalog's own
+    /// categories are free text and are never normalised here.
     pub store_category: Option<String>,
 }
 
@@ -1620,30 +1695,48 @@ pub fn list_pantry_entries(
         .collect::<Result<Vec<_>, _>>()?;
     let mut aliases = alias_index(conn)?;
     rows.into_iter()
-        .map(|(kind, id, name, marked, restock_requested, store_category)| {
-            // Keyed on the kind, not the bare id: a custom ingredient whose id string happens
-            // to match a catalog one must not inherit that catalog entry's aliases.
-            let (ingredient, aliases) = if kind == "catalog" {
-                (
-                    IngredientRef::Catalog(IngredientId::new(&id)?),
-                    aliases.remove(&id).unwrap_or_default(),
-                )
-            } else {
-                (
-                    IngredientRef::Custom(CustomIngredientId::new(&id)?),
-                    Vec::new(),
-                )
-            };
-            Ok(PantryEntry {
-                ingredient,
-                name,
-                aliases,
-                marked,
-                restock_requested,
-                store_category,
-            })
-        })
+        .map(
+            |(kind, id, name, marked, restock_requested, store_category)| {
+                // Keyed on the kind, not the bare id: a custom ingredient whose id string happens
+                // to match a catalog one must not inherit that catalog entry's aliases.
+                // The custom arm's category runs through `known_category`, the catalog arm's does
+                // not: catalog `store_category` is deliberately free text, so normalising it would
+                // drop a row out of its group with no way to put it back (nothing writes a catalog
+                // category). A custom row's vocabulary is closed, so an out-of-vocabulary value
+                // reads as uncategorised here and reaches the categorize banner.
+                let (ingredient, aliases, store_category) = if kind == "catalog" {
+                    (
+                        IngredientRef::Catalog(IngredientId::new(&id)?),
+                        aliases.remove(&id).unwrap_or_default(),
+                        store_category,
+                    )
+                } else {
+                    // Same rule as `classify_custom_row`: a custom id the newtype rejects is
+                    // skipped, not raised. Erroring here would take the browse read down — and
+                    // with it the categorize banner, the only in-app repair surface — over one
+                    // row. The catalog arm still raises: catalog ids ship with the manifest, and
+                    // no catalog read has a skip counterpart to stay consistent with.
+                    let Ok(custom) = CustomIngredientId::new(&id) else {
+                        return Ok(None);
+                    };
+                    (
+                        IngredientRef::Custom(custom),
+                        Vec::new(),
+                        known_category(store_category),
+                    )
+                };
+                Ok(Some(PantryEntry {
+                    ingredient,
+                    name,
+                    aliases,
+                    marked,
+                    restock_requested,
+                    store_category,
+                }))
+            },
+        )
         .collect::<Result<Vec<_>, StorageError>>()
+        .map(|entries| entries.into_iter().flatten().collect())
 }
 
 /// Just the identities this household has marked — the derivation's only pantry need, where
@@ -1678,8 +1771,13 @@ pub fn list_marked_pantry_refs(
     for id in catalog {
         marked.push(IngredientRef::Catalog(IngredientId::new(&id)?));
     }
+    // A row whose custom id the newtype rejects is skipped for the same reason the list reads
+    // skip it — `pantry_item.custom_ingredient_id` is a plain FK with no blank guard, so a
+    // corrupt row can carry a mark, and raising here fails the whole shopping derivation.
     for id in custom {
-        marked.push(IngredientRef::Custom(CustomIngredientId::new(&id)?));
+        if let Ok(id) = CustomIngredientId::new(&id) {
+            marked.push(IngredientRef::Custom(id));
+        }
     }
     Ok(marked)
 }
@@ -1791,6 +1889,9 @@ fn set_pantry_mark_in(
                 |r| r.get::<_, Option<String>>(0),
             )?,
         ),
+        // `known_category` on this arm only, matching `list_pantry_entries`: the written entry
+        // is spliced straight into the published list without a re-read, so a raw value here
+        // would move the row to an out-of-vocabulary group until the next refresh.
         IngredientRef::Custom(id) => (
             tx.query_row(
                 "SELECT name FROM custom_ingredient WHERE id = ?1",
@@ -1798,11 +1899,11 @@ fn set_pantry_mark_in(
                 |r| r.get::<_, String>(0),
             )?,
             Vec::new(),
-            tx.query_row(
+            known_category(tx.query_row(
                 "SELECT store_category FROM custom_ingredient WHERE id = ?1",
                 params![id.as_str()],
                 |r| r.get::<_, Option<String>>(0),
-            )?,
+            )?),
         ),
     };
     let restock_requested = restock_flagged_in(tx, household, ingredient)?;
@@ -1872,22 +1973,23 @@ pub fn list_restock_flagged_refs(
             .collect::<Result<Vec<_>, _>>()?;
         Ok(rows)
     };
-    let catalog = ids(
-        "SELECT ingredient_id FROM pantry_restock_flag
+    let catalog = ids("SELECT ingredient_id FROM pantry_restock_flag
           WHERE household_id = ?1 AND ingredient_id IS NOT NULL
-          ORDER BY ingredient_id",
-    )?;
-    let custom = ids(
-        "SELECT custom_ingredient_id FROM pantry_restock_flag
+          ORDER BY ingredient_id")?;
+    let custom = ids("SELECT custom_ingredient_id FROM pantry_restock_flag
           WHERE household_id = ?1 AND custom_ingredient_id IS NOT NULL
-          ORDER BY custom_ingredient_id",
-    )?;
+          ORDER BY custom_ingredient_id")?;
     let mut flagged = Vec::with_capacity(catalog.len() + custom.len());
     for id in catalog {
         flagged.push(IngredientRef::Catalog(IngredientId::new(&id)?));
     }
+    // Skipped rather than raised, exactly as in [`list_marked_pantry_refs`]:
+    // `pantry_restock_flag.custom_ingredient_id` is the same unguarded FK, and a flag is what
+    // puts a line on the shopping list, so this is the corrupt row likeliest to be reached.
     for id in custom {
-        flagged.push(IngredientRef::Custom(CustomIngredientId::new(&id)?));
+        if let Ok(id) = CustomIngredientId::new(&id) {
+            flagged.push(IngredientRef::Custom(id));
+        }
     }
     Ok(flagged)
 }
@@ -1966,6 +2068,9 @@ fn set_restock_flag_in(
                 |r| r.get::<_, Option<String>>(0),
             )?,
         ),
+        // `known_category` on this arm only, matching `list_pantry_entries`: the written entry
+        // is spliced straight into the published list without a re-read, so a raw value here
+        // would move the row to an out-of-vocabulary group until the next refresh.
         IngredientRef::Custom(id) => (
             tx.query_row(
                 "SELECT name FROM custom_ingredient WHERE id = ?1",
@@ -1973,11 +2078,11 @@ fn set_restock_flag_in(
                 |r| r.get::<_, String>(0),
             )?,
             Vec::new(),
-            tx.query_row(
+            known_category(tx.query_row(
                 "SELECT store_category FROM custom_ingredient WHERE id = ?1",
                 params![id.as_str()],
                 |r| r.get::<_, Option<String>>(0),
-            )?,
+            )?),
         ),
     };
     let marked = pantry_marked_in(tx, household, ingredient)?;
@@ -3173,10 +3278,30 @@ pub fn load_shopping_input(
             recipes.push(record.recipe);
         }
     }
-    let customs: HashMap<String, CustomIngredient> = list_custom_ingredients(&tx, household)?
+    // Both lists, not just the categorised one: a restock-flagged row that resolves no
+    // `IdentityInfo` falls back to its ref key, which would put `custom:c-1` on the shopping
+    // list as a line name. Nothing filters blank names here — `classify_custom_row` already
+    // classes such a row `Skip`, so neither list can yield one.
+    let mut customs: HashMap<String, IdentityInfo> = list_custom_ingredients(&tx, household)?
         .into_iter()
-        .map(|c| (c.id().as_str().to_owned(), c))
+        .map(|c| {
+            (
+                c.id().as_str().to_owned(),
+                IdentityInfo {
+                    name: c.name().to_owned(),
+                    store_category: Some(c.store_category().to_owned()),
+                },
+            )
+        })
         .collect();
+    for (id, name) in list_custom_ingredients_missing_category(&tx, household)? {
+        customs
+            .entry(id.as_str().to_owned())
+            .or_insert(IdentityInfo {
+                name,
+                store_category: None,
+            });
+    }
     let mut identities: Vec<(IngredientRef, IdentityInfo)> = Vec::new();
     // Keyed by `(kind, id)` strings: `IngredientRef` carries no `Hash`, and a bare id would
     // let a custom ingredient shadow a catalog one sharing its id string.
@@ -3197,10 +3322,7 @@ pub fn load_shopping_input(
                 name: i.canonical_name().to_owned(),
                 store_category: i.store_category().map(str::to_owned),
             }),
-            IngredientRef::Custom(id) => customs.get(id.as_str()).map(|c| IdentityInfo {
-                name: c.name().to_owned(),
-                store_category: Some(c.store_category().to_owned()),
-            }),
+            IngredientRef::Custom(id) => customs.get(id.as_str()).cloned(),
         };
         if let Some(info) = info {
             identities.push((r.clone(), info));
@@ -3225,10 +3347,7 @@ pub fn load_shopping_input(
                 name: i.canonical_name().to_owned(),
                 store_category: i.store_category().map(str::to_owned),
             }),
-            IngredientRef::Custom(id) => customs.get(id.as_str()).map(|c| IdentityInfo {
-                name: c.name().to_owned(),
-                store_category: Some(c.store_category().to_owned()),
-            }),
+            IngredientRef::Custom(id) => customs.get(id.as_str()).cloned(),
         };
         if let Some(info) = info {
             identities.push((r.clone(), info));
@@ -3739,6 +3858,37 @@ mod tests {
         );
     }
 
+    /// A foreign database is refused on the cheap schema lookup, before `integrity_check` walks
+    /// its pages: damage past page 1 would otherwise surface as `CorruptDatabase`.
+    #[test]
+    fn validate_refuses_a_foreign_file_before_walking_its_pages() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("foreign.db");
+        let conn = Connection::open(&path).unwrap();
+        conn.execute_batch(
+            "CREATE TABLE notes (x TEXT);
+             WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < 500)
+             INSERT INTO notes SELECT printf('%0100d', i) FROM n;",
+        )
+        .unwrap();
+        drop(conn);
+        let mut bytes = std::fs::read(&path).unwrap();
+        let len = bytes.len();
+        assert!(
+            len > 3 * 4096,
+            "fixture must span pages past the schema page"
+        );
+        for b in bytes.iter_mut().skip(len - 4096) {
+            *b = 0xFF;
+        }
+        std::fs::write(&path, bytes).unwrap();
+        let err = validate_export(&path).unwrap_err();
+        assert!(
+            matches!(err, StorageError::NotAnExport),
+            "want NotAnExport, got {err:?}"
+        );
+    }
+
     /// Expected-to-pass pin: a real export whose pages are damaged stays `CorruptDatabase`, so
     /// "damaged" and "wrong file" remain distinct.
     #[test]
@@ -3749,6 +3899,36 @@ mod tests {
         export_database(&conn, &dest).unwrap();
         let mut bytes = std::fs::read(&dest).unwrap();
         for b in bytes.iter_mut().skip(100) {
+            *b = 0xFF;
+        }
+        std::fs::write(&dest, bytes).unwrap();
+        let err = validate_export(&dest).unwrap_err();
+        assert!(
+            matches!(err, StorageError::CorruptDatabase { .. }),
+            "want CorruptDatabase, got {err:?}"
+        );
+    }
+
+    /// Expected-to-pass pin: a real export damaged past its schema pages passes the household
+    /// lookup, so only `integrity_check` can refuse it — the test above damages page 1 and
+    /// fails on the schema read before `integrity_check` runs.
+    #[test]
+    fn validate_types_an_export_damaged_past_its_schema_as_corrupt() {
+        let dir = tempfile::tempdir().unwrap();
+        let conn = open(dir.path().join("kimatta.db")).unwrap();
+        let dest = dir.path().join("export.db");
+        export_database(&conn, &dest).unwrap();
+        // Rows added after the export land on appended pages, so the last page is data.
+        Connection::open(&dest)
+            .unwrap()
+            .execute_batch(
+                "WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < 500)
+                 INSERT INTO household (id, name) SELECT 'h' || i, printf('%0100d', i) FROM n;",
+            )
+            .unwrap();
+        let mut bytes = std::fs::read(&dest).unwrap();
+        let len = bytes.len();
+        for b in bytes.iter_mut().skip(len - 4096) {
             *b = 0xFF;
         }
         std::fs::write(&dest, bytes).unwrap();
@@ -4042,7 +4222,7 @@ mod tests {
     /// on-device v1→v2 migration (PRD §12: tested from representative prior versions); since
     /// v4 it proves v1→latest end to end.
     #[test]
-    fn an_existing_v1_database_migrates_to_v13_without_losing_data() {
+    fn an_existing_v1_database_migrates_to_latest_without_losing_data() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("kimatta.db");
         {
@@ -4271,7 +4451,7 @@ mod tests {
     }
 
     #[test]
-    fn empty_db_migrates_to_v13() {
+    fn empty_db_migrates_to_latest() {
         let conn = open(":memory:").unwrap();
         assert_eq!(schema_version(&conn).unwrap(), 14);
     }
@@ -4280,7 +4460,7 @@ mod tests {
 
     /// Test-level stand-in for the on-device v2→v3 migration, as the v1 test is for v1→v2.
     #[test]
-    fn an_existing_v2_database_migrates_to_v13_without_losing_data() {
+    fn an_existing_v2_database_migrates_to_latest_without_losing_data() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("kimatta.db");
         {
@@ -4314,7 +4494,7 @@ mod tests {
     /// theirs. A recipe is saved at v3 so the migration is proved not to disturb the tables
     /// migration 3 introduced, not merely the household one it alters.
     #[test]
-    fn an_existing_v3_database_migrates_to_v13_without_losing_data() {
+    fn an_existing_v3_database_migrates_to_latest_without_losing_data() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("kimatta.db");
         {
@@ -4340,7 +4520,7 @@ mod tests {
     /// test: a recipe saved at v4 must survive the `ALTER TABLE`s that add `archived_at` (v5)
     /// and `prep_minutes`/the rights columns (v6).
     #[test]
-    fn an_existing_v4_database_migrates_to_v13_without_losing_data() {
+    fn an_existing_v4_database_migrates_to_latest_without_losing_data() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("kimatta.db");
         {
@@ -6420,7 +6600,7 @@ mod tests {
     }
 
     #[test]
-    fn an_existing_v5_database_migrates_to_v13_without_losing_data() {
+    fn an_existing_v5_database_migrates_to_latest_without_losing_data() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("kimatta.db");
         {
@@ -6459,7 +6639,7 @@ mod tests {
     /// predecessors: a recipe saved at v6 must survive the two new tables, which touch nothing
     /// that exists.
     #[test]
-    fn an_existing_v6_database_migrates_to_v13_without_losing_data() {
+    fn an_existing_v6_database_migrates_to_latest_without_losing_data() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("kimatta.db");
         {
@@ -7947,7 +8127,7 @@ mod tests {
     /// Test-level stand-in for the on-device v7→v8 migration, in the pattern of its
     /// predecessors: everything saved at v7 must survive a migration that only adds a table.
     #[test]
-    fn an_existing_v7_database_migrates_to_v13_without_losing_data() {
+    fn an_existing_v7_database_migrates_to_latest_without_losing_data() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("kimatta.db");
         {
@@ -8341,12 +8521,21 @@ mod tests {
         let mut conn = open(":memory:").unwrap();
         seed_for_pantry(&mut conn, "h");
         seed_for_pantry(&mut conn, "h2");
-        conn.execute(RAW_RESTOCK_FLAG, params!["h", "flour", Option::<String>::None])
-            .unwrap();
-        conn.execute(RAW_RESTOCK_FLAG, params!["h", Option::<String>::None, "c-h"])
-            .unwrap();
-        conn.execute(RAW_RESTOCK_FLAG, params!["h2", "flour", Option::<String>::None])
-            .unwrap();
+        conn.execute(
+            RAW_RESTOCK_FLAG,
+            params!["h", "flour", Option::<String>::None],
+        )
+        .unwrap();
+        conn.execute(
+            RAW_RESTOCK_FLAG,
+            params!["h", Option::<String>::None, "c-h"],
+        )
+        .unwrap();
+        conn.execute(
+            RAW_RESTOCK_FLAG,
+            params!["h2", "flour", Option::<String>::None],
+        )
+        .unwrap();
         conn.execute("DELETE FROM household WHERE id = 'h'", [])
             .unwrap();
         assert_eq!(count(&conn, "pantry_restock_flag"), 1);
@@ -8389,24 +8578,25 @@ mod tests {
         seed_for_pantry(&mut conn, "h2");
         set_restock_flag(&mut conn, &hid("h"), &catalog_ref("flour"), true).unwrap();
         assert_eq!(count(&conn, "pantry_restock_flag"), 1);
-        assert!(
-            !list_restock_flagged_refs(&conn, &hid("h2"))
-                .unwrap()
-                .contains(&catalog_ref("flour"))
-        );
-        assert!(
-            list_restock_flagged_refs(&conn, &hid("h"))
-                .unwrap()
-                .contains(&catalog_ref("flour"))
-        );
+        assert!(!list_restock_flagged_refs(&conn, &hid("h2"))
+            .unwrap()
+            .contains(&catalog_ref("flour")));
+        assert!(list_restock_flagged_refs(&conn, &hid("h"))
+            .unwrap()
+            .contains(&catalog_ref("flour")));
     }
 
     #[test]
     fn flagging_an_unknown_ingredient_is_rejected() {
         let mut conn = open(":memory:").unwrap();
         seed_for_pantry(&mut conn, "h");
-        let err = set_restock_flag(&mut conn, &hid("h"), &catalog_ref("no-such-ingredient"), true)
-            .unwrap_err();
+        let err = set_restock_flag(
+            &mut conn,
+            &hid("h"),
+            &catalog_ref("no-such-ingredient"),
+            true,
+        )
+        .unwrap_err();
         assert!(matches!(err, StorageError::NoSuchIngredient(_)), "{err:?}");
         assert_eq!(count(&conn, "pantry_restock_flag"), 0);
     }
@@ -8533,7 +8723,7 @@ mod tests {
     /// Test-level stand-in for the on-device v8→v9 migration, in the pattern of its
     /// predecessors: everything saved at v8 must survive a migration that only adds tables.
     #[test]
-    fn an_existing_v8_database_migrates_to_v13_without_losing_data() {
+    fn an_existing_v8_database_migrates_to_latest_without_losing_data() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("kimatta.db");
         {
@@ -8561,7 +8751,7 @@ mod tests {
     /// Test-level stand-in for the on-device v9→v12 migration: everything saved at
     /// v9 — a shopping overlay row included — survives a migration that only adds tables.
     #[test]
-    fn an_existing_v9_database_migrates_to_v13_without_losing_data() {
+    fn an_existing_v9_database_migrates_to_latest_without_losing_data() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("kimatta.db");
         {
@@ -9654,8 +9844,9 @@ mod tests {
 
     /// A custom ingredient created before OPT-006's required-category rule may still carry a
     /// `NULL` `store_category` in storage — `list_custom_ingredients` skips it rather than
-    /// erroring the whole household's read (invariant 6), so it also never resolves an
-    /// `IdentityInfo` for the shopping list until remediated.
+    /// erroring the whole household's read (invariant 6). It still resolves an `IdentityInfo`
+    /// for the shopping list, carrying its real name with no category, so a restock line for it
+    /// is nameable; what it does not do is appear in the categorised list.
     #[test]
     fn a_null_category_custom_ingredient_is_skipped_by_list_custom_ingredients() {
         let mut conn = open(":memory:").unwrap();
@@ -9696,6 +9887,355 @@ mod tests {
             .any(|c| c.name() == "legacy mix"));
     }
 
+    /// Gate 5's coverage rule: the two custom-ingredient lists are disjoint, and a row whose
+    /// category is merely *unknown* — not absent — has a way back. Before OPT-006 widened the
+    /// remediation query such a row was in neither list, so nothing could ever fix it.
+    #[test]
+    fn an_unknown_category_custom_ingredient_is_offered_for_remediation() {
+        let mut conn = open(":memory:").unwrap();
+        seed_for_shopping(&mut conn, "h");
+        conn.execute(
+            "INSERT INTO custom_ingredient (id, household_id, name, store_category)
+             VALUES ('c-odd', 'h', 'odd mix', 'snacks')",
+            [],
+        )
+        .unwrap();
+        assert!(list_custom_ingredients(&conn, &hid("h"))
+            .unwrap()
+            .iter()
+            .all(|c| c.name() != "odd mix"));
+        let missing = list_custom_ingredients_missing_category(&conn, &hid("h")).unwrap();
+        assert!(missing.iter().any(|(_, name)| name == "odd mix"));
+    }
+
+    /// The `Skip` class, pinned on both sides. A blank name is corrupt rather than
+    /// uncategorised: assigning a category would not make it constructible, and
+    /// `set_custom_ingredient_category` re-validates the stored name, so offering it in the
+    /// remediation flow would render a nameless row above a Save that always fails.
+    #[test]
+    fn a_blank_name_custom_ingredient_is_in_neither_list() {
+        let mut conn = open(":memory:").unwrap();
+        seed_for_shopping(&mut conn, "h");
+        conn.execute(
+            "INSERT INTO custom_ingredient (id, household_id, name, store_category)
+             VALUES ('c-blank', 'h', '', 'pantry')",
+            [],
+        )
+        .unwrap();
+        assert!(list_custom_ingredients(&conn, &hid("h"))
+            .unwrap()
+            .iter()
+            .all(|c| c.id().as_str() != "c-blank"));
+        assert!(list_custom_ingredients_missing_category(&conn, &hid("h"))
+            .unwrap()
+            .iter()
+            .all(|(id, _)| id.as_str() != "c-blank"));
+    }
+
+    /// The other blank-name variant, and the same disposition: a blank name is corrupt whatever
+    /// the category, so it is in neither list. Before this pass the `NULL`-category case was
+    /// offered for remediation instead, where every Save would have failed on the stored name.
+    #[test]
+    fn a_blank_name_row_with_no_category_is_in_neither_list() {
+        let mut conn = open(":memory:").unwrap();
+        seed_for_shopping(&mut conn, "h");
+        conn.execute(
+            "INSERT INTO custom_ingredient (id, household_id, name, store_category)
+             VALUES ('c-blank2', 'h', '', NULL)",
+            [],
+        )
+        .unwrap();
+        assert!(list_custom_ingredients(&conn, &hid("h"))
+            .unwrap()
+            .iter()
+            .all(|c| c.id().as_str() != "c-blank2"));
+        assert!(list_custom_ingredients_missing_category(&conn, &hid("h"))
+            .unwrap()
+            .iter()
+            .all(|(id, _)| id.as_str() != "c-blank2"));
+    }
+
+    /// `trim`, not `is_empty`: the domain constructor rejects a whitespace-only name through
+    /// `non_blank`, so the classification arm that tests the name by hand has to agree with it
+    /// or the two arms disagree about the same row.
+    #[test]
+    fn a_whitespace_name_row_with_no_category_is_in_neither_list() {
+        let mut conn = open(":memory:").unwrap();
+        seed_for_shopping(&mut conn, "h");
+        conn.execute(
+            "INSERT INTO custom_ingredient (id, household_id, name, store_category)
+             VALUES ('c-blank4', 'h', '   ', NULL)",
+            [],
+        )
+        .unwrap();
+        assert!(list_custom_ingredients(&conn, &hid("h"))
+            .unwrap()
+            .iter()
+            .all(|c| c.id().as_str() != "c-blank4"));
+        assert!(list_custom_ingredients_missing_category(&conn, &hid("h"))
+            .unwrap()
+            .iter()
+            .all(|(id, _)| id.as_str() != "c-blank4"));
+    }
+
+    /// Invariant 6 at the id boundary, for every category rather than only for `NULL`. A row
+    /// whose id the newtype rejects cannot be repaired from any screen — there is no id to pass
+    /// to `set_custom_ingredient_category` — so raising would strand the household with a dead
+    /// read and nothing to act on. The three ids are distinct because `custom_ingredient.id` is
+    /// the primary key; all three are blank as far as `CustomIngredientId` is concerned, which
+    /// rejects on `trim().is_empty()`.
+    #[test]
+    fn a_blank_id_custom_row_is_skipped_by_the_custom_ingredient_reads_whatever_its_category() {
+        let mut conn = open(":memory:").unwrap();
+        seed_for_shopping(&mut conn, "h");
+        for (id, name, category) in [
+            ("", "ghost null", None),
+            (" ", "ghost known", Some("pantry")),
+            ("\t", "ghost unknown", Some("snacks")),
+        ] {
+            conn.execute(
+                "INSERT INTO custom_ingredient (id, household_id, name, store_category)
+                 VALUES (?1, 'h', ?2, ?3)",
+                params![id, name, category],
+            )
+            .unwrap();
+        }
+        let names = ["ghost null", "ghost known", "ghost unknown"];
+        let listed = list_custom_ingredients(&conn, &hid("h")).unwrap();
+        assert!(listed.iter().all(|c| !names.contains(&c.name())));
+        let missing = list_custom_ingredients_missing_category(&conn, &hid("h")).unwrap();
+        assert!(missing
+            .iter()
+            .all(|(_, name)| !names.contains(&name.as_str())));
+        let browsed = list_pantry_entries(&conn, &hid("h")).unwrap();
+        assert!(browsed.iter().all(|e| !names.contains(&e.name.as_str())));
+    }
+
+    /// The other half of the browse read's asymmetry, which the custom-arm skip left unpinned:
+    /// the catalog arm still raises. Catalog ids ship with the manifest rather than arriving from
+    /// a household, so there is no repair flow to keep alive and no reason to hide the row — and
+    /// `ingredient.id` carries no CHECK, so the shape is reachable by import like the rest.
+    #[test]
+    fn a_blank_catalog_id_still_fails_the_browse_read() {
+        let mut conn = open(":memory:").unwrap();
+        seed_for_shopping(&mut conn, "h");
+        conn.execute(
+            "INSERT INTO ingredient (id, canonical_name, store_category)
+             VALUES ('', 'ghost catalog', 'pantry')",
+            [],
+        )
+        .unwrap();
+        assert!(list_pantry_entries(&conn, &hid("h")).is_err());
+    }
+
+    /// The mark side of the same boundary. `pantry_item.custom_ingredient_id` is a plain FK with
+    /// no blank guard, so a corrupt row can carry a mark; the read has to skip it for the same
+    /// reason the list reads do. Inserted raw because `set_pantry_mark` validates the identity,
+    /// and the `custom_ingredient` row comes first because the FK is enforced.
+    #[test]
+    fn a_marked_blank_id_custom_row_is_skipped_by_the_marked_refs_read() {
+        let mut conn = open(":memory:").unwrap();
+        seed_for_shopping(&mut conn, "h");
+        conn.execute(
+            "INSERT INTO custom_ingredient (id, household_id, name, store_category)
+             VALUES ('', 'h', 'ghost', 'pantry')",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO pantry_item (household_id, ingredient_id, custom_ingredient_id)
+             VALUES ('h', NULL, ''), ('h', NULL, 'c-h')",
+            [],
+        )
+        .unwrap();
+        let marked = list_marked_pantry_refs(&conn, &hid("h")).unwrap();
+        // The sibling is the point: skipping must drop the corrupt row and keep the rest, not
+        // merely stop raising. Without it this assertion passes over an empty vec.
+        assert!(marked.contains(&IngredientRef::Custom(
+            CustomIngredientId::new("c-h").unwrap()
+        )));
+        assert!(marked
+            .iter()
+            .all(|r| !matches!(r, IngredientRef::Custom(id) if id.as_str().trim().is_empty())));
+    }
+
+    /// The flag side, and the one that actually reaches a household: a restock flag is what puts
+    /// a line on the shopping list, so a flagged corrupt row is the likeliest to be hit. Raising
+    /// here took the whole derivation down.
+    #[test]
+    fn a_flagged_blank_id_custom_row_does_not_fail_the_shopping_derivation() {
+        let mut conn = open(":memory:").unwrap();
+        seed_for_shopping(&mut conn, "h");
+        conn.execute(
+            "INSERT INTO custom_ingredient (id, household_id, name, store_category)
+             VALUES ('', 'h', 'ghost', 'pantry')",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO pantry_restock_flag (household_id, ingredient_id, custom_ingredient_id)
+             VALUES ('h', NULL, ''), ('h', NULL, 'c-h')",
+            [],
+        )
+        .unwrap();
+        let flagged = list_restock_flagged_refs(&conn, &hid("h")).unwrap();
+        // As above: the valid sibling proves the read keeps going rather than returning nothing.
+        assert!(flagged.contains(&IngredientRef::Custom(
+            CustomIngredientId::new("c-h").unwrap()
+        )));
+        assert!(flagged
+            .iter()
+            .all(|r| !matches!(r, IngredientRef::Custom(id) if id.as_str().trim().is_empty())));
+        let list = load_shopping_list(
+            &mut conn,
+            &hid("h"),
+            parse_civil_date("2026-08-29").unwrap(),
+            parse_civil_date("2026-08-31").unwrap(),
+        );
+        assert!(
+            list.is_ok(),
+            "one corrupt row must not fail the whole derivation"
+        );
+    }
+
+    /// Gate 5's naming rule, the whole point of reading both lists into `load_shopping_input`:
+    /// a flagged row with no category must not render its ref key (`custom:c-1`) as a shopping
+    /// line name. The household sees the name it typed.
+    #[test]
+    fn a_flagged_uncategorised_custom_renders_its_name_not_its_ref_key() {
+        let mut conn = open(":memory:").unwrap();
+        seed_for_shopping(&mut conn, "h");
+        conn.execute(
+            "INSERT INTO custom_ingredient (id, household_id, name, store_category)
+             VALUES ('c-legacy', 'h', 'legacy mix', NULL)",
+            [],
+        )
+        .unwrap();
+        let ingredient = IngredientRef::Custom(CustomIngredientId::new("c-legacy").unwrap());
+        set_restock_flag(&mut conn, &hid("h"), &ingredient, true).unwrap();
+        let list = load_shopping_list(
+            &mut conn,
+            &hid("h"),
+            parse_civil_date("2026-08-29").unwrap(),
+            parse_civil_date("2026-08-31").unwrap(),
+        )
+        .unwrap();
+        let line = shopping_lines(&list)
+            .into_iter()
+            .find(|l| l.restock)
+            .expect("the flagged identity gets a restock line");
+        assert_eq!(line.name, "legacy mix");
+        assert!(!line.name.contains("custom:"));
+        // No category resolved, so it groups with the uncategorised lines rather than inventing
+        // a shelf for it.
+        let group = list
+            .groups
+            .iter()
+            .find(|g| g.lines.iter().any(|l| l.restock))
+            .unwrap();
+        assert_eq!(group.category, None);
+    }
+
+    /// A blank-name row keeps the ref-key fallback deliberately: an empty `IdentityInfo.name`
+    /// would render a line with no name at all, which is worse than a key the household can at
+    /// least match to something.
+    #[test]
+    fn a_flagged_blank_name_custom_keeps_the_ref_key_fallback() {
+        let mut conn = open(":memory:").unwrap();
+        seed_for_shopping(&mut conn, "h");
+        conn.execute(
+            "INSERT INTO custom_ingredient (id, household_id, name, store_category)
+             VALUES ('c-blank3', 'h', '', NULL)",
+            [],
+        )
+        .unwrap();
+        let ingredient = IngredientRef::Custom(CustomIngredientId::new("c-blank3").unwrap());
+        set_restock_flag(&mut conn, &hid("h"), &ingredient, true).unwrap();
+        let list = load_shopping_list(
+            &mut conn,
+            &hid("h"),
+            parse_civil_date("2026-08-29").unwrap(),
+            parse_civil_date("2026-08-31").unwrap(),
+        )
+        .unwrap();
+        let line = shopping_lines(&list)
+            .into_iter()
+            .find(|l| l.restock)
+            .expect("the flagged identity still gets a line");
+        // The exact key, not merely a non-empty one: `escape_segment` escapes only `:` and `\`,
+        // so this id passes through untouched. A nameless line is the outcome to avoid, and any
+        // non-empty name would have satisfied the old assertion.
+        assert_eq!(line.name, "custom:c-blank3");
+    }
+
+    /// The contract those write paths copy, and the only thing holding `known_category` at the
+    /// custom arm of the browse read: deleting that call leaves every other test in the crate
+    /// green. A custom row's vocabulary is closed, so an out-of-vocabulary value reads as
+    /// uncategorised and reaches the categorize banner; a catalog category is deliberately free
+    /// text and must survive the same read untouched. Both halves are the invariant.
+    #[test]
+    fn the_browse_read_normalises_a_custom_category_but_not_a_catalog_one() {
+        let mut conn = open(":memory:").unwrap();
+        seed_for_shopping(&mut conn, "h");
+        conn.execute(
+            "INSERT INTO custom_ingredient (id, household_id, name, store_category)
+             VALUES ('c-odd', 'h', 'odd mix', 'snacks')",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO ingredient (id, canonical_name, store_category)
+             VALUES ('i-odd', 'odd catalog thing', 'snacks')",
+            [],
+        )
+        .unwrap();
+        let entries = list_pantry_entries(&conn, &hid("h")).unwrap();
+        let custom = entries
+            .iter()
+            .find(|e| e.name == "odd mix")
+            .expect("the custom row is still browsable");
+        assert_eq!(custom.store_category, None);
+        let catalog = entries
+            .iter()
+            .find(|e| e.name == "odd catalog thing")
+            .expect("the catalog row is still browsable");
+        assert_eq!(catalog.store_category, Some("snacks".to_owned()));
+    }
+
+    /// The write paths splice their returned entry straight into the published list without a
+    /// re-read, so they must normalise the custom category exactly as the list read does — or
+    /// the next tap moves the row to a shelf outside the app's vocabulary until a refresh.
+    #[test]
+    fn a_write_normalises_an_unknown_custom_category_like_the_list_read() {
+        let mut conn = open(":memory:").unwrap();
+        seed_for_shopping(&mut conn, "h");
+        conn.execute(
+            "INSERT INTO custom_ingredient (id, household_id, name, store_category)
+             VALUES ('c-odd2', 'h', 'odd two', 'snacks')",
+            [],
+        )
+        .unwrap();
+        let ingredient = IngredientRef::Custom(CustomIngredientId::new("c-odd2").unwrap());
+        let marked = set_pantry_mark(&mut conn, &hid("h"), &ingredient, true).unwrap();
+        assert_eq!(marked.store_category, None);
+        let flagged = set_restock_flag(&mut conn, &hid("h"), &ingredient, true).unwrap();
+        assert_eq!(flagged.store_category, None);
+    }
+
+    /// The converse, and the reason `known_category` is applied per arm rather than to the
+    /// finished `PantryEntry`: catalog categories are free text by design, so normalising them
+    /// would drop a catalog row out of its group with nothing able to put it back.
+    #[test]
+    fn a_write_leaves_a_free_text_catalog_category_alone() {
+        let mut conn = open(":memory:").unwrap();
+        seed_for_shopping(&mut conn, "h");
+        let ingredient = IngredientRef::Catalog(IngredientId::new("i-oil").unwrap());
+        let marked = set_pantry_mark(&mut conn, &hid("h"), &ingredient, true).unwrap();
+        assert_eq!(marked.store_category, Some("aisle".to_owned()));
+        let flagged = set_restock_flag(&mut conn, &hid("h"), &ingredient, true).unwrap();
+        assert_eq!(flagged.store_category, Some("aisle".to_owned()));
+    }
+
     #[test]
     fn categorizing_with_an_unknown_category_is_rejected() {
         let mut conn = open(":memory:").unwrap();
@@ -9710,7 +10250,10 @@ mod tests {
         let err = set_custom_ingredient_category(&mut conn, &hid("h"), &id, "not-a-real-category")
             .unwrap_err();
         assert!(
-            matches!(err, StorageError::Recipe(RecipeError::UnknownStoreCategory(_))),
+            matches!(
+                err,
+                StorageError::Recipe(RecipeError::UnknownStoreCategory(_))
+            ),
             "{err:?}"
         );
         assert_eq!(

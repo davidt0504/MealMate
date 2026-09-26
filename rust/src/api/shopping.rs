@@ -579,7 +579,10 @@ mod tests {
             Some(ScaleDto { numer: 3, denom: 2 }),
         );
         let list = derive_in(&mut conn, "h", "2026-08-29", "2026-09-04").unwrap();
-        assert_eq!(list.algorithm_version, 2);
+        assert_eq!(
+            list.algorithm_version,
+            kimatta_storage::SHOPPING_ALGORITHM_VERSION
+        );
         assert_eq!(list.from_date, "2026-08-29");
         assert_eq!(list.to_date, "2026-09-04");
         assert_eq!(list.contribution_count, 2);

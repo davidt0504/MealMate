@@ -143,12 +143,6 @@ class PantryNotifier extends AsyncNotifier<List<PantryEntryDto>> {
     return stored;
   }
 
-  /// Custom ingredients this household has not yet categorized (OPT-006 gate 5 remediation).
-  @protected
-  Future<List<CustomIngredientMissingCategoryDto>> fetchMissingCategory(
-    String householdId,
-  ) => listCustomIngredientsMissingCategory(householdId: householdId);
-
   /// Assigns a category to a pre-existing custom ingredient, then refreshes the pantry list so
   /// it renders grouped. Unlike [setMark]/[setRestockFlag]/[setUsedUp], a full refetch is
   /// correct here: categorizing changes which group the entry belongs to, and (per

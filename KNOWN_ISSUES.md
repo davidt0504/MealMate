@@ -2,6 +2,20 @@
 
 Additional LOW findings are tracked in `KNOWN_ISSUES-low.md`.
 
+## feature/opt-006 -- 2026-09-24 (OPT-006 / OPT-009 review-diff)
+
+Full review: `~/.claude/reviews/review-diff-master-2026-09-22T1813-20e8.md`
+
+### MEDIUM
+
+- **A restock flag has no surface on My Shelves once its row leaves the marked view** (`lib/features/pantry/pantry_screen.dart:236`) -- gate 1 lets a household flag an ingredient without marking it "have", and gate 4's "Used up" clears the mark and sets the flag in one gesture. `_myShelves` renders only `marked` rows, so in both cases the row leaves the default view carrying its new flag, and the household can neither see nor clear that flag again without remembering the name and searching for it. The read side is now covered on the shopping list (a flagged line renders under To buy with a "Flagged low" note), so the flag is visible where it is acted on; what is missing is a flagged-but-unmarked section on the screen that owns the flag. Fix: a "Flagged for restock" section in `_myShelves`, ordered against the categorize banner, with widget tests for the used-up-then-look-for-it path. Full review: `~/.claude/reviews/review-diff-master-2026-09-22T1813-20e8.md`
+  **Status:** OPEN
+
+- **The `listCustomIngredientsMissingCategory` bridge command and its DTO have no app caller, and four `rust/src/api/**` doc comments state a predicate the code no longer applies** (`rust/src/api/recipe.rs:206`, `:138-140`, `:131-134`; `rust/src/api/pantry.rs:21-22`) -- the banner and the categorize sheet both derive from `pantryProvider`, so the bridge path is dead in the app; `PantryNotifier.fetchMissingCategory` was deleted, and `test/bridge_native_test.dart:609` is the only remaining caller. The storage query itself is live (`load_shopping_input` reads it). The four doc comments describe the old "`store_category IS NULL`" rule, which the OPT-006 widening replaced with a `KNOWN_STORE_CATEGORIES` membership test. They cannot be reworded on their own: flutter_rust_bridge copies Rust doc comments verbatim into the committed `lib/src/rust/**`, and the release workflow regenerates and `git diff --exit-code`s that directory, so an edit without a codegen run red-lights the only workflow the repo has. Fix both together in one `flutter_rust_bridge_codegen generate` pass: drop the command and DTO, reword the remaining docs, commit the regenerated bindings. Full review: `~/.claude/reviews/review-diff-master-2026-09-22T1813-20e8.md`
+  **Status:** OPEN
+
+---
+
 ## master -- 2026-09-07 (MVP-032 AC-2 rights review)
 
 Full review: `~/.claude/reviews/redteam-mvp-032-generalized-2026-09-07T0957-70a3.md`

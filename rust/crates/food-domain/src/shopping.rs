@@ -15,7 +15,7 @@ use crate::{
 };
 
 /// Bump when a rule below changes what a given snapshot derives to (invariant 17).
-pub const SHOPPING_ALGORITHM_VERSION: u32 = 2;
+pub const SHOPPING_ALGORITHM_VERSION: u32 = 3;
 
 // Same shape as `recipe.rs`'s and `planned_meal.rs`'s: each module carries its own copy
 // because a `macro_rules!` is textually scoped and neither is exported.
@@ -665,7 +665,11 @@ pub fn derive_shopping_list(input: &ShoppingInput) -> ShoppingList {
                 quantity: Quantity::Unknown,
                 unit: Unit::None,
                 optional: false,
-                status: LineStatus::Needed,
+                // Same rule as every other line: the mark decides `status`. The flag decides
+                // where the line *renders*, which is the reader's rule, not this one — so a
+                // synthesized line and a merged line for the same household state agree here
+                // instead of differing by which shape happened to be emitted.
+                status: identities.status(Some(flagged)),
                 separate_reason: None,
                 contributions: Vec::new(),
                 restock: true,
@@ -1929,7 +1933,7 @@ mod tests {
         let list = derive_shopping_list(&input(vec![], vec![], vec![], vec![]));
         assert_eq!(list.from, date("2026-08-29"));
         assert_eq!(list.to, date("2026-09-04"));
-        assert_eq!(list.algorithm_version, 2);
+        assert_eq!(list.algorithm_version, SHOPPING_ALGORITHM_VERSION);
         assert!(list.groups.is_empty());
     }
 
@@ -2122,6 +2126,54 @@ mod tests {
         let lines = all_lines(&list);
         assert_eq!(lines.len(), 1);
         assert!(lines[0].restock);
+        // One `status` rule for every line: the mark decides it, whichever shape the line took.
+        // Where the line *renders* is the reader's business, and the reader has `restock`.
+        assert_eq!(lines[0].status, LineStatus::OmittedPantryMarked);
+    }
+
+    /// The same household state through the other shape — a recipe demands the flagged, marked
+    /// identity, so the flag rides an existing line instead of synthesizing one. Both shapes
+    /// must report the same `status`, or the value depends on whether a recipe happened to ask
+    /// for it inside the window.
+    #[test]
+    fn both_restock_line_shapes_report_the_same_status() {
+        let synthesized = derive_shopping_list(&input_with_restock(
+            vec![],
+            vec![],
+            vec![identity("onion", "onion", Some("produce"))],
+            vec![cat("onion")],
+            vec![cat("onion")],
+        ));
+        let merged = derive_shopping_list(&input_with_restock(
+            vec![meal(
+                "pm-1",
+                "2026-08-29",
+                MealSlot::Dinner,
+                vec![component("r", None)],
+            )],
+            vec![recipe(
+                "r",
+                vec![line(
+                    "onion",
+                    Some(cat("onion")),
+                    exact(1, 1),
+                    Unit::None,
+                    false,
+                )],
+            )],
+            vec![identity("onion", "onion", Some("produce"))],
+            vec![cat("onion")],
+            vec![cat("onion")],
+        ));
+        let a = all_lines(&synthesized);
+        let b = all_lines(&merged);
+        assert_eq!(a.len(), 1);
+        assert_eq!(b.len(), 1);
+        assert!(a[0].restock && b[0].restock);
+        assert_eq!(
+            a[0].status, b[0].status,
+            "the shape a line took must not change what its status reports"
+        );
     }
 
     #[test]
@@ -2172,8 +2224,15 @@ mod tests {
             vec![cat("onion")],
         ));
         let lines = all_lines(&flagged);
-        assert_eq!(lines.len(), 2, "no duplicate r: line — the signal rides the existing lines");
-        assert!(lines.iter().all(|l| l.restock), "every emitted line for the identity carries it");
+        assert_eq!(
+            lines.len(),
+            2,
+            "no duplicate r: line — the signal rides the existing lines"
+        );
+        assert!(
+            lines.iter().all(|l| l.restock),
+            "every emitted line for the identity carries it"
+        );
         assert!(lines.iter().all(|l| !l.key.starts_with("r:")));
     }
 
@@ -2182,7 +2241,10 @@ mod tests {
         assert!(
             !restock_line_key(&cat("onion-powder")).starts_with(&restock_line_key(&cat("onion")))
         );
-        assert_ne!(restock_line_key(&cat("onion")), restock_line_key(&cat("onion-powder")));
+        assert_ne!(
+            restock_line_key(&cat("onion")),
+            restock_line_key(&cat("onion-powder"))
+        );
     }
 
     /// Escaping has to be injective over `\` as well as `:`. The first pair below collides with

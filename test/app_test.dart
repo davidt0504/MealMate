@@ -910,11 +910,46 @@ ShoppingViewDto shoppingView({
   List<ShoppingLineStateDto> states = const [],
   List<ShoppingManualItemDto> items = const [],
   int orphaned = 0,
+  ShoppingListDto? list,
 }) => ShoppingViewDto(
-  list: okShoppingList,
+  list: list ?? okShoppingList,
   lineStates: states,
   manualItems: items,
   orphanedLineStateCount: orphaned,
+);
+
+/// `okShoppingList` with its pantry-omitted line flagged for restock — the OPT-006 gate 1 shape
+/// that used to be filed under "Already have", i.e. under the opposite of what the flag means.
+ShoppingListDto shoppingListWithFlaggedOnion() => ShoppingListDto(
+  algorithmVersion: okShoppingList.algorithmVersion,
+  fromDate: okShoppingList.fromDate,
+  toDate: okShoppingList.toDate,
+  groups: [
+    for (final group in okShoppingList.groups)
+      ShoppingGroupDto(
+        category: group.category,
+        lines: [
+          for (final line in group.lines)
+            if (line.key == onionKey)
+              ShoppingLineDto(
+                key: line.key,
+                name: line.name,
+                ingredient: line.ingredient,
+                quantity: line.quantity,
+                unit: line.unit,
+                optional: line.optional,
+                status: line.status,
+                separateReason: line.separateReason,
+                contributions: line.contributions,
+                restock: true,
+              )
+            else
+              line,
+        ],
+      ),
+  ],
+  nonRecipeComponents: okShoppingList.nonRecipeComponents,
+  contributionCount: okShoppingList.contributionCount,
 );
 
 ShoppingLineStateDto lineStateOf(
@@ -1096,6 +1131,7 @@ Widget harness({
   Future<StarterInstallReportDto> Function(String)? starterInstall,
   FutureOr<List<PantryEntryDto>> Function()? pantry,
   Future<PantryEntryDto> Function(String, IngredientRefDto, bool)? setMark,
+  Future<PantryEntryDto> Function(String, IngredientRefDto, bool)? setRestockFlag,
   Future<PantryEntryDto> Function(String, IngredientRefDto)? usedUp,
   FutureOr<List<String>> Function()? storeCategories,
   FutureOr<PlanningCycleDto> Function(int)? cycleWindow,
@@ -1194,7 +1230,12 @@ Widget harness({
     // accessibility and text-scale tests all visit Pantry, and an un-overridden provider
     // would reach the real bridge.
     pantryProvider.overrideWith(
-      () => _FakePantryNotifier(pantry, setMark, setUsedUp: usedUp),
+      () => _FakePantryNotifier(
+        pantry,
+        setMark,
+        setRestockFlag: setRestockFlag,
+        setUsedUp: usedUp,
+      ),
     ),
     // Unconditional, like `knownUnitKindsProvider`: the categorize sheet and the
     // custom-ingredient form both watch this, and an un-overridden provider would reach the
@@ -5954,6 +5995,122 @@ void main() {
     },
   );
 
+  /// Gate 5's remediation list has no small upper bound — it is every uncategorised custom
+  /// ingredient the household ever made — so the sheet has to scroll. `isScrollControlled: true`
+  /// at the call site lets it grow to the viewport; without a scrollable inside, growing past
+  /// the viewport is an overflow instead of a scroll.
+  testWidgets('the categorize sheet scrolls rather than overflowing', (
+    tester,
+  ) async {
+    usePixel5(tester);
+    await tester.pumpWidget(
+      harness(
+        initial: '/pantry',
+        pantry: () => [
+          for (var i = 0; i < 20; i++)
+            PantryEntryDto(
+              ingredient: IngredientRefDto.custom(id: 'c-many-$i'),
+              name: 'legacy item $i',
+              aliases: const [],
+              marked: true,
+              restockRequested: false,
+              storeCategory: null,
+            ),
+        ],
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(pantryNeedsCategoryCopy(20)));
+    await tester.pumpAndSettle();
+    expect(
+      tester.takeException(),
+      isNull,
+      reason: 'twenty rows must not overflow the sheet',
+    );
+    // `SingleChildScrollView` builds every child, so the last row is *found* from the start —
+    // what changes is whether it can be brought on screen. It starts below the viewport and
+    // scrolling has to reach it. Scoped to the sheet's own scrollable: the pantry list behind
+    // it is scrollable too.
+    final viewport = tester.view.physicalSize.height / tester.view.devicePixelRatio;
+    final last = find.text('legacy item 19');
+    expect(tester.getRect(last).top, greaterThan(viewport));
+    await tester.scrollUntilVisible(
+      last,
+      100,
+      scrollable: find.descendant(
+        of: find.byType(SingleChildScrollView),
+        matching: find.byType(Scrollable),
+      ),
+    );
+    expect(tester.getRect(last).top, lessThan(viewport));
+  });
+
+  /// Gate 5 makes the category required, so a Save with none chosen is the single most likely
+  /// way a household first meets this form. It must say why nothing happened rather than
+  /// silently doing nothing.
+  testWidgets('saving a custom ingredient with no category says why', (
+    tester,
+  ) async {
+    await tester.pumpWidget(harness(initial: '/pantry'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), 'sumac');
+    await tester.pumpAndSettle();
+    await tester.tap(find.textContaining('as a new ingredient'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+    await tester.pumpAndSettle();
+    expect(find.text('Category is required'), findsOneWidget);
+    expect(
+      find.text('Add ingredient'),
+      findsWidgets,
+      reason: 'a rejected save stays on the form',
+    );
+  });
+
+  /// Both fields report together: a submit with neither filled should not send the household
+  /// round the form one field at a time.
+  testWidgets('an empty save reports the name and the category at once', (
+    tester,
+  ) async {
+    await tester.pumpWidget(harness(initial: '/pantry'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), 'sumac');
+    await tester.pumpAndSettle();
+    await tester.tap(find.textContaining('as a new ingredient'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).first, '');
+    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+    await tester.pumpAndSettle();
+    expect(find.text('Name is required'), findsOneWidget);
+    expect(find.text('Category is required'), findsOneWidget);
+  });
+
+  /// The other half of that pair: an error clears when its own field is corrected. The dropdown
+  /// already did this, so without it the household fixes the name and watches 'Name is required'
+  /// sit under a field that is now valid until the next Save.
+  testWidgets('correcting the name clears its error but leaves the category error', (
+    tester,
+  ) async {
+    await tester.pumpWidget(harness(initial: '/pantry'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), 'sumac');
+    await tester.pumpAndSettle();
+    await tester.tap(find.textContaining('as a new ingredient'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).first, '');
+    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+    await tester.pumpAndSettle();
+    expect(find.text('Name is required'), findsOneWidget);
+    await tester.enterText(find.byType(TextField).first, 'sumac');
+    await tester.pumpAndSettle();
+    expect(find.text('Name is required'), findsNothing);
+    expect(
+      find.text('Category is required'),
+      findsOneWidget,
+      reason: 'an untouched field keeps its error',
+    );
+  });
+
   /// Edge case, gate 5: the categorize sheet must show exactly what the banner counted — an
   /// unmarked custom ingredient missing a category is invisible on My Shelves at all, so it
   /// must not appear in the sheet either, even though it's also missing a category.
@@ -6178,6 +6335,174 @@ void main() {
       }
     }
     handle.dispose();
+  });
+
+  /// AC-3's other half, and the one a guideline sweep cannot give: a control that carries a
+  /// name but no action. `ExcludeSemantics` drops every descendant semantic, the tap action
+  /// included, so a wrapper placed outside the tappable node leaves a node TalkBack can read
+  /// and cannot activate — and both tap-target guidelines *skip* action-less nodes, so they go
+  /// quiet rather than failing. These drive the controls through `SemanticsAction.tap`, which
+  /// is what a screen reader actually dispatches; the widget tests elsewhere tap by hit test
+  /// and would not notice.
+  testWidgets('the pantry row toggle is reachable by semantics action', (
+    tester,
+  ) async {
+    usePixel5(tester);
+    final handle = tester.ensureSemantics();
+    await tester.pumpWidget(
+      harness(
+        initial: '/pantry',
+        setMark: (_, ref, marked) async => pantryEntryMarked(ref, marked),
+      ),
+    );
+    await tester.pumpAndSettle();
+    // The fixture rows start unmarked and `_myShelves` renders only marked rows, so the row
+    // has to be surfaced by search before there is anything to drive.
+    await tester.enterText(find.byType(TextField), 'chickpeas');
+    await tester.pumpAndSettle();
+    tester.semantics.tap(
+      find.semantics.byLabel(pantryRowLabel('chickpeas', false)),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.bySemanticsLabel(pantryRowLabel('chickpeas', true)),
+      findsOneWidget,
+      reason: 'the semantics action must perform the same write the tap does',
+    );
+    handle.dispose();
+  });
+
+  testWidgets('both shelf chips are reachable by semantics action', (
+    tester,
+  ) async {
+    usePixel5(tester);
+    final handle = tester.ensureSemantics();
+    var flagged = 0;
+    var usedUp = 0;
+    await tester.pumpWidget(
+      harness(
+        initial: '/pantry',
+        setRestockFlag: (_, ref, wanted) async {
+          flagged++;
+          return pantryEntryMarked(ref, false);
+        },
+        usedUp: (_, ref) async {
+          usedUp++;
+          return pantryEntryMarked(ref, false);
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), 'chickpeas');
+    await tester.pumpAndSettle();
+    tester.semantics.tap(
+      find.semantics.byLabel(pantryRestockChipLabel('chickpeas', false)),
+    );
+    await tester.pumpAndSettle();
+    expect(flagged, 1, reason: '"Low" must be activatable by a screen reader');
+    tester.semantics.tap(
+      find.semantics.byLabel(pantryUsedUpLabel('chickpeas')),
+    );
+    await tester.pumpAndSettle();
+    expect(usedUp, 1, reason: '"Used up" must be activatable too');
+    handle.dispose();
+  });
+
+  /// The regression pin the guidelines cannot supply. `labeledTapTargetGuideline` and
+  /// `androidTapTargetGuideline` both return early on a node with neither tap nor longPress,
+  /// so moving `ExcludeSemantics` back outside the tappable node would make them pass on an
+  /// empty set rather than fail. This asserts the action is there.
+  testWidgets('the pantry row node carries a tap action, not just a name', (
+    tester,
+  ) async {
+    usePixel5(tester);
+    final handle = tester.ensureSemantics();
+    await tester.pumpWidget(harness(initial: '/pantry'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), 'chickpeas');
+    await tester.pumpAndSettle();
+    expect(
+      tester.getSemantics(
+        find.bySemanticsLabel(pantryRowLabel('chickpeas', false)),
+      ),
+      isSemantics(isButton: true, hasTapAction: true),
+    );
+    expect(
+      tester.getSemantics(
+        find.bySemanticsLabel(pantryRestockChipLabel('chickpeas', false)),
+      ),
+      isSemantics(isButton: true, hasTapAction: true),
+    );
+    handle.dispose();
+  });
+
+  /// Gate 5's banner counts what its sheet can act on, and nothing else. A catalog row cannot
+  /// be categorized from here at all — `set_custom_ingredient_category` reaches no catalog row
+  /// — so counting one would open a sheet that throws on its own downcast.
+  testWidgets('an uncategorised catalog row raises no categorize banner', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      harness(
+        initial: '/pantry',
+        pantry: () => const [
+          PantryEntryDto(
+            ingredient: chickpeasRef,
+            name: 'chickpeas',
+            aliases: [],
+            marked: true,
+            restockRequested: false,
+            storeCategory: null,
+          ),
+        ],
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text(pantryNeedsCategoryCopy(1)), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  /// The other clause of the same predicate. A blank-named row cannot be repaired from the
+  /// sheet either — `set_custom_ingredient_category` re-validates the stored name and would
+  /// reject every Save — so it must not be offered as though it could.
+  testWidgets('a blank-named custom row raises no categorize banner', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      harness(
+        initial: '/pantry',
+        pantry: () => const [
+          PantryEntryDto(
+            ingredient: houseMixRef,
+            name: '   ',
+            aliases: [],
+            marked: true,
+            restockRequested: false,
+            storeCategory: null,
+          ),
+        ],
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text(pantryNeedsCategoryCopy(1)), findsNothing);
+  });
+
+  /// Gate 2's create affordance must not offer to duplicate a catalog row the user is looking
+  /// straight at. `garbanzo beans` is an alias the fixtures carry precisely because it is not a
+  /// substring of its canonical name.
+  testWidgets('an exact alias match offers no "add as new ingredient"', (
+    tester,
+  ) async {
+    await tester.pumpWidget(harness(initial: '/pantry'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), 'garbanzo beans');
+    await tester.pumpAndSettle();
+    expect(find.text('chickpeas'), findsOneWidget);
+    expect(
+      find.textContaining('as a new ingredient'),
+      findsNothing,
+      reason: 'an exact hit on an alias is still an exact hit',
+    );
   });
 
   /// The reachable stale-list path: `installStarterContent` grows the catalog after
@@ -7469,6 +7794,140 @@ void main() {
     await tester.tap(find.text(action));
     await tester.pumpAndSettle();
   }
+
+  /// OPT-006 gate 1's read side. A flag is a purchase instruction set by a household that
+  /// *knows* it has the item, so filing the line under "Already have" would hide exactly what
+  /// the flag was raised about. It renders under To buy instead, saying why.
+  testWidgets('a flagged pantry-marked line renders under To buy with its note', (
+    tester,
+  ) async {
+    useTallView(tester);
+    await tester.pumpWidget(
+      harness(
+        initial: '/shopping',
+        shopping: (_, _) =>
+            shoppingView(list: shoppingListWithFlaggedOnion()),
+      ),
+    );
+    await tester.pumpAndSettle();
+    // Present in the unexpanded list, which is what "under To buy" means here — before the
+    // reroute this line only appeared inside the collapsed Already-have tile.
+    expect(find.text('onion'), findsOneWidget);
+    // Not `textContaining(alreadyHaveHeading)`: the line menu's 'Already have it' item
+    // shares that prefix. The trailing ' (' matches only the section title, and fails against
+    // the pre-reroute tree on 'Already have (1)' — the old `(0)` form could never appear at
+    // all, because the section is built only when the list is non-empty.
+    expect(find.textContaining('$alreadyHaveHeading ('), findsNothing);
+    expect(find.textContaining(restockFlagCopy), findsOneWidget);
+  });
+
+  /// The flag has to reach a screen reader too. The visible note rides the subtitle, which
+  /// `_neededRow` wraps in `ExcludeSemantics`, so the accessible name is the only place it can
+  /// live — a subtitle-only note would be invisible to TalkBack.
+  testWidgets('a flagged line carries the flag in its accessible name', (
+    tester,
+  ) async {
+    useTallView(tester);
+    final handle = tester.ensureSemantics();
+    await tester.pumpWidget(
+      harness(
+        initial: '/shopping',
+        shopping: (_, _) =>
+            shoppingView(list: shoppingListWithFlaggedOnion()),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.bySemanticsLabel(restockLineLabel('onion', false)),
+      findsOneWidget,
+    );
+    handle.dispose();
+  });
+
+  /// Two surfaces that would otherwise contradict the new section. "Already have it" on an
+  /// already-marked identity is a no-op whose snackbar promises the line drops off a list the
+  /// flag keeps it on; `omittedCopy` says the line was skipped for a pantry mark while the
+  /// household reads it under To buy.
+  testWidgets('a flagged marked line offers no "Already have it" and explains the flag', (
+    tester,
+  ) async {
+    useTallView(tester);
+    await tester.pumpWidget(
+      harness(
+        initial: '/shopping',
+        shopping: (_, _) =>
+            shoppingView(list: shoppingListWithFlaggedOnion()),
+      ),
+    );
+    await tester.pumpAndSettle();
+    // Row order under To buy: flour, onion.
+    await tester.tap(find.byTooltip(lineOptionsTooltip).at(1));
+    await tester.pumpAndSettle();
+    expect(find.text('Already have it'), findsNothing);
+    expect(find.text('Back to pantry'), findsNothing);
+    await tester.tap(find.text('Why is this here?'));
+    await tester.pumpAndSettle();
+    expect(find.text(restockExplainCopy), findsOneWidget);
+    expect(find.text(omittedCopy), findsNothing);
+  });
+
+  /// The converse, and why the gate is on `status` rather than on `restock`: a flagged but
+  /// *unmarked* line still offers the mark, because marking it is a legitimate correction.
+  testWidgets('a flagged unmarked line still offers "Already have it"', (
+    tester,
+  ) async {
+    useTallView(tester);
+    await tester.pumpWidget(
+      harness(
+        initial: '/shopping',
+        pantry: () => pantryEntries,
+        setPantryMarks: (refs, marked) async => refs,
+        shopping: (_, _) => shoppingView(
+          list: ShoppingListDto(
+            algorithmVersion: okShoppingList.algorithmVersion,
+            fromDate: okShoppingList.fromDate,
+            toDate: okShoppingList.toDate,
+            groups: [
+              ShoppingGroupDto(
+                category: 'baking',
+                lines: [
+                  ShoppingLineDto(
+                    key: flourKey,
+                    name: 'flour',
+                    ingredient: chickpeasRef,
+                    quantity: const QuantityDto.exact(numer: 5, denom: 2),
+                    unit: const UnitDto.known(unit: 'cup'),
+                    optional: false,
+                    status: ShoppingLineStatusDto.needed,
+                    contributions: [
+                      contribution('pm-1', '2026-08-29', '1 cup flour'),
+                    ],
+                    restock: true,
+                  ),
+                ],
+              ),
+            ],
+            nonRecipeComponents: 0,
+            contributionCount: 1,
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip(lineOptionsTooltip).first);
+    await tester.pumpAndSettle();
+    expect(
+      find.text('Already have it'),
+      findsOneWidget,
+      reason: 'the flag does not mean the household already marked it',
+    );
+    // ...and taking it says what actually happens. The unflagged copy promises the item stays
+    // off the lists, which the flag has just made false.
+    await tester.tap(find.text('Already have it'));
+    await tester.pumpAndSettle();
+    expect(find.text(alreadyHaveItFlaggedCopy('flour')), findsOneWidget);
+    expect(find.text(alreadyHaveItCopy('flour')), findsNothing);
+  });
 
   /// AC-1: lines land under their store category, the uncategorised line under `Other`, the
   /// omitted line under Already have, and the explain sheet names every contribution.

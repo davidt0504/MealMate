@@ -34,6 +34,9 @@ void main() {
     expect(body, contains('replaced by "old.db"'));
     expect(body, contains('recipes'));
     expect(body, contains('"Restore latest export"'));
+    // The undo lasts only until a newer export becomes the latest.
+    expect(body, contains('until you export or import again'));
+    expect(body, isNot(endsWith('brings it back.')));
     expect(importConfirmAction, 'Save a copy and replace my data');
   });
 

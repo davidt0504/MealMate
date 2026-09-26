@@ -58,6 +58,11 @@ final shoppingCopySamples = [
   lineOptionsTooltip,
   skippedCopy('flour'),
   alreadyHaveItCopy('flour'),
+  alreadyHaveItFlaggedCopy('flour'),
+  restockFlagCopy,
+  restockExplainCopy,
+  restockLineLabel('flour', true),
+  restockLineLabel('flour', false),
   resetTitle,
   resetBody(1, 1),
   resetBody(2, 0),
@@ -215,27 +220,39 @@ void main() {
     }
   });
 
-  test('sectionFor: hidden wins, omitted needs restore, else needed', () {
+  test('sectionFor: hidden wins, then restock, then omitted needs restore', () {
     const needed = ShoppingLineStatusDto.needed;
     const omitted = ShoppingLineStatusDto.omittedPantryMarked;
-    // Hard-coded table: status × hidden × restored.
-    final table = <(ShoppingLineStatusDto, ShoppingLineStateDto?), Section>{
-      (needed, null): Section.needed,
-      (needed, state()): Section.needed,
-      (needed, state(checked: true)): Section.needed,
-      (needed, state(hidden: true)): Section.removed,
-      (needed, state(restored: true)): Section.needed,
-      (needed, state(hidden: true, restored: true)): Section.removed,
-      (omitted, null): Section.alreadyHave,
-      (omitted, state()): Section.alreadyHave,
-      (omitted, state(restored: true)): Section.needed,
-      (omitted, state(hidden: true)): Section.removed,
-      (omitted, state(hidden: true, restored: true)): Section.removed,
-    };
+    // Hard-coded table: status × restock × hidden × restored.
+    final table =
+        <(ShoppingLineStatusDto, bool, ShoppingLineStateDto?), Section>{
+          (needed, false, null): Section.needed,
+          (needed, false, state()): Section.needed,
+          (needed, false, state(checked: true)): Section.needed,
+          (needed, false, state(hidden: true)): Section.removed,
+          (needed, false, state(restored: true)): Section.needed,
+          (needed, false, state(hidden: true, restored: true)): Section.removed,
+          (omitted, false, null): Section.alreadyHave,
+          (omitted, false, state()): Section.alreadyHave,
+          (omitted, false, state(restored: true)): Section.needed,
+          (omitted, false, state(hidden: true)): Section.removed,
+          (omitted, false, state(hidden: true, restored: true)):
+              Section.removed,
+          // A flag outranks the mark: the household said "I am low on this", so it belongs on
+          // the buy list whatever the mark says. This is the row that would otherwise hide
+          // under "Already have" — the one place the flag must not be filed.
+          (omitted, true, null): Section.needed,
+          (omitted, true, state()): Section.needed,
+          (omitted, true, state(restored: true)): Section.needed,
+          (needed, true, null): Section.needed,
+          // ...but hidden still wins over everything, flag included: a removal is explicit.
+          (omitted, true, state(hidden: true)): Section.removed,
+          (needed, true, state(hidden: true)): Section.removed,
+        };
     expect(table, isNotEmpty);
     for (final entry in table.entries) {
       expect(
-        sectionFor(entry.key.$1, entry.key.$2),
+        sectionFor(entry.key.$1, entry.key.$3, restock: entry.key.$2),
         entry.value,
         reason: '${entry.key}',
       );
