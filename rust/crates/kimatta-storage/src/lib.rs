@@ -1471,10 +1471,11 @@ enum CustomRowClass {
 /// passed to [`set_custom_ingredient_category`] and the categorize sheet re-validates the stored
 /// name, so a Save there would always fail.
 ///
-/// Scope, because it is narrower than it looks: the id rule is shared by the two reads that do
+/// Scope, because it is narrower than it looks: the id rule is shared by the three reads that do
 /// not route through here ([`list_pantry_entries`], [`list_marked_pantry_refs`] and
-/// [`list_restock_flagged_refs`] each apply it inline), but the *name* rule is this function's
-/// alone. [`list_pantry_entries`] guards only the id and still yields a blank-named row; the
+/// [`list_restock_flagged_refs`] each apply it inline, to catalog ids as well as custom ones;
+/// the recipe-line reader is the deliberate exception and still raises), but the *name* rule is
+/// this function's alone. [`list_pantry_entries`] guards only the id and still yields a blank-named row; the
 /// pantry banner filters those out Dart-side, in `pantry_categorize_sheet.dart`.
 fn classify_custom_row(
     household: &HouseholdId,
@@ -1694,8 +1695,9 @@ pub fn list_pantry_entries(
         })?
         .collect::<Result<Vec<_>, _>>()?;
     let mut aliases = alias_index(conn)?;
-    rows.into_iter()
-        .map(
+    Ok(rows
+        .into_iter()
+        .filter_map(
             |(kind, id, name, marked, restock_requested, store_category)| {
                 // Keyed on the kind, not the bare id: a custom ingredient whose id string happens
                 // to match a catalog one must not inherit that catalog entry's aliases.
@@ -1704,39 +1706,35 @@ pub fn list_pantry_entries(
                 // drop a row out of its group with no way to put it back (nothing writes a catalog
                 // category). A custom row's vocabulary is closed, so an out-of-vocabulary value
                 // reads as uncategorised here and reaches the categorize banner.
+                // In both arms an id the newtype rejects is skipped, not raised — the rule
+                // `classify_custom_row` applies. Erroring here would take the browse read down,
+                // and with it the categorize banner, over one row no screen can repair; neither
+                // `ingredient.id` nor `custom_ingredient.id` carries a CHECK, so import reaches
+                // both shapes.
                 let (ingredient, aliases, store_category) = if kind == "catalog" {
                     (
-                        IngredientRef::Catalog(IngredientId::new(&id)?),
+                        IngredientRef::Catalog(IngredientId::new(&id).ok()?),
                         aliases.remove(&id).unwrap_or_default(),
                         store_category,
                     )
                 } else {
-                    // Same rule as `classify_custom_row`: a custom id the newtype rejects is
-                    // skipped, not raised. Erroring here would take the browse read down — and
-                    // with it the categorize banner, the only in-app repair surface — over one
-                    // row. The catalog arm still raises: catalog ids ship with the manifest, and
-                    // no catalog read has a skip counterpart to stay consistent with.
-                    let Ok(custom) = CustomIngredientId::new(&id) else {
-                        return Ok(None);
-                    };
                     (
-                        IngredientRef::Custom(custom),
+                        IngredientRef::Custom(CustomIngredientId::new(&id).ok()?),
                         Vec::new(),
                         known_category(store_category),
                     )
                 };
-                Ok(Some(PantryEntry {
+                Some(PantryEntry {
                     ingredient,
                     name,
                     aliases,
                     marked,
                     restock_requested,
                     store_category,
-                }))
+                })
             },
         )
-        .collect::<Result<Vec<_>, StorageError>>()
-        .map(|entries| entries.into_iter().flatten().collect())
+        .collect())
 }
 
 /// Just the identities this household has marked — the derivation's only pantry need, where
@@ -1768,12 +1766,14 @@ pub fn list_marked_pantry_refs(
           WHERE household_id = ?1 AND custom_ingredient_id IS NOT NULL
           ORDER BY custom_ingredient_id")?;
     let mut marked = Vec::with_capacity(catalog.len() + custom.len());
-    for id in catalog {
-        marked.push(IngredientRef::Catalog(IngredientId::new(&id)?));
-    }
-    // A row whose custom id the newtype rejects is skipped for the same reason the list reads
-    // skip it — `pantry_item.custom_ingredient_id` is a plain FK with no blank guard, so a
+    // A row whose id the newtype rejects, of either kind, is skipped for the same reason the
+    // list reads skip it — both `pantry_item` id columns are plain FKs with no blank guard, so a
     // corrupt row can carry a mark, and raising here fails the whole shopping derivation.
+    for id in catalog {
+        if let Ok(id) = IngredientId::new(&id) {
+            marked.push(IngredientRef::Catalog(id));
+        }
+    }
     for id in custom {
         if let Ok(id) = CustomIngredientId::new(&id) {
             marked.push(IngredientRef::Custom(id));
@@ -1980,12 +1980,14 @@ pub fn list_restock_flagged_refs(
           WHERE household_id = ?1 AND custom_ingredient_id IS NOT NULL
           ORDER BY custom_ingredient_id")?;
     let mut flagged = Vec::with_capacity(catalog.len() + custom.len());
+    // Skipped rather than raised, exactly as in [`list_marked_pantry_refs`]: both
+    // `pantry_restock_flag` id columns are the same unguarded FKs, and a flag is what puts a
+    // line on the shopping list, so this is the corrupt row likeliest to be reached.
     for id in catalog {
-        flagged.push(IngredientRef::Catalog(IngredientId::new(&id)?));
+        if let Ok(id) = IngredientId::new(&id) {
+            flagged.push(IngredientRef::Catalog(id));
+        }
     }
-    // Skipped rather than raised, exactly as in [`list_marked_pantry_refs`]:
-    // `pantry_restock_flag.custom_ingredient_id` is the same unguarded FK, and a flag is what
-    // puts a line on the shopping list, so this is the corrupt row likeliest to be reached.
     for id in custom {
         if let Ok(id) = CustomIngredientId::new(&id) {
             flagged.push(IngredientRef::Custom(id));
@@ -9713,7 +9715,7 @@ mod tests {
     }
 
     /// `h` with the lunch+dinner cycle, catalog `i-oil` (aisle) and `i-salt` (aisle), custom
-    /// `c-h` (no category), recipe `shop-h` naming all three plus an unresolved line.
+    /// `c-h` (pantry), recipe `shop-h` naming all three plus an unresolved line.
     fn seed_for_shopping(conn: &mut Connection, household: &str) {
         seed_for_meals(conn, household);
         for i in catalog() {
@@ -9918,7 +9920,8 @@ mod tests {
         seed_for_shopping(&mut conn, "h");
         conn.execute(
             "INSERT INTO custom_ingredient (id, household_id, name, store_category)
-             VALUES ('c-blank', 'h', '', 'pantry')",
+             VALUES ('c-blank', 'h', '', 'pantry'),
+                    ('c-legacy', 'h', 'legacy mix', NULL)",
             [],
         )
         .unwrap();
@@ -9926,10 +9929,13 @@ mod tests {
             .unwrap()
             .iter()
             .all(|c| c.id().as_str() != "c-blank"));
-        assert!(list_custom_ingredients_missing_category(&conn, &hid("h"))
-            .unwrap()
-            .iter()
-            .all(|(id, _)| id.as_str() != "c-blank"));
+        let missing = list_custom_ingredients_missing_category(&conn, &hid("h")).unwrap();
+        let ids: Vec<&str> = missing.iter().map(|(id, _)| id.as_str()).collect();
+        assert_eq!(
+            ids,
+            ["c-legacy"],
+            "the corrupt row is skipped, its valid sibling kept"
+        );
     }
 
     /// The other blank-name variant, and the same disposition: a blank name is corrupt whatever
@@ -9941,7 +9947,8 @@ mod tests {
         seed_for_shopping(&mut conn, "h");
         conn.execute(
             "INSERT INTO custom_ingredient (id, household_id, name, store_category)
-             VALUES ('c-blank2', 'h', '', NULL)",
+             VALUES ('c-blank2', 'h', '', NULL),
+                    ('c-legacy', 'h', 'legacy mix', NULL)",
             [],
         )
         .unwrap();
@@ -9949,10 +9956,13 @@ mod tests {
             .unwrap()
             .iter()
             .all(|c| c.id().as_str() != "c-blank2"));
-        assert!(list_custom_ingredients_missing_category(&conn, &hid("h"))
-            .unwrap()
-            .iter()
-            .all(|(id, _)| id.as_str() != "c-blank2"));
+        let missing = list_custom_ingredients_missing_category(&conn, &hid("h")).unwrap();
+        let ids: Vec<&str> = missing.iter().map(|(id, _)| id.as_str()).collect();
+        assert_eq!(
+            ids,
+            ["c-legacy"],
+            "the corrupt row is skipped, its valid sibling kept"
+        );
     }
 
     /// `trim`, not `is_empty`: the domain constructor rejects a whitespace-only name through
@@ -9964,7 +9974,8 @@ mod tests {
         seed_for_shopping(&mut conn, "h");
         conn.execute(
             "INSERT INTO custom_ingredient (id, household_id, name, store_category)
-             VALUES ('c-blank4', 'h', '   ', NULL)",
+             VALUES ('c-blank4', 'h', '   ', NULL),
+                    ('c-legacy', 'h', 'legacy mix', NULL)",
             [],
         )
         .unwrap();
@@ -9972,10 +9983,13 @@ mod tests {
             .unwrap()
             .iter()
             .all(|c| c.id().as_str() != "c-blank4"));
-        assert!(list_custom_ingredients_missing_category(&conn, &hid("h"))
-            .unwrap()
-            .iter()
-            .all(|(id, _)| id.as_str() != "c-blank4"));
+        let missing = list_custom_ingredients_missing_category(&conn, &hid("h")).unwrap();
+        let ids: Vec<&str> = missing.iter().map(|(id, _)| id.as_str()).collect();
+        assert_eq!(
+            ids,
+            ["c-legacy"],
+            "the corrupt row is skipped, its valid sibling kept"
+        );
     }
 
     /// Invariant 6 at the id boundary, for every category rather than only for `NULL`. A row
@@ -9992,6 +10006,7 @@ mod tests {
             ("", "ghost null", None),
             (" ", "ghost known", Some("pantry")),
             ("\t", "ghost unknown", Some("snacks")),
+            ("c-legacy", "legacy mix", None),
         ] {
             conn.execute(
                 "INSERT INTO custom_ingredient (id, household_id, name, store_category)
@@ -10004,19 +10019,21 @@ mod tests {
         let listed = list_custom_ingredients(&conn, &hid("h")).unwrap();
         assert!(listed.iter().all(|c| !names.contains(&c.name())));
         let missing = list_custom_ingredients_missing_category(&conn, &hid("h")).unwrap();
-        assert!(missing
-            .iter()
-            .all(|(_, name)| !names.contains(&name.as_str())));
+        let missing: Vec<&str> = missing.iter().map(|(_, name)| name.as_str()).collect();
+        assert_eq!(
+            missing,
+            ["legacy mix"],
+            "the corrupt rows are skipped, the sibling kept"
+        );
         let browsed = list_pantry_entries(&conn, &hid("h")).unwrap();
         assert!(browsed.iter().all(|e| !names.contains(&e.name.as_str())));
     }
 
-    /// The other half of the browse read's asymmetry, which the custom-arm skip left unpinned:
-    /// the catalog arm still raises. Catalog ids ship with the manifest rather than arriving from
-    /// a household, so there is no repair flow to keep alive and no reason to hide the row — and
-    /// `ingredient.id` carries no CHECK, so the shape is reachable by import like the rest.
+    /// The catalog arm of the browse read, under the same rule as the custom arm. `ingredient.id`
+    /// carries no CHECK, so a blank id is reachable by import exactly as a blank custom id is, and
+    /// raising would take the whole pantry screen down over a row nothing in the app can repair.
     #[test]
-    fn a_blank_catalog_id_still_fails_the_browse_read() {
+    fn a_blank_catalog_id_is_skipped_by_the_browse_read() {
         let mut conn = open(":memory:").unwrap();
         seed_for_shopping(&mut conn, "h");
         conn.execute(
@@ -10025,7 +10042,47 @@ mod tests {
             [],
         )
         .unwrap();
-        assert!(list_pantry_entries(&conn, &hid("h")).is_err());
+        let browsed = list_pantry_entries(&conn, &hid("h")).unwrap();
+        assert!(browsed.iter().all(|e| e.name != "ghost catalog"));
+        assert!(browsed.iter().any(|e| e.name == "olive oil"));
+    }
+
+    /// The mark and flag sides of the catalog arm. Both columns are plain FKs with no blank
+    /// guard, so a corrupt catalog row can carry either; raising in either read failed the whole
+    /// shopping derivation, which is the worse of the two dead screens.
+    #[test]
+    fn a_marked_and_flagged_blank_catalog_id_is_skipped_by_the_ref_reads() {
+        let mut conn = open(":memory:").unwrap();
+        seed_for_shopping(&mut conn, "h");
+        conn.execute(
+            "INSERT INTO ingredient (id, canonical_name, store_category)
+             VALUES ('', 'ghost catalog', 'pantry')",
+            [],
+        )
+        .unwrap();
+        for table in ["pantry_item", "pantry_restock_flag"] {
+            conn.execute(
+                &format!(
+                    "INSERT INTO {table} (household_id, ingredient_id, custom_ingredient_id)
+                     VALUES ('h', '', NULL), ('h', 'i-oil', NULL)"
+                ),
+                [],
+            )
+            .unwrap();
+        }
+        let oil = vec![IngredientRef::Catalog(IngredientId::new("i-oil").unwrap())];
+        assert_eq!(list_marked_pantry_refs(&conn, &hid("h")).unwrap(), oil);
+        assert_eq!(list_restock_flagged_refs(&conn, &hid("h")).unwrap(), oil);
+        let list = load_shopping_list(
+            &mut conn,
+            &hid("h"),
+            parse_civil_date("2026-08-29").unwrap(),
+            parse_civil_date("2026-08-31").unwrap(),
+        );
+        assert!(
+            list.is_ok(),
+            "one corrupt row must not fail the whole derivation"
+        );
     }
 
     /// The mark side of the same boundary. `pantry_item.custom_ingredient_id` is a plain FK with

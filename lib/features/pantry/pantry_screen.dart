@@ -236,8 +236,8 @@ class _PantryScreenState extends ConsumerState<PantryScreen> {
   /// The banner's list is narrowed three ways, and each clause is load-bearing. Custom refs
   /// only, because the sheet writes through `set_custom_ingredient_category`, which reaches no
   /// catalog row; a catalog row with no category is therefore absent from the grouped view and
-  /// reachable only by search, which is import-only in practice — all 161 rows of the shipped
-  /// manifest carry a category. Non-blank names only, because the sheet re-validates the stored
+  /// reachable only by search, which is import-only in practice — every row of the shipped
+  /// manifest carries a category. Non-blank names only, because the sheet re-validates the stored
   /// name on Save, so a blank-named row would render nameless above a button that always fails.
   /// That clause is not a duplicate of the Rust rule and must not be deleted as one: Rust drops
   /// blank-named rows from the two custom-ingredient *list* reads, while these entries come from

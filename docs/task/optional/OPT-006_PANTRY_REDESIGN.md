@@ -66,6 +66,12 @@ requirement.
    already-flagged-confusing screen); M4 standing list (per-trip tap tax scales with
    trip-frequency × staple-count, and "always on the list" isn't a truthful stock statement —
    conflicts invariants 6 and 19).
+
+   **Amended 2026-09-26 — `SHOPPING_ALGORITHM_VERSION` 3.** A synthesized restock line's
+   `status` follows the have/none mark (`OmittedPantryMarked` when marked, `Needed` when not)
+   instead of always reading `Needed`, so it agrees with a restock flag riding a recipe-derived
+   line for the same household state. This amends OPT-003's table row "yes / no, no meal needs
+   it → `Needed`".
 2. **Default screen: My Shelves, single screen, inline add.** Default view shows only rows with
    `marked = true` (post-gate-1, "staple" is not a stored concept — see gate 1), grouped by
    `store_category`; a persistent search field expands the same screen to the full catalog in

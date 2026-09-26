@@ -2110,6 +2110,30 @@ mod tests {
         assert_eq!(lines[0].quantity, Quantity::Unknown);
         assert_eq!(lines[0].contributions.len(), 0);
         assert_eq!(lines[0].name, "onion");
+        // The unmarked counterpart of `marked_and_flagged_still_yields_a_restock_line`: this is
+        // what keeps "Already have it" on the row, since the reader hides it for
+        // `OmittedPantryMarked`.
+        assert_eq!(lines[0].status, LineStatus::Needed);
+    }
+
+    /// The mark is looked up per identity: another identity's mark must not leak into the
+    /// status of a synthesized line for this one.
+    #[test]
+    fn a_mark_on_another_identity_does_not_mark_a_flagged_line() {
+        let list = derive_shopping_list(&input_with_restock(
+            vec![],
+            vec![],
+            vec![
+                identity("onion", "onion", Some("produce")),
+                identity("garlic", "garlic", Some("produce")),
+            ],
+            vec![cat("garlic")],
+            vec![cat("onion")],
+        ));
+        let lines = all_lines(&list);
+        assert_eq!(lines.len(), 1);
+        assert_eq!(lines[0].key, restock_line_key(&cat("onion")));
+        assert_eq!(lines[0].status, LineStatus::Needed);
     }
 
     #[test]
