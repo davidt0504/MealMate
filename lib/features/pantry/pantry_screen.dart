@@ -262,6 +262,14 @@ class _PantryScreenState extends ConsumerState<PantryScreen> {
       final category = entry.storeCategory;
       if (category != null) grouped.putIfAbsent(category, () => []).add(entry);
     }
+    // Flagged but not marked — the state both "Low" on an unmarked row and "Used up" leave
+    // behind. `!marked` is the partition rather than the flag alone: a marked-and-flagged row
+    // already renders under its store category with the "Low" chip selected, so selecting on
+    // `restockRequested` by itself would render it in two places at once.
+    final flagged = [
+      for (final entry in entries)
+        if (entry.restockRequested && !entry.marked) entry,
+    ]..sort((a, b) => a.name.compareTo(b.name));
     final categories = grouped.keys.toList()..sort();
     final theme = Theme.of(context).textTheme;
     return [
@@ -270,13 +278,19 @@ class _PantryScreenState extends ConsumerState<PantryScreen> {
           count: needsCategory.length,
           onTap: () => _openCategorizeSheet(householdId, needsCategory),
         ),
-      if (marked.isEmpty)
+      // The "nothing marked" line belongs to the marked list, so a household whose only pantry
+      // state is a flag still sees that flag rather than being told there is nothing here.
+      if (marked.isEmpty && flagged.isEmpty)
         const Text(pantryNothingMarkedCopy)
       else
         for (final category in categories) ...[
           Text(category, style: theme.titleSmall),
           for (final entry in grouped[category]!) _row(entry, householdId),
         ],
+      if (flagged.isNotEmpty) ...[
+        Text(pantryFlaggedSectionTitle, style: theme.titleSmall),
+        for (final entry in flagged) _flaggedRow(entry, householdId),
+      ],
     ];
   }
 
@@ -356,6 +370,29 @@ class _PantryScreenState extends ConsumerState<PantryScreen> {
                 ),
               ],
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// A flagged-but-unmarked row: name plus the one action that state needs. Deliberately not
+  /// `_row` — that row's toggle marks the ingredient as had, which moves it to the shelves still
+  /// flagged, and its "Used up" chip always sets the very flag this section exists to clear.
+  /// Clearing routes through the same `_toggleRestock` the "Low" chip uses, so the flag keeps a
+  /// single writer.
+  Widget _flaggedRow(PantryEntryDto entry, String householdId) {
+    final busy = _writing.contains(entry.ingredient);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          Expanded(child: Text(entry.name)),
+          _ShelfChip(
+            label: pantryClearFlagChipLabel,
+            semanticLabel: pantryClearFlagLabel(entry.name),
+            selected: true,
+            onPressed: busy ? null : () => _toggleRestock(householdId, entry),
           ),
         ],
       ),

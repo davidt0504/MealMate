@@ -45,6 +45,19 @@ String pantryRestockChipLabel(String name, bool flagged) => flagged
 /// The accessible label for the "Used up" chip.
 String pantryUsedUpLabel(String name) => '$name, used up — clear and restock';
 
+/// My Shelves' section for ingredients flagged for restock but not marked as had. Both "Low" on
+/// an unmarked row and "Used up" leave a row in that state, and until this section existed the
+/// row left the default view still carrying its flag, with no way back to it but search.
+const pantryFlaggedSectionTitle = 'Flagged for restock';
+
+/// The accessible label for a flagged row's only action. States the effect, like
+/// [pantryRestockChipLabel] does, rather than restating the section heading.
+String pantryClearFlagLabel(String name) =>
+    '$name, flagged for restock. Tap to clear.';
+
+/// The flagged row's visible action.
+const pantryClearFlagChipLabel = 'Clear flag';
+
 /// One or more custom ingredients still need a shelf before they can appear on My Shelves
 /// (OPT-006 gate 5 remediation) — never a silent drop, never a grouped "Other" bucket.
 String pantryNeedsCategoryCopy(int count) => count == 1

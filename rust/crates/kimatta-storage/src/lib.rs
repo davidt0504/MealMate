@@ -620,6 +620,21 @@ const MIGRATION_ARRAY: &[M] = &[
     CREATE INDEX pantry_restock_flag_custom_ingredient
         ON pantry_restock_flag(custom_ingredient_id);",
     ),
+    // Sweeps `meal_component` rows whose planned meal no longer exists. `open` turns foreign keys
+    // OFF across `to_latest` — it must, since the pragma is a no-op inside a transaction — so v11
+    // and v12's `DELETE FROM planned_meal` could not cascade, and every device importing a
+    // pre-quarantine database strands one component per deleted meal. `integrity_check` does not
+    // examine foreign keys, so restore accepted them silently.
+    //
+    // A forward sweep rather than a fix to v11/v12: no released build ran those (v1.0.3 is schema
+    // 10), but development databases did, and editing an applied migration leaves two databases
+    // claiming one `user_version` with different rows. These rows are already unreachable — every
+    // read path reaches components through their planned meal — and nothing references
+    // `meal_component`, so the sweep is complete and creates no second-order orphans.
+    M::up(
+        "DELETE FROM meal_component
+    WHERE planned_meal_id NOT IN (SELECT id FROM planned_meal);",
+    ),
 ];
 pub const MIGRATIONS: Migrations<'static> = Migrations::from_slice(MIGRATION_ARRAY);
 
@@ -3966,20 +3981,23 @@ mod tests {
         let conn = open(&path).unwrap();
         let dest = dir.path().join("export.db");
         export_database(&conn, &dest).unwrap();
-        assert_eq!(validate_export(&dest).unwrap(), 14);
+        let latest = MIGRATION_ARRAY.len() as u32;
+        assert_eq!(validate_export(&dest).unwrap(), latest);
 
+        // Derived, not a literal: `supported` is `MIGRATION_ARRAY.len()`, so a hard-coded sentinel
+        // stops being "newer than us" the moment a migration lands, and this test then asserts
+        // refusal of a version the code accepts — passing as `Ok` into `unwrap_err`.
+        let newer = latest + 1;
         Connection::open(&dest)
             .unwrap()
-            .pragma_update(None, "user_version", 15)
+            .pragma_update(None, "user_version", newer)
             .unwrap();
         let err = validate_export(&dest).unwrap_err();
         assert!(
             matches!(
                 err,
-                StorageError::NewerSchema {
-                    found: 15,
-                    supported: 14,
-                }
+                StorageError::NewerSchema { found, supported }
+                    if found == newer && supported == latest
             ),
             "want NewerSchema, got {err:?}"
         );
@@ -4042,18 +4060,20 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("kimatta.db");
         drop(open(&path).unwrap());
+        // Derived for the same reason as in `validate_refuses_a_newer_export_and_accepts_a_real_one`:
+        // a literal sentinel silently stops testing refusal at the next migration.
+        let latest = MIGRATION_ARRAY.len() as u32;
+        let newer = latest + 1;
         {
             let conn = Connection::open(&path).unwrap();
-            conn.pragma_update(None, "user_version", 15).unwrap();
+            conn.pragma_update(None, "user_version", newer).unwrap();
         }
         let err = open(&path).unwrap_err();
         assert!(
             matches!(
                 err,
-                StorageError::NewerSchema {
-                    found: 15,
-                    supported: 14,
-                }
+                StorageError::NewerSchema { found, supported }
+                    if found == newer && supported == latest
             ),
             "want NewerSchema, got {err:?}"
         );
@@ -4061,8 +4081,8 @@ mod tests {
         // the recovery.
         let text = err.to_string();
         assert!(text.contains("newer version of the app"), "got {text:?}");
-        assert!(text.contains("schema 15"), "got {text:?}");
-        assert!(text.contains("supports 14"), "got {text:?}");
+        assert!(text.contains(&format!("schema {newer}")), "got {text:?}");
+        assert!(text.contains(&format!("supports {latest}")), "got {text:?}");
         assert!(text.contains("Update the app"), "got {text:?}");
     }
 
@@ -4076,7 +4096,7 @@ mod tests {
         let path = dir.path().join("does-not-exist-yet.db");
         let conn = open(&path).unwrap();
         // Hard-coded, not derived from MIGRATIONS: a new migration must consciously bump it.
-        assert_eq!(schema_version(&conn).unwrap(), 14);
+        assert_eq!(schema_version(&conn).unwrap(), 15);
         assert_eq!(count(&conn, "household"), 0);
     }
 
@@ -4239,7 +4259,7 @@ mod tests {
             .unwrap();
         }
         let conn = open(&path).unwrap();
-        assert_eq!(schema_version(&conn).unwrap(), 14);
+        assert_eq!(schema_version(&conn).unwrap(), 15);
         assert_eq!(count(&conn, "household"), 1);
         assert_eq!(count(&conn, "household_member"), 2);
         assert_eq!(count(&conn, "planning_cycle"), 0);
@@ -4455,7 +4475,7 @@ mod tests {
     #[test]
     fn empty_db_migrates_to_latest() {
         let conn = open(":memory:").unwrap();
-        assert_eq!(schema_version(&conn).unwrap(), 14);
+        assert_eq!(schema_version(&conn).unwrap(), 15);
     }
 
     // --- Step 4: schema v3 -----------------------------------------------------------------
@@ -4483,7 +4503,7 @@ mod tests {
             .unwrap();
         }
         let conn = open(&path).unwrap();
-        assert_eq!(schema_version(&conn).unwrap(), 14);
+        assert_eq!(schema_version(&conn).unwrap(), 15);
         assert_eq!(count(&conn, "household"), 1);
         assert_eq!(count(&conn, "planning_cycle"), 1);
         assert_eq!(count(&conn, "planning_meal_slot"), 2);
@@ -4508,7 +4528,7 @@ mod tests {
             insert_pre_v6_recipe(&raw, "h", "r");
         }
         let conn = open(&path).unwrap();
-        assert_eq!(schema_version(&conn).unwrap(), 14);
+        assert_eq!(schema_version(&conn).unwrap(), 15);
         assert_eq!(count(&conn, "household"), 1);
         assert_eq!(count(&conn, "household_member"), 1);
         assert_eq!(count(&conn, "recipe"), 1);
@@ -4534,7 +4554,7 @@ mod tests {
             insert_pre_v6_recipe(&raw, "h", "r");
         }
         let conn = open(&path).unwrap();
-        assert_eq!(schema_version(&conn).unwrap(), 14);
+        assert_eq!(schema_version(&conn).unwrap(), 15);
         assert_eq!(count(&conn, "household"), 1);
         assert_eq!(count(&conn, "recipe"), 1);
         assert_eq!(count(&conn, "household_restriction"), 0);
@@ -5884,7 +5904,7 @@ mod tests {
             insert_household(&mut conn, &household("h"), &[member("m", "h")]).unwrap();
         }
         let conn = open(&path).unwrap();
-        assert_eq!(schema_version(&conn).unwrap(), 14);
+        assert_eq!(schema_version(&conn).unwrap(), 15);
         assert_eq!(count(&conn, "household"), 1);
         assert_eq!(count(&conn, "household_member"), 1);
         let on: i32 = conn
@@ -6614,7 +6634,7 @@ mod tests {
             insert_pre_v6_recipe(&raw, "h", "r");
         }
         let conn = open(&path).unwrap();
-        assert_eq!(schema_version(&conn).unwrap(), 14);
+        assert_eq!(schema_version(&conn).unwrap(), 15);
         assert_eq!(count(&conn, "household"), 1);
         assert_eq!(count(&conn, "recipe"), 1);
         assert_eq!(load(&conn, "h", "r").unwrap().title(), "Recipe r");
@@ -6653,7 +6673,7 @@ mod tests {
             save_recipe(&mut raw, &recipe("h", "r", vec![])).unwrap();
         }
         let conn = open(&path).unwrap();
-        assert_eq!(schema_version(&conn).unwrap(), 14);
+        assert_eq!(schema_version(&conn).unwrap(), 15);
         assert_eq!(count(&conn, "household"), 1);
         assert_eq!(count(&conn, "recipe"), 1);
         assert_eq!(load(&conn, "h", "r").unwrap().title(), "Recipe r");
@@ -8141,7 +8161,7 @@ mod tests {
             save_recipe(&mut raw, &recipe("h", "r", vec![])).unwrap();
         }
         let conn = open(&path).unwrap();
-        assert_eq!(schema_version(&conn).unwrap(), 14);
+        assert_eq!(schema_version(&conn).unwrap(), 15);
         assert_eq!(count(&conn, "household"), 1);
         assert_eq!(count(&conn, "recipe"), 1);
         assert_eq!(load(&conn, "h", "r").unwrap().title(), "Recipe r");
@@ -8743,7 +8763,7 @@ mod tests {
             .unwrap();
         }
         let conn = open(&path).unwrap();
-        assert_eq!(schema_version(&conn).unwrap(), 14);
+        assert_eq!(schema_version(&conn).unwrap(), 15);
         assert_eq!(count(&conn, "household"), 1);
         assert_eq!(count(&conn, "pantry_item"), 1);
         assert_eq!(count(&conn, "shopping_line_state"), 0);
@@ -8775,7 +8795,7 @@ mod tests {
             .unwrap();
         }
         let conn = open(&path).unwrap();
-        assert_eq!(schema_version(&conn).unwrap(), 14);
+        assert_eq!(schema_version(&conn).unwrap(), 15);
         assert_eq!(count(&conn, "household"), 1);
         assert_eq!(count(&conn, "pantry_item"), 1);
         assert_eq!(count(&conn, "shopping_line_state"), 1);
@@ -8832,6 +8852,18 @@ mod tests {
         ));
         assert!(load_meal(&conn, "h", "historical").is_some());
         assert_eq!(load_meal(&conn, "h", "future"), None);
+        // The quarantine migration deleted that future meal with foreign keys off, so its
+        // components could not cascade; migration 15 sweeps them. Red before that migration
+        // existed. Scoped to this table on purpose: the fixture seeds through `Connection::open`
+        // with foreign keys at SQLite's default OFF, so the whole-database form would let an
+        // unrelated seed inconsistency fail an assertion about the sweep.
+        let orphans = conn
+            .prepare("PRAGMA foreign_key_check(meal_component)")
+            .unwrap()
+            .query_map([], |_| Ok(()))
+            .unwrap()
+            .count();
+        assert_eq!(orphans, 0, "migration left orphan meal_component rows");
     }
 
     #[test]
@@ -8890,6 +8922,18 @@ mod tests {
         ));
         assert!(load_meal(&conn, "h", "historical").is_some());
         assert_eq!(load_meal(&conn, "h", "future"), None);
+        // The quarantine migration deleted that future meal with foreign keys off, so its
+        // components could not cascade; migration 15 sweeps them. Red before that migration
+        // existed. Scoped to this table on purpose: the fixture seeds through `Connection::open`
+        // with foreign keys at SQLite's default OFF, so the whole-database form would let an
+        // unrelated seed inconsistency fail an assertion about the sweep.
+        let orphans = conn
+            .prepare("PRAGMA foreign_key_check(meal_component)")
+            .unwrap()
+            .query_map([], |_| Ok(()))
+            .unwrap()
+            .count();
+        assert_eq!(orphans, 0, "migration left orphan meal_component rows");
     }
 
     #[test]
@@ -8955,7 +8999,7 @@ mod tests {
         }
 
         let mut conn = open(&path).unwrap();
-        assert_eq!(schema_version(&conn).unwrap(), 14);
+        assert_eq!(schema_version(&conn).unwrap(), 15);
         let list = load_shopping_list(
             &mut conn,
             &hid("h"),

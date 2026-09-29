@@ -57,3 +57,7 @@ docs/wiki/viewer.html
 
 # Owner recipe-card photos: working material, ~26 MB, not diffable
 refs/images/
+
+# Real household database exports, dropped here to verify a migration. Two tracked files already
+# live in refs/, so an untracked export is one `git add -A` away from a public repo.
+refs/*.db

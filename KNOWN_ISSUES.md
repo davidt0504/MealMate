@@ -2,6 +2,17 @@
 
 Additional LOW findings are tracked in `KNOWN_ISSUES-low.md`.
 
+## master -- 2026-09-29 (pre-publish export verification)
+
+Full plan: `~/.claude/plans/home-davidlinux-claude-reviews-redteam-elegant-charm.md`
+
+### MEDIUM
+
+- **Migration runs with foreign keys off and nothing checks them afterwards; one realized case is fixed, the gap is not** (`rust/crates/kimatta-storage/src/lib.rs:665`, cf. `rust/src/api/health.rs:126`) -- `open()` must disable foreign keys across `to_latest`, since the pragma is a no-op inside a transaction, and neither `open` nor `restore_database`'s verify block runs `PRAGMA foreign_key_check` afterwards; `integrity_check` does not examine foreign keys. **Supersedes "No `foreign_key_check` backstop around migration" in `KNOWN_ISSUES-low.md`**, which enumerated only the table-rebuild hazard and concluded it was "safe while no migration rebuilds tables". That premise was incomplete rather than wrong: an FK-off `DELETE` on a parent row is a second route, and it was realized — v11 and v12 (`:546`, `:572`, the only parent-row deletes in `MIGRATION_ARRAY`) stranded one `meal_component` per removed planned meal on every device importing a pre-quarantine database, which `restore_database` accepted silently. Migration v15 sweeps those rows, and with `meal_component` childless that sweep is complete for the known damage; the class stays open. Fix: one `foreign_key_check` in restore's verify block, deferred because refusing an import on a pre-existing violation changes behaviour on the path two phones are about to take.
+  **Status:** OPEN
+
+---
+
 ## feature/opt-006 -- 2026-09-24 (OPT-006 / OPT-009 review-diff)
 
 Full review: `~/.claude/reviews/review-diff-master-2026-09-22T1813-20e8.md`
@@ -9,7 +20,7 @@ Full review: `~/.claude/reviews/review-diff-master-2026-09-22T1813-20e8.md`
 ### MEDIUM
 
 - **A restock flag has no surface on My Shelves once its row leaves the marked view** (`lib/features/pantry/pantry_screen.dart:236`) -- gate 1 lets a household flag an ingredient without marking it "have", and gate 4's "Used up" clears the mark and sets the flag in one gesture. `_myShelves` renders only `marked` rows, so in both cases the row leaves the default view carrying its new flag, and the household can neither see nor clear that flag again without remembering the name and searching for it. The read side is now covered on the shopping list (a flagged line renders under To buy with a "Flagged low" note), so the flag is visible where it is acted on; what is missing is a flagged-but-unmarked section on the screen that owns the flag. Fix: a "Flagged for restock" section in `_myShelves`, ordered against the categorize banner, with widget tests for the used-up-then-look-for-it path. Full review: `~/.claude/reviews/review-diff-master-2026-09-22T1813-20e8.md`
-  **Status:** OPEN
+  **Status:** RESOLVED 2026-09-29 — `_myShelves` (`lib/features/pantry/pantry_screen.dart`) gained a "Flagged for restock" section, ordered after the categorize banner and the marked shelves, holding rows where `restockRequested && !marked`. `!marked` is the partition, not the flag alone: a marked-and-flagged row already renders under its store category with "Low" selected. Its one action clears the flag through the existing `_toggleRestock`, so the flag keeps a single writer, and `pantryNothingMarkedCopy` now yields when only the flagged section has rows. Four widget tests, three of which fail against the previous screen.
 
 - **The `listCustomIngredientsMissingCategory` bridge command and its DTO have no app caller, and four `rust/src/api/**` doc comments state a predicate the code no longer applies** (`rust/src/api/recipe.rs:206`, `:138-140`, `:131-134`; `rust/src/api/pantry.rs:21-22`) -- the banner and the categorize sheet both derive from `pantryProvider`, so the bridge path is dead in the app; `PantryNotifier.fetchMissingCategory` was deleted, and `test/bridge_native_test.dart:609` is the only remaining caller. The storage query itself is live (`load_shopping_input` reads it). The four doc comments describe the old "`store_category IS NULL`" rule, which the OPT-006 widening replaced with a `KNOWN_STORE_CATEGORIES` membership test. They cannot be reworded on their own: flutter_rust_bridge copies Rust doc comments verbatim into the committed `lib/src/rust/**`, and the release workflow regenerates and `git diff --exit-code`s that directory, so an edit without a codegen run red-lights the only workflow the repo has. Fix both together in one `flutter_rust_bridge_codegen generate` pass: drop the command and DTO, reword the remaining docs, commit the regenerated bindings. Full review: `~/.claude/reviews/review-diff-master-2026-09-22T1813-20e8.md`
   **Status:** OPEN
