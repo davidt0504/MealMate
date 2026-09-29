@@ -39,7 +39,7 @@ flutter_rust_bridge::frb_generated_boilerplate!(
     default_rust_auto_opaque = RustAutoOpaqueMoi,
 );
 pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_VERSION: &str = "2.13.0";
-pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = 1046333278;
+pub(crate) const FLUTTER_RUST_BRIDGE_CODEGEN_CONTENT_HASH: i32 = -1627482760;
 
 // Section: executor
 
@@ -47,6 +47,41 @@ flutter_rust_bridge::frb_generated_default_handler!();
 
 // Section: wire_funcs
 
+fn wire__crate__api__planning_drafts__accept_planning_draft_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "accept_planning_draft",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_envelope =
+                <crate::api::planning_drafts::DraftEnvelopeDto>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, crate::api::error::KimattaError>((move || {
+                    let output_ok =
+                        crate::api::planning_drafts::accept_planning_draft(api_envelope)?;
+                    std::result::Result::Ok(output_ok)
+                })())
+            }
+        },
+    )
+}
 fn wire__crate__api__recipe__add_custom_ingredient_impl(
     port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
@@ -74,6 +109,40 @@ fn wire__crate__api__recipe__add_custom_ingredient_impl(
             move |context| {
                 transform_result_sse::<_, crate::api::error::KimattaError>((move || {
                     let output_ok = crate::api::recipe::add_custom_ingredient(api_item)?;
+                    std::result::Result::Ok(output_ok)
+                })())
+            }
+        },
+    )
+}
+fn wire__crate__api__planning_drafts__add_meal_exclusions_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "add_meal_exclusions",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_request =
+                <crate::api::planning_drafts::AddMealExclusionsDto>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, crate::api::error::KimattaError>((move || {
+                    let output_ok = crate::api::planning_drafts::add_meal_exclusions(api_request)?;
                     std::result::Result::Ok(output_ok)
                 })())
             }
@@ -397,6 +466,246 @@ fn wire__crate__api__planning__ensure_planning_cycle_impl(
         },
     )
 }
+fn wire__crate__api__experiment__experiment_export_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "experiment_export",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_dir = <String>::sse_decode(&mut deserializer);
+            let api_dest_path = <String>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, crate::api::error::KimattaError>((move || {
+                    let output_ok =
+                        crate::api::experiment::experiment_export(api_dir, api_dest_path)?;
+                    std::result::Result::Ok(output_ok)
+                })())
+            }
+        },
+    )
+}
+fn wire__crate__api__experiment__experiment_record_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "experiment_record",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_dir = <String>::sse_decode(&mut deserializer);
+            let api_event =
+                <crate::api::experiment::ExperimentEventDto>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, crate::api::error::KimattaError>((move || {
+                    let output_ok = crate::api::experiment::experiment_record(api_dir, api_event)?;
+                    std::result::Result::Ok(output_ok)
+                })())
+            }
+        },
+    )
+}
+fn wire__crate__api__experiment__experiment_reset_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "experiment_reset",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_dir = <String>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, crate::api::error::KimattaError>((move || {
+                    let output_ok = crate::api::experiment::experiment_reset(api_dir)?;
+                    std::result::Result::Ok(output_ok)
+                })())
+            }
+        },
+    )
+}
+fn wire__crate__api__experiment__experiment_set_enabled_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "experiment_set_enabled",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_dir = <String>::sse_decode(&mut deserializer);
+            let api_enabled = <bool>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, crate::api::error::KimattaError>((move || {
+                    let output_ok =
+                        crate::api::experiment::experiment_set_enabled(api_dir, api_enabled)?;
+                    std::result::Result::Ok(output_ok)
+                })())
+            }
+        },
+    )
+}
+fn wire__crate__api__experiment__experiment_set_override_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "experiment_set_override",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_dir = <String>::sse_decode(&mut deserializer);
+            let api_label_id = <Option<String>>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, crate::api::error::KimattaError>((move || {
+                    let output_ok =
+                        crate::api::experiment::experiment_set_override(api_dir, api_label_id)?;
+                    std::result::Result::Ok(output_ok)
+                })())
+            }
+        },
+    )
+}
+fn wire__crate__api__experiment__experiment_start_session_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "experiment_start_session",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_dir = <String>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, crate::api::error::KimattaError>((move || {
+                    let output_ok = crate::api::experiment::experiment_start_session(api_dir)?;
+                    std::result::Result::Ok(output_ok)
+                })())
+            }
+        },
+    )
+}
+fn wire__crate__api__experiment__experiment_status_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "experiment_status",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_dir = <String>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, ()>((move || {
+                    let output_ok =
+                        Ok::<_, ()>(crate::api::experiment::experiment_status(api_dir))?;
+                    std::result::Result::Ok(output_ok)
+                })())
+            }
+        },
+    )
+}
 fn wire__crate__api__health__export_database_impl(
     port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
@@ -458,6 +767,44 @@ fn wire__crate__api__health__init_app_impl(
                     let output_ok = Ok::<_, ()>({
                         crate::api::health::init_app();
                     })?;
+                    std::result::Result::Ok(output_ok)
+                })())
+            }
+        },
+    )
+}
+fn wire__crate__api__planning_drafts__inspect_planning_draft_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "inspect_planning_draft",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_context =
+                <crate::api::planning_drafts::DraftContextDto>::sse_decode(&mut deserializer);
+            let api_draft_id = <String>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, crate::api::error::KimattaError>((move || {
+                    let output_ok = crate::api::planning_drafts::inspect_planning_draft(
+                        api_context,
+                        api_draft_id,
+                    )?;
                     std::result::Result::Ok(output_ok)
                 })())
             }
@@ -728,6 +1075,40 @@ fn wire__crate__api__recipe__list_custom_ingredients_missing_category_impl(
         },
     )
 }
+fn wire__crate__api__planning_drafts__list_meal_exclusions_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "list_meal_exclusions",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_household_id = <String>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, crate::api::error::KimattaError>((move || {
+                    let output_ok =
+                        crate::api::planning_drafts::list_meal_exclusions(api_household_id)?;
+                    std::result::Result::Ok(output_ok)
+                })())
+            }
+        },
+    )
+}
 fn wire__crate__api__pantry__list_pantry_impl(
     port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
@@ -977,6 +1358,45 @@ fn wire__crate__api__shopping__load_shopping_view_impl(
         },
     )
 }
+fn wire__crate__api__planning_drafts__mutate_planning_draft_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "mutate_planning_draft",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_envelope =
+                <crate::api::planning_drafts::DraftEnvelopeDto>::sse_decode(&mut deserializer);
+            let api_action =
+                <crate::api::planning_drafts::DraftActionDto>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, crate::api::error::KimattaError>((move || {
+                    let output_ok = crate::api::planning_drafts::mutate_planning_draft(
+                        api_envelope,
+                        api_action,
+                    )?;
+                    std::result::Result::Ok(output_ok)
+                })())
+            }
+        },
+    )
+}
 fn wire__crate__api__health__open_database_impl(
     port_: flutter_rust_bridge::for_generated::MessagePort,
     ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
@@ -1004,6 +1424,40 @@ fn wire__crate__api__health__open_database_impl(
             move |context| {
                 transform_result_sse::<_, crate::api::error::KimattaError>((move || {
                     let output_ok = crate::api::health::open_database(api_db_path)?;
+                    std::result::Result::Ok(output_ok)
+                })())
+            }
+        },
+    )
+}
+fn wire__crate__api__planning_drafts__open_planning_draft_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "open_planning_draft",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_context =
+                <crate::api::planning_drafts::DraftContextDto>::sse_decode(&mut deserializer);
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, crate::api::error::KimattaError>((move || {
+                    let output_ok = crate::api::planning_drafts::open_planning_draft(api_context)?;
                     std::result::Result::Ok(output_ok)
                 })())
             }
@@ -1077,6 +1531,42 @@ fn wire__crate__api__decisions__record_plan_decision_impl(
             move |context| {
                 transform_result_sse::<_, crate::api::error::KimattaError>((move || {
                     let output_ok = crate::api::decisions::record_plan_decision(api_request)?;
+                    std::result::Result::Ok(output_ok)
+                })())
+            }
+        },
+    )
+}
+fn wire__crate__api__planning_drafts__remove_meal_exclusion_impl(
+    port_: flutter_rust_bridge::for_generated::MessagePort,
+    ptr_: flutter_rust_bridge::for_generated::PlatformGeneralizedUint8ListPtr,
+    rust_vec_len_: i32,
+    data_len_: i32,
+) {
+    FLUTTER_RUST_BRIDGE_HANDLER.wrap_normal::<flutter_rust_bridge::for_generated::SseCodec, _, _>(
+        flutter_rust_bridge::for_generated::TaskInfo {
+            debug_name: "remove_meal_exclusion",
+            port: Some(port_),
+            mode: flutter_rust_bridge::for_generated::FfiCallMode::Normal,
+        },
+        move || {
+            let message = unsafe {
+                flutter_rust_bridge::for_generated::Dart2RustMessageSse::from_wire(
+                    ptr_,
+                    rust_vec_len_,
+                    data_len_,
+                )
+            };
+            let mut deserializer =
+                flutter_rust_bridge::for_generated::SseDeserializer::new(message);
+            let api_request = <crate::api::planning_drafts::RemoveMealExclusionDto>::sse_decode(
+                &mut deserializer,
+            );
+            deserializer.end();
+            move |context| {
+                transform_result_sse::<_, crate::api::error::KimattaError>((move || {
+                    let output_ok =
+                        crate::api::planning_drafts::remove_meal_exclusion(api_request)?;
                     std::result::Result::Ok(output_ok)
                 })())
             }
@@ -1729,6 +2219,18 @@ impl SseDecode for String {
     }
 }
 
+impl SseDecode for crate::api::planning_drafts::AcceptReceiptDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_ledgerEntryId = <String>::sse_decode(deserializer);
+        let mut var_changedSlots = <u32>::sse_decode(deserializer);
+        return crate::api::planning_drafts::AcceptReceiptDto {
+            ledger_entry_id: var_ledgerEntryId,
+            changed_slots: var_changedSlots,
+        };
+    }
+}
+
 impl SseDecode for crate::api::planner::ActionProposalDto {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -1753,6 +2255,22 @@ impl SseDecode for crate::api::planner::ActionProposalDto {
             required_authority: var_requiredAuthority,
             deadline: var_deadline,
             reason_codes: var_reasonCodes,
+        };
+    }
+}
+
+impl SseDecode for crate::api::planning_drafts::AddMealExclusionsDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_context =
+            <crate::api::planning_drafts::DraftContextDto>::sse_decode(deserializer);
+        let mut var_dishes = <Vec<String>>::sse_decode(deserializer);
+        let mut var_acting =
+            <Option<crate::api::planning_drafts::DraftEnvelopeDto>>::sse_decode(deserializer);
+        return crate::api::planning_drafts::AddMealExclusionsDto {
+            context: var_context,
+            dishes: var_dishes,
+            acting: var_acting,
         };
     }
 }
@@ -1957,6 +2475,353 @@ impl SseDecode for crate::api::recipe::CustomIngredientMissingCategoryDto {
     }
 }
 
+impl SseDecode for crate::api::planning_drafts::DraftActionDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut tag_ = <i32>::sse_decode(deserializer);
+        match tag_ {
+            0 => {
+                let mut var_date = <String>::sse_decode(deserializer);
+                let mut var_slot = <crate::api::planning::MealSlotDto>::sse_decode(deserializer);
+                return crate::api::planning_drafts::DraftActionDto::Another {
+                    date: var_date,
+                    slot: var_slot,
+                };
+            }
+            1 => {
+                return crate::api::planning_drafts::DraftActionDto::Alternatives;
+            }
+            2 => {
+                let mut var_date = <String>::sse_decode(deserializer);
+                let mut var_slot = <crate::api::planning::MealSlotDto>::sse_decode(deserializer);
+                let mut var_locked = <bool>::sse_decode(deserializer);
+                return crate::api::planning_drafts::DraftActionDto::SetCommitment {
+                    date: var_date,
+                    slot: var_slot,
+                    locked: var_locked,
+                };
+            }
+            3 => {
+                let mut var_date = <String>::sse_decode(deserializer);
+                let mut var_slot = <crate::api::planning::MealSlotDto>::sse_decode(deserializer);
+                let mut var_components =
+                    <Vec<crate::api::planned_meals::MealComponentDto>>::sse_decode(deserializer);
+                let mut var_explicitReplace = <bool>::sse_decode(deserializer);
+                return crate::api::planning_drafts::DraftActionDto::Choose {
+                    date: var_date,
+                    slot: var_slot,
+                    components: var_components,
+                    explicit_replace: var_explicitReplace,
+                };
+            }
+            4 => {
+                return crate::api::planning_drafts::DraftActionDto::Undo;
+            }
+            5 => {
+                return crate::api::planning_drafts::DraftActionDto::Discard;
+            }
+            6 => {
+                let mut var_date = <Option<String>>::sse_decode(deserializer);
+                let mut var_slot =
+                    <Option<crate::api::planning::MealSlotDto>>::sse_decode(deserializer);
+                return crate::api::planning_drafts::DraftActionDto::Reconsider {
+                    date: var_date,
+                    slot: var_slot,
+                };
+            }
+            7 => {
+                let mut var_resolutions =
+                    <Vec<crate::api::planning_drafts::ReviewResolutionDto>>::sse_decode(
+                        deserializer,
+                    );
+                return crate::api::planning_drafts::DraftActionDto::Review {
+                    resolutions: var_resolutions,
+                };
+            }
+            _ => {
+                unimplemented!("");
+            }
+        }
+    }
+}
+
+impl SseDecode for crate::api::planning_drafts::DraftContextDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_householdId = <String>::sse_decode(deserializer);
+        let mut var_today = <String>::sse_decode(deserializer);
+        let mut var_offsetCycles = <i32>::sse_decode(deserializer);
+        return crate::api::planning_drafts::DraftContextDto {
+            household_id: var_householdId,
+            today: var_today,
+            offset_cycles: var_offsetCycles,
+        };
+    }
+}
+
+impl SseDecode for crate::api::planning_drafts::DraftEnvelopeDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_context =
+            <crate::api::planning_drafts::DraftContextDto>::sse_decode(deserializer);
+        let mut var_databaseSession = <String>::sse_decode(deserializer);
+        let mut var_draftId = <String>::sse_decode(deserializer);
+        let mut var_expectedRevision = <i64>::sse_decode(deserializer);
+        let mut var_requestId = <String>::sse_decode(deserializer);
+        return crate::api::planning_drafts::DraftEnvelopeDto {
+            context: var_context,
+            database_session: var_databaseSession,
+            draft_id: var_draftId,
+            expected_revision: var_expectedRevision,
+            request_id: var_requestId,
+        };
+    }
+}
+
+impl SseDecode for crate::api::error::DraftErrorKind {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut inner = <i32>::sse_decode(deserializer);
+        return match inner {
+            0 => crate::api::error::DraftErrorKind::Stale,
+            1 => crate::api::error::DraftErrorKind::NeedsReview,
+            2 => crate::api::error::DraftErrorKind::Closed,
+            3 => crate::api::error::DraftErrorKind::Locked,
+            4 => crate::api::error::DraftErrorKind::Refused,
+            5 => crate::api::error::DraftErrorKind::Conflict,
+            6 => crate::api::error::DraftErrorKind::SessionChanged,
+            7 => crate::api::error::DraftErrorKind::Invalid,
+            _ => unreachable!("Invalid variant for DraftErrorKind: {}", inner),
+        };
+    }
+}
+
+impl SseDecode for crate::api::planning_drafts::DraftOperationDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_operation = <String>::sse_decode(deserializer);
+        let mut var_slots =
+            <Vec<crate::api::planning_drafts::SlotOutcomeRecordDto>>::sse_decode(deserializer);
+        return crate::api::planning_drafts::DraftOperationDto {
+            operation: var_operation,
+            slots: var_slots,
+        };
+    }
+}
+
+impl SseDecode for crate::api::planning_drafts::DraftSlotDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_date = <String>::sse_decode(deserializer);
+        let mut var_slot = <crate::api::planning::MealSlotDto>::sse_decode(deserializer);
+        let mut var_components =
+            <Vec<crate::api::planned_meals::MealComponentDto>>::sse_decode(deserializer);
+        let mut var_origin = <crate::api::planning_drafts::SlotOriginDto>::sse_decode(deserializer);
+        let mut var_committed = <bool>::sse_decode(deserializer);
+        let mut var_saved =
+            <Option<crate::api::planning_drafts::SavedMealDto>>::sse_decode(deserializer);
+        let mut var_editable = <bool>::sse_decode(deserializer);
+        let mut var_pending = <bool>::sse_decode(deserializer);
+        let mut var_inReview = <bool>::sse_decode(deserializer);
+        let mut var_state = <crate::api::planner::CoverageStateDto>::sse_decode(deserializer);
+        let mut var_reasonCodes = <Vec<String>>::sse_decode(deserializer);
+        let mut var_outcome =
+            <Option<crate::api::planning_drafts::SlotOutcomeDto>>::sse_decode(deserializer);
+        let mut var_excluded = <u32>::sse_decode(deserializer);
+        return crate::api::planning_drafts::DraftSlotDto {
+            date: var_date,
+            slot: var_slot,
+            components: var_components,
+            origin: var_origin,
+            committed: var_committed,
+            saved: var_saved,
+            editable: var_editable,
+            pending: var_pending,
+            in_review: var_inReview,
+            state: var_state,
+            reason_codes: var_reasonCodes,
+            outcome: var_outcome,
+            excluded: var_excluded,
+        };
+    }
+}
+
+impl SseDecode for crate::api::planning_drafts::DraftStateDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut inner = <i32>::sse_decode(deserializer);
+        return match inner {
+            0 => crate::api::planning_drafts::DraftStateDto::Active,
+            1 => crate::api::planning_drafts::DraftStateDto::NeedsReview,
+            2 => crate::api::planning_drafts::DraftStateDto::Accepted,
+            3 => crate::api::planning_drafts::DraftStateDto::Discarded,
+            4 => crate::api::planning_drafts::DraftStateDto::Expired,
+            _ => unreachable!("Invalid variant for DraftStateDto: {}", inner),
+        };
+    }
+}
+
+impl SseDecode for crate::api::planning_drafts::DraftViewDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_databaseSession = <String>::sse_decode(deserializer);
+        let mut var_draftId = <String>::sse_decode(deserializer);
+        let mut var_revision = <i64>::sse_decode(deserializer);
+        let mut var_state = <crate::api::planning_drafts::DraftStateDto>::sse_decode(deserializer);
+        let mut var_anchor = <String>::sse_decode(deserializer);
+        let mut var_lengthDays = <u32>::sse_decode(deserializer);
+        let mut var_slots =
+            <Vec<crate::api::planning_drafts::DraftSlotDto>>::sse_decode(deserializer);
+        let mut var_status = <crate::api::planner::OutcomeStatusDto>::sse_decode(deserializer);
+        let mut var_unresolvedIssues = <Vec<String>>::sse_decode(deserializer);
+        let mut var_assumptions = <Vec<String>>::sse_decode(deserializer);
+        let mut var_acceptAllowed = <bool>::sse_decode(deserializer);
+        let mut var_undoAvailable = <bool>::sse_decode(deserializer);
+        let mut var_pendingChanges = <bool>::sse_decode(deserializer);
+        let mut var_weekTargets = <u32>::sse_decode(deserializer);
+        let mut var_excluded = <u32>::sse_decode(deserializer);
+        let mut var_pastChangesDropped = <u32>::sse_decode(deserializer);
+        let mut var_operation =
+            <Option<crate::api::planning_drafts::DraftOperationDto>>::sse_decode(deserializer);
+        let mut var_receipt =
+            <Option<crate::api::planning_drafts::AcceptReceiptDto>>::sse_decode(deserializer);
+        let mut var_expired =
+            <Vec<crate::api::planning_drafts::ExpiredDraftDto>>::sse_decode(deserializer);
+        return crate::api::planning_drafts::DraftViewDto {
+            database_session: var_databaseSession,
+            draft_id: var_draftId,
+            revision: var_revision,
+            state: var_state,
+            anchor: var_anchor,
+            length_days: var_lengthDays,
+            slots: var_slots,
+            status: var_status,
+            unresolved_issues: var_unresolvedIssues,
+            assumptions: var_assumptions,
+            accept_allowed: var_acceptAllowed,
+            undo_available: var_undoAvailable,
+            pending_changes: var_pendingChanges,
+            week_targets: var_weekTargets,
+            excluded: var_excluded,
+            past_changes_dropped: var_pastChangesDropped,
+            operation: var_operation,
+            receipt: var_receipt,
+            expired: var_expired,
+        };
+    }
+}
+
+impl SseDecode for crate::api::experiment::ExperimentEventDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_sessionId = <String>::sse_decode(deserializer);
+        let mut var_kind =
+            <crate::api::experiment::ExperimentEventKindDto>::sse_decode(deserializer);
+        let mut var_elapsedMs = <u64>::sse_decode(deserializer);
+        let mut var_changed = <u32>::sse_decode(deserializer);
+        let mut var_exhausted = <u32>::sse_decode(deserializer);
+        let mut var_completed = <bool>::sse_decode(deserializer);
+        return crate::api::experiment::ExperimentEventDto {
+            session_id: var_sessionId,
+            kind: var_kind,
+            elapsed_ms: var_elapsedMs,
+            changed: var_changed,
+            exhausted: var_exhausted,
+            completed: var_completed,
+        };
+    }
+}
+
+impl SseDecode for crate::api::experiment::ExperimentEventKindDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut inner = <i32>::sse_decode(deserializer);
+        return match inner {
+            0 => crate::api::experiment::ExperimentEventKindDto::Exposure,
+            1 => crate::api::experiment::ExperimentEventKindDto::AlternativeRequested,
+            2 => crate::api::experiment::ExperimentEventKindDto::AlternativeResult,
+            3 => crate::api::experiment::ExperimentEventKindDto::Undo,
+            4 => crate::api::experiment::ExperimentEventKindDto::AcceptSuccess,
+            5 => crate::api::experiment::ExperimentEventKindDto::Discard,
+            6 => crate::api::experiment::ExperimentEventKindDto::Background,
+            7 => crate::api::experiment::ExperimentEventKindDto::Resume,
+            8 => crate::api::experiment::ExperimentEventKindDto::End,
+            _ => unreachable!("Invalid variant for ExperimentEventKindDto: {}", inner),
+        };
+    }
+}
+
+impl SseDecode for crate::api::experiment::ExperimentLabelDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_id = <String>::sse_decode(deserializer);
+        let mut var_label = <String>::sse_decode(deserializer);
+        return crate::api::experiment::ExperimentLabelDto {
+            id: var_id,
+            label: var_label,
+        };
+    }
+}
+
+impl SseDecode for crate::api::experiment::ExperimentSessionDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_sessionId = <String>::sse_decode(deserializer);
+        let mut var_labelId = <String>::sse_decode(deserializer);
+        let mut var_label = <String>::sse_decode(deserializer);
+        let mut var_active = <bool>::sse_decode(deserializer);
+        let mut var_overridden = <bool>::sse_decode(deserializer);
+        return crate::api::experiment::ExperimentSessionDto {
+            session_id: var_sessionId,
+            label_id: var_labelId,
+            label: var_label,
+            active: var_active,
+            overridden: var_overridden,
+        };
+    }
+}
+
+impl SseDecode for crate::api::experiment::ExperimentStatusDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_enabled = <bool>::sse_decode(deserializer);
+        let mut var_nextEnabled = <Option<bool>>::sse_decode(deserializer);
+        let mut var_assigned = <Option<String>>::sse_decode(deserializer);
+        let mut var_overrideLabel = <Option<String>>::sse_decode(deserializer);
+        let mut var_overridePending = <bool>::sse_decode(deserializer);
+        let mut var_nextOverride = <Option<String>>::sse_decode(deserializer);
+        let mut var_events = <u32>::sse_decode(deserializer);
+        let mut var_dropped = <u64>::sse_decode(deserializer);
+        let mut var_labels =
+            <Vec<crate::api::experiment::ExperimentLabelDto>>::sse_decode(deserializer);
+        return crate::api::experiment::ExperimentStatusDto {
+            enabled: var_enabled,
+            next_enabled: var_nextEnabled,
+            assigned: var_assigned,
+            override_label: var_overrideLabel,
+            override_pending: var_overridePending,
+            next_override: var_nextOverride,
+            events: var_events,
+            dropped: var_dropped,
+            labels: var_labels,
+        };
+    }
+}
+
+impl SseDecode for crate::api::planning_drafts::ExpiredDraftDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_draftId = <String>::sse_decode(deserializer);
+        let mut var_anchor = <String>::sse_decode(deserializer);
+        let mut var_lengthDays = <u32>::sse_decode(deserializer);
+        return crate::api::planning_drafts::ExpiredDraftDto {
+            draft_id: var_draftId,
+            anchor: var_anchor,
+            length_days: var_lengthDays,
+        };
+    }
+}
+
 impl SseDecode for crate::api::health::ExportReport {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -2110,6 +2975,14 @@ impl SseDecode for crate::api::error::KimattaError {
             9 => {
                 return crate::api::error::KimattaError::RecipeQuarantined;
             }
+            10 => {
+                let mut var_kind = <crate::api::error::DraftErrorKind>::sse_decode(deserializer);
+                let mut var_message = <String>::sse_decode(deserializer);
+                return crate::api::error::KimattaError::Draft {
+                    kind: var_kind,
+                    message: var_message,
+                };
+            }
             _ => {
                 unimplemented!("");
             }
@@ -2211,6 +3084,48 @@ impl SseDecode for Vec<crate::api::recipe::CustomIngredientMissingCategoryDto> {
     }
 }
 
+impl SseDecode for Vec<crate::api::planning_drafts::DraftSlotDto> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut len_ = <i32>::sse_decode(deserializer);
+        let mut ans_ = Vec::with_capacity(len_ as usize);
+        for idx_ in 0..len_ {
+            ans_.push(<crate::api::planning_drafts::DraftSlotDto>::sse_decode(
+                deserializer,
+            ));
+        }
+        return ans_;
+    }
+}
+
+impl SseDecode for Vec<crate::api::experiment::ExperimentLabelDto> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut len_ = <i32>::sse_decode(deserializer);
+        let mut ans_ = Vec::with_capacity(len_ as usize);
+        for idx_ in 0..len_ {
+            ans_.push(<crate::api::experiment::ExperimentLabelDto>::sse_decode(
+                deserializer,
+            ));
+        }
+        return ans_;
+    }
+}
+
+impl SseDecode for Vec<crate::api::planning_drafts::ExpiredDraftDto> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut len_ = <i32>::sse_decode(deserializer);
+        let mut ans_ = Vec::with_capacity(len_ as usize);
+        for idx_ in 0..len_ {
+            ans_.push(<crate::api::planning_drafts::ExpiredDraftDto>::sse_decode(
+                deserializer,
+            ));
+        }
+        return ans_;
+    }
+}
+
 impl SseDecode for Vec<crate::api::recipe::IngredientLineDto> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -2246,6 +3161,20 @@ impl SseDecode for Vec<crate::api::planned_meals::MealComponentDto> {
         let mut ans_ = Vec::with_capacity(len_ as usize);
         for idx_ in 0..len_ {
             ans_.push(<crate::api::planned_meals::MealComponentDto>::sse_decode(
+                deserializer,
+            ));
+        }
+        return ans_;
+    }
+}
+
+impl SseDecode for Vec<crate::api::planning_drafts::MealExclusionDto> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut len_ = <i32>::sse_decode(deserializer);
+        let mut ans_ = Vec::with_capacity(len_ as usize);
+        for idx_ in 0..len_ {
+            ans_.push(<crate::api::planning_drafts::MealExclusionDto>::sse_decode(
                 deserializer,
             ));
         }
@@ -2387,6 +3316,18 @@ impl SseDecode for Vec<crate::api::restrictions::RestrictionDto> {
     }
 }
 
+impl SseDecode for Vec<crate::api::planning_drafts::ReviewResolutionDto> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut len_ = <i32>::sse_decode(deserializer);
+        let mut ans_ = Vec::with_capacity(len_ as usize);
+        for idx_ in 0..len_ {
+            ans_.push(<crate::api::planning_drafts::ReviewResolutionDto>::sse_decode(deserializer));
+        }
+        return ans_;
+    }
+}
+
 impl SseDecode for Vec<crate::api::shopping::ShoppingGroupDto> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -2457,6 +3398,20 @@ impl SseDecode for Vec<crate::api::planner::SlotCoverageDto> {
     }
 }
 
+impl SseDecode for Vec<crate::api::planning_drafts::SlotOutcomeRecordDto> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut len_ = <i32>::sse_decode(deserializer);
+        let mut ans_ = Vec::with_capacity(len_ as usize);
+        for idx_ in 0..len_ {
+            ans_.push(
+                <crate::api::planning_drafts::SlotOutcomeRecordDto>::sse_decode(deserializer),
+            );
+        }
+        return ans_;
+    }
+}
+
 impl SseDecode for crate::api::planned_meals::MealComponentDto {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -2469,6 +3424,61 @@ impl SseDecode for crate::api::planned_meals::MealComponentDto {
             recipe_id: var_recipeId,
             note: var_note,
             scale: var_scale,
+        };
+    }
+}
+
+impl SseDecode for crate::api::planning_drafts::MealExclusionDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_policyId = <String>::sse_decode(deserializer);
+        let mut var_kind =
+            <crate::api::planning_drafts::MealExclusionKindDto>::sse_decode(deserializer);
+        return crate::api::planning_drafts::MealExclusionDto {
+            policy_id: var_policyId,
+            kind: var_kind,
+        };
+    }
+}
+
+impl SseDecode for crate::api::planning_drafts::MealExclusionKindDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut tag_ = <i32>::sse_decode(deserializer);
+        match tag_ {
+            0 => {
+                let mut var_identity = <String>::sse_decode(deserializer);
+                let mut var_title = <Option<String>>::sse_decode(deserializer);
+                let mut var_available = <bool>::sse_decode(deserializer);
+                return crate::api::planning_drafts::MealExclusionKindDto::Dish {
+                    identity: var_identity,
+                    title: var_title,
+                    available: var_available,
+                };
+            }
+            1 => {
+                let mut var_subject = <String>::sse_decode(deserializer);
+                return crate::api::planning_drafts::MealExclusionKindDto::Phrase {
+                    subject: var_subject,
+                };
+            }
+            _ => {
+                unimplemented!("");
+            }
+        }
+    }
+}
+
+impl SseDecode for crate::api::planning_drafts::MealExclusionOutcomeDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_exclusions =
+            <Vec<crate::api::planning_drafts::MealExclusionDto>>::sse_decode(deserializer);
+        let mut var_draft =
+            <Option<crate::api::planning_drafts::DraftViewDto>>::sse_decode(deserializer);
+        return crate::api::planning_drafts::MealExclusionOutcomeDto {
+            exclusions: var_exclusions,
+            draft: var_draft,
         };
     }
 }
@@ -2509,6 +3519,30 @@ impl SseDecode for Option<String> {
     }
 }
 
+impl SseDecode for Option<crate::api::planning_drafts::AcceptReceiptDto> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        if (<bool>::sse_decode(deserializer)) {
+            return Some(<crate::api::planning_drafts::AcceptReceiptDto>::sse_decode(
+                deserializer,
+            ));
+        } else {
+            return None;
+        }
+    }
+}
+
+impl SseDecode for Option<bool> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        if (<bool>::sse_decode(deserializer)) {
+            return Some(<bool>::sse_decode(deserializer));
+        } else {
+            return None;
+        }
+    }
+}
+
 impl SseDecode for Option<crate::api::planner::CandidateSourceDto> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -2522,11 +3556,63 @@ impl SseDecode for Option<crate::api::planner::CandidateSourceDto> {
     }
 }
 
+impl SseDecode for Option<crate::api::planning_drafts::DraftEnvelopeDto> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        if (<bool>::sse_decode(deserializer)) {
+            return Some(<crate::api::planning_drafts::DraftEnvelopeDto>::sse_decode(
+                deserializer,
+            ));
+        } else {
+            return None;
+        }
+    }
+}
+
+impl SseDecode for Option<crate::api::planning_drafts::DraftOperationDto> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        if (<bool>::sse_decode(deserializer)) {
+            return Some(
+                <crate::api::planning_drafts::DraftOperationDto>::sse_decode(deserializer),
+            );
+        } else {
+            return None;
+        }
+    }
+}
+
+impl SseDecode for Option<crate::api::planning_drafts::DraftViewDto> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        if (<bool>::sse_decode(deserializer)) {
+            return Some(<crate::api::planning_drafts::DraftViewDto>::sse_decode(
+                deserializer,
+            ));
+        } else {
+            return None;
+        }
+    }
+}
+
 impl SseDecode for Option<crate::api::recipe::IngredientRefDto> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
         if (<bool>::sse_decode(deserializer)) {
             return Some(<crate::api::recipe::IngredientRefDto>::sse_decode(
+                deserializer,
+            ));
+        } else {
+            return None;
+        }
+    }
+}
+
+impl SseDecode for Option<crate::api::planning::MealSlotDto> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        if (<bool>::sse_decode(deserializer)) {
+            return Some(<crate::api::planning::MealSlotDto>::sse_decode(
                 deserializer,
             ));
         } else {
@@ -2572,6 +3658,19 @@ impl SseDecode for Option<crate::api::recipe::RestrictionAssessmentDto> {
     }
 }
 
+impl SseDecode for Option<crate::api::planning_drafts::SavedMealDto> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        if (<bool>::sse_decode(deserializer)) {
+            return Some(<crate::api::planning_drafts::SavedMealDto>::sse_decode(
+                deserializer,
+            ));
+        } else {
+            return None;
+        }
+    }
+}
+
 impl SseDecode for Option<crate::api::planned_meals::ScaleDto> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -2590,6 +3689,19 @@ impl SseDecode for Option<crate::api::shopping::SeparateReasonDto> {
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
         if (<bool>::sse_decode(deserializer)) {
             return Some(<crate::api::shopping::SeparateReasonDto>::sse_decode(
+                deserializer,
+            ));
+        } else {
+            return None;
+        }
+    }
+}
+
+impl SseDecode for Option<crate::api::planning_drafts::SlotOutcomeDto> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        if (<bool>::sse_decode(deserializer)) {
+            return Some(<crate::api::planning_drafts::SlotOutcomeDto>::sse_decode(
                 deserializer,
             ));
         } else {
@@ -2927,6 +4039,22 @@ impl SseDecode for crate::api::planner::RejectionDto {
     }
 }
 
+impl SseDecode for crate::api::planning_drafts::RemoveMealExclusionDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_context =
+            <crate::api::planning_drafts::DraftContextDto>::sse_decode(deserializer);
+        let mut var_policyId = <String>::sse_decode(deserializer);
+        let mut var_acting =
+            <Option<crate::api::planning_drafts::DraftEnvelopeDto>>::sse_decode(deserializer);
+        return crate::api::planning_drafts::RemoveMealExclusionDto {
+            context: var_context,
+            policy_id: var_policyId,
+            acting: var_acting,
+        };
+    }
+}
+
 impl SseDecode for crate::api::planner::RequiredAuthorityDto {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -2985,6 +4113,33 @@ impl SseDecode for crate::api::planner::ReversibilityDto {
             0 => crate::api::planner::ReversibilityDto::Reversible,
             1 => crate::api::planner::ReversibilityDto::Irreversible,
             _ => unreachable!("Invalid variant for ReversibilityDto: {}", inner),
+        };
+    }
+}
+
+impl SseDecode for crate::api::planning_drafts::ReviewResolutionDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_date = <String>::sse_decode(deserializer);
+        let mut var_slot = <crate::api::planning::MealSlotDto>::sse_decode(deserializer);
+        let mut var_useSaved = <bool>::sse_decode(deserializer);
+        return crate::api::planning_drafts::ReviewResolutionDto {
+            date: var_date,
+            slot: var_slot,
+            use_saved: var_useSaved,
+        };
+    }
+}
+
+impl SseDecode for crate::api::planning_drafts::SavedMealDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_components =
+            <Vec<crate::api::planned_meals::MealComponentDto>>::sse_decode(deserializer);
+        let mut var_locked = <bool>::sse_decode(deserializer);
+        return crate::api::planning_drafts::SavedMealDto {
+            components: var_components,
+            locked: var_locked,
         };
     }
 }
@@ -3186,6 +4341,48 @@ impl SseDecode for crate::api::planner::SlotCoverageDto {
     }
 }
 
+impl SseDecode for crate::api::planning_drafts::SlotOriginDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut inner = <i32>::sse_decode(deserializer);
+        return match inner {
+            0 => crate::api::planning_drafts::SlotOriginDto::Empty,
+            1 => crate::api::planning_drafts::SlotOriginDto::Saved,
+            2 => crate::api::planning_drafts::SlotOriginDto::Suggested,
+            3 => crate::api::planning_drafts::SlotOriginDto::Chosen,
+            _ => unreachable!("Invalid variant for SlotOriginDto: {}", inner),
+        };
+    }
+}
+
+impl SseDecode for crate::api::planning_drafts::SlotOutcomeDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut inner = <i32>::sse_decode(deserializer);
+        return match inner {
+            0 => crate::api::planning_drafts::SlotOutcomeDto::Changed,
+            1 => crate::api::planning_drafts::SlotOutcomeDto::Exhausted,
+            2 => crate::api::planning_drafts::SlotOutcomeDto::Blocked,
+            _ => unreachable!("Invalid variant for SlotOutcomeDto: {}", inner),
+        };
+    }
+}
+
+impl SseDecode for crate::api::planning_drafts::SlotOutcomeRecordDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        let mut var_date = <String>::sse_decode(deserializer);
+        let mut var_slot = <crate::api::planning::MealSlotDto>::sse_decode(deserializer);
+        let mut var_outcome =
+            <crate::api::planning_drafts::SlotOutcomeDto>::sse_decode(deserializer);
+        return crate::api::planning_drafts::SlotOutcomeRecordDto {
+            date: var_date,
+            slot: var_slot,
+            outcome: var_outcome,
+        };
+    }
+}
+
 impl SseDecode for crate::api::starter::StarterInstallReportDto {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
@@ -3208,6 +4405,13 @@ impl SseDecode for u32 {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
         deserializer.cursor.read_u32::<NativeEndian>().unwrap()
+    }
+}
+
+impl SseDecode for u64 {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        deserializer.cursor.read_u64::<NativeEndian>().unwrap()
     }
 }
 
@@ -3267,160 +4471,232 @@ fn pde_ffi_dispatcher_primary_impl(
 ) {
     // Codec=Pde (Serialization + dispatch), see doc to use other codecs
     match func_id {
-        1 => {
+        1 => wire__crate__api__planning_drafts__accept_planning_draft_impl(
+            port,
+            ptr,
+            rust_vec_len,
+            data_len,
+        ),
+        2 => {
             wire__crate__api__recipe__add_custom_ingredient_impl(port, ptr, rust_vec_len, data_len)
         }
-        2 => wire__crate__api__recipe__archive_recipe_impl(port, ptr, rust_vec_len, data_len),
-        3 => {
+        3 => wire__crate__api__planning_drafts__add_meal_exclusions_impl(
+            port,
+            ptr,
+            rust_vec_len,
+            data_len,
+        ),
+        4 => wire__crate__api__recipe__archive_recipe_impl(port, ptr, rust_vec_len, data_len),
+        5 => {
             wire__crate__api__household__bootstrap_household_impl(port, ptr, rust_vec_len, data_len)
         }
-        4 => {
+        6 => {
             wire__crate__api__household__complete_onboarding_impl(port, ptr, rust_vec_len, data_len)
         }
-        6 => wire__crate__api__planner__cover_cycle_impl(port, ptr, rust_vec_len, data_len),
-        7 => wire__crate__api__planned_meals__delete_planned_meal_impl(
+        8 => wire__crate__api__planner__cover_cycle_impl(port, ptr, rust_vec_len, data_len),
+        9 => wire__crate__api__planned_meals__delete_planned_meal_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        8 => wire__crate__api__shopping__delete_shopping_manual_item_impl(
+        10 => wire__crate__api__shopping__delete_shopping_manual_item_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        9 => {
+        11 => {
             wire__crate__api__shopping__derive_shopping_list_impl(port, ptr, rust_vec_len, data_len)
         }
-        10 => wire__crate__api__planning__ensure_planning_cycle_impl(
+        12 => wire__crate__api__planning__ensure_planning_cycle_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        11 => wire__crate__api__health__export_database_impl(port, ptr, rust_vec_len, data_len),
-        12 => wire__crate__api__health__init_app_impl(port, ptr, rust_vec_len, data_len),
-        13 => wire__crate__api__starter__install_starter_content_impl(
+        13 => {
+            wire__crate__api__experiment__experiment_export_impl(port, ptr, rust_vec_len, data_len)
+        }
+        14 => {
+            wire__crate__api__experiment__experiment_record_impl(port, ptr, rust_vec_len, data_len)
+        }
+        15 => {
+            wire__crate__api__experiment__experiment_reset_impl(port, ptr, rust_vec_len, data_len)
+        }
+        16 => wire__crate__api__experiment__experiment_set_enabled_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        14 => wire__crate__api__planned_meals__known_meal_component_kinds_impl(
+        17 => wire__crate__api__experiment__experiment_set_override_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        15 => wire__crate__api__restrictions__known_restriction_kinds_impl(
+        18 => wire__crate__api__experiment__experiment_start_session_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        16 => {
+        19 => {
+            wire__crate__api__experiment__experiment_status_impl(port, ptr, rust_vec_len, data_len)
+        }
+        20 => wire__crate__api__health__export_database_impl(port, ptr, rust_vec_len, data_len),
+        21 => wire__crate__api__health__init_app_impl(port, ptr, rust_vec_len, data_len),
+        22 => wire__crate__api__planning_drafts__inspect_planning_draft_impl(
+            port,
+            ptr,
+            rust_vec_len,
+            data_len,
+        ),
+        23 => wire__crate__api__starter__install_starter_content_impl(
+            port,
+            ptr,
+            rust_vec_len,
+            data_len,
+        ),
+        24 => wire__crate__api__planned_meals__known_meal_component_kinds_impl(
+            port,
+            ptr,
+            rust_vec_len,
+            data_len,
+        ),
+        25 => wire__crate__api__restrictions__known_restriction_kinds_impl(
+            port,
+            ptr,
+            rust_vec_len,
+            data_len,
+        ),
+        26 => {
             wire__crate__api__recipe__known_store_categories_impl(port, ptr, rust_vec_len, data_len)
         }
-        17 => wire__crate__api__recipe__known_unit_kinds_impl(port, ptr, rust_vec_len, data_len),
-        18 => {
+        27 => wire__crate__api__recipe__known_unit_kinds_impl(port, ptr, rust_vec_len, data_len),
+        28 => {
             wire__crate__api__recipe__list_archived_recipes_impl(port, ptr, rust_vec_len, data_len)
         }
-        19 => wire__crate__api__recipe__list_custom_ingredients_impl(
+        29 => wire__crate__api__recipe__list_custom_ingredients_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        20 => wire__crate__api__recipe__list_custom_ingredients_missing_category_impl(
+        30 => wire__crate__api__recipe__list_custom_ingredients_missing_category_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        21 => wire__crate__api__pantry__list_pantry_impl(port, ptr, rust_vec_len, data_len),
-        22 => wire__crate__api__planned_meals__list_planned_meals_impl(
+        31 => wire__crate__api__planning_drafts__list_meal_exclusions_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        23 => wire__crate__api__recipe__list_recipes_impl(port, ptr, rust_vec_len, data_len),
-        24 => wire__crate__api__planned_meals__load_planned_meal_impl(
+        32 => wire__crate__api__pantry__list_pantry_impl(port, ptr, rust_vec_len, data_len),
+        33 => wire__crate__api__planned_meals__list_planned_meals_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        25 => wire__crate__api__recipe__load_recipe_impl(port, ptr, rust_vec_len, data_len),
-        26 => wire__crate__api__restrictions__load_restrictions_impl(
+        34 => wire__crate__api__recipe__list_recipes_impl(port, ptr, rust_vec_len, data_len),
+        35 => wire__crate__api__planned_meals__load_planned_meal_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        27 => {
+        36 => wire__crate__api__recipe__load_recipe_impl(port, ptr, rust_vec_len, data_len),
+        37 => wire__crate__api__restrictions__load_restrictions_impl(
+            port,
+            ptr,
+            rust_vec_len,
+            data_len,
+        ),
+        38 => {
             wire__crate__api__shopping__load_shopping_view_impl(port, ptr, rust_vec_len, data_len)
         }
-        28 => wire__crate__api__health__open_database_impl(port, ptr, rust_vec_len, data_len),
-        29 => wire__crate__api__planning__planning_cycle_window_impl(
+        39 => wire__crate__api__planning_drafts__mutate_planning_draft_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        30 => wire__crate__api__decisions__record_plan_decision_impl(
+        40 => wire__crate__api__health__open_database_impl(port, ptr, rust_vec_len, data_len),
+        41 => wire__crate__api__planning_drafts__open_planning_draft_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        31 => wire__crate__api__household__rename_household_impl(port, ptr, rust_vec_len, data_len),
-        32 => wire__crate__api__health__reset_database_impl(port, ptr, rust_vec_len, data_len),
-        33 => {
+        42 => wire__crate__api__planning__planning_cycle_window_impl(
+            port,
+            ptr,
+            rust_vec_len,
+            data_len,
+        ),
+        43 => wire__crate__api__decisions__record_plan_decision_impl(
+            port,
+            ptr,
+            rust_vec_len,
+            data_len,
+        ),
+        44 => wire__crate__api__planning_drafts__remove_meal_exclusion_impl(
+            port,
+            ptr,
+            rust_vec_len,
+            data_len,
+        ),
+        45 => wire__crate__api__household__rename_household_impl(port, ptr, rust_vec_len, data_len),
+        46 => wire__crate__api__health__reset_database_impl(port, ptr, rust_vec_len, data_len),
+        47 => {
             wire__crate__api__shopping__reset_shopping_list_impl(port, ptr, rust_vec_len, data_len)
         }
-        34 => wire__crate__api__health__restore_database_impl(port, ptr, rust_vec_len, data_len),
-        35 => wire__crate__api__recipe__restore_recipe_impl(port, ptr, rust_vec_len, data_len),
-        36 => wire__crate__api__planned_meals__save_planned_meal_impl(
+        48 => wire__crate__api__health__restore_database_impl(port, ptr, rust_vec_len, data_len),
+        49 => wire__crate__api__recipe__restore_recipe_impl(port, ptr, rust_vec_len, data_len),
+        50 => wire__crate__api__planned_meals__save_planned_meal_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        37 => {
+        51 => {
             wire__crate__api__planning__save_planning_cycle_impl(port, ptr, rust_vec_len, data_len)
         }
-        38 => wire__crate__api__recipe__save_recipe_impl(port, ptr, rust_vec_len, data_len),
-        39 => wire__crate__api__restrictions__save_restrictions_impl(
+        52 => wire__crate__api__recipe__save_recipe_impl(port, ptr, rust_vec_len, data_len),
+        53 => wire__crate__api__restrictions__save_restrictions_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        40 => wire__crate__api__shopping__save_shopping_manual_item_impl(
+        54 => wire__crate__api__shopping__save_shopping_manual_item_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        41 => wire__crate__api__recipe__set_custom_ingredient_category_impl(
+        55 => wire__crate__api__recipe__set_custom_ingredient_category_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        42 => wire__crate__api__pantry__set_pantry_mark_impl(port, ptr, rust_vec_len, data_len),
-        43 => wire__crate__api__pantry__set_pantry_marks_impl(port, ptr, rust_vec_len, data_len),
-        44 => wire__crate__api__pantry__set_pantry_used_up_impl(port, ptr, rust_vec_len, data_len),
-        45 => wire__crate__api__planned_meals__set_planned_meal_lock_impl(
+        56 => wire__crate__api__pantry__set_pantry_mark_impl(port, ptr, rust_vec_len, data_len),
+        57 => wire__crate__api__pantry__set_pantry_marks_impl(port, ptr, rust_vec_len, data_len),
+        58 => wire__crate__api__pantry__set_pantry_used_up_impl(port, ptr, rust_vec_len, data_len),
+        59 => wire__crate__api__planned_meals__set_planned_meal_lock_impl(
             port,
             ptr,
             rust_vec_len,
             data_len,
         ),
-        46 => wire__crate__api__pantry__set_restock_flag_impl(port, ptr, rust_vec_len, data_len),
-        47 => wire__crate__api__shopping__set_shopping_line_state_impl(
+        60 => wire__crate__api__pantry__set_restock_flag_impl(port, ptr, rust_vec_len, data_len),
+        61 => wire__crate__api__shopping__set_shopping_line_state_impl(
             port,
             ptr,
             rust_vec_len,
@@ -3438,13 +4714,34 @@ fn pde_ffi_dispatcher_sync_impl(
 ) -> flutter_rust_bridge::for_generated::WireSyncRust2DartSse {
     // Codec=Pde (Serialization + dispatch), see doc to use other codecs
     match func_id {
-        5 => wire__crate__api__health__core_version_impl(ptr, rust_vec_len, data_len),
+        7 => wire__crate__api__health__core_version_impl(ptr, rust_vec_len, data_len),
         _ => unreachable!(),
     }
 }
 
 // Section: rust2dart
 
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::planning_drafts::AcceptReceiptDto {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.ledger_entry_id.into_into_dart().into_dart(),
+            self.changed_slots.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::planning_drafts::AcceptReceiptDto
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::planning_drafts::AcceptReceiptDto>
+    for crate::api::planning_drafts::AcceptReceiptDto
+{
+    fn into_into_dart(self) -> crate::api::planning_drafts::AcceptReceiptDto {
+        self
+    }
+}
 // Codec=Dco (DartCObject based), see doc to use other codecs
 impl flutter_rust_bridge::IntoDart for crate::api::planner::ActionProposalDto {
     fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
@@ -3470,6 +4767,28 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::planner::ActionProposalDto>
     for crate::api::planner::ActionProposalDto
 {
     fn into_into_dart(self) -> crate::api::planner::ActionProposalDto {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::planning_drafts::AddMealExclusionsDto {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.context.into_into_dart().into_dart(),
+            self.dishes.into_into_dart().into_dart(),
+            self.acting.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::planning_drafts::AddMealExclusionsDto
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::planning_drafts::AddMealExclusionsDto>
+    for crate::api::planning_drafts::AddMealExclusionsDto
+{
+    fn into_into_dart(self) -> crate::api::planning_drafts::AddMealExclusionsDto {
         self
     }
 }
@@ -3738,6 +5057,403 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::recipe::CustomIngredientMissi
     }
 }
 // Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::planning_drafts::DraftActionDto {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        match self {
+            crate::api::planning_drafts::DraftActionDto::Another { date, slot } => [
+                0.into_dart(),
+                date.into_into_dart().into_dart(),
+                slot.into_into_dart().into_dart(),
+            ]
+            .into_dart(),
+            crate::api::planning_drafts::DraftActionDto::Alternatives => {
+                [1.into_dart()].into_dart()
+            }
+            crate::api::planning_drafts::DraftActionDto::SetCommitment { date, slot, locked } => [
+                2.into_dart(),
+                date.into_into_dart().into_dart(),
+                slot.into_into_dart().into_dart(),
+                locked.into_into_dart().into_dart(),
+            ]
+            .into_dart(),
+            crate::api::planning_drafts::DraftActionDto::Choose {
+                date,
+                slot,
+                components,
+                explicit_replace,
+            } => [
+                3.into_dart(),
+                date.into_into_dart().into_dart(),
+                slot.into_into_dart().into_dart(),
+                components.into_into_dart().into_dart(),
+                explicit_replace.into_into_dart().into_dart(),
+            ]
+            .into_dart(),
+            crate::api::planning_drafts::DraftActionDto::Undo => [4.into_dart()].into_dart(),
+            crate::api::planning_drafts::DraftActionDto::Discard => [5.into_dart()].into_dart(),
+            crate::api::planning_drafts::DraftActionDto::Reconsider { date, slot } => [
+                6.into_dart(),
+                date.into_into_dart().into_dart(),
+                slot.into_into_dart().into_dart(),
+            ]
+            .into_dart(),
+            crate::api::planning_drafts::DraftActionDto::Review { resolutions } => {
+                [7.into_dart(), resolutions.into_into_dart().into_dart()].into_dart()
+            }
+            _ => {
+                unimplemented!("");
+            }
+        }
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::planning_drafts::DraftActionDto
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::planning_drafts::DraftActionDto>
+    for crate::api::planning_drafts::DraftActionDto
+{
+    fn into_into_dart(self) -> crate::api::planning_drafts::DraftActionDto {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::planning_drafts::DraftContextDto {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.household_id.into_into_dart().into_dart(),
+            self.today.into_into_dart().into_dart(),
+            self.offset_cycles.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::planning_drafts::DraftContextDto
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::planning_drafts::DraftContextDto>
+    for crate::api::planning_drafts::DraftContextDto
+{
+    fn into_into_dart(self) -> crate::api::planning_drafts::DraftContextDto {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::planning_drafts::DraftEnvelopeDto {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.context.into_into_dart().into_dart(),
+            self.database_session.into_into_dart().into_dart(),
+            self.draft_id.into_into_dart().into_dart(),
+            self.expected_revision.into_into_dart().into_dart(),
+            self.request_id.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::planning_drafts::DraftEnvelopeDto
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::planning_drafts::DraftEnvelopeDto>
+    for crate::api::planning_drafts::DraftEnvelopeDto
+{
+    fn into_into_dart(self) -> crate::api::planning_drafts::DraftEnvelopeDto {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::error::DraftErrorKind {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        match self {
+            Self::Stale => 0.into_dart(),
+            Self::NeedsReview => 1.into_dart(),
+            Self::Closed => 2.into_dart(),
+            Self::Locked => 3.into_dart(),
+            Self::Refused => 4.into_dart(),
+            Self::Conflict => 5.into_dart(),
+            Self::SessionChanged => 6.into_dart(),
+            Self::Invalid => 7.into_dart(),
+            _ => unreachable!(),
+        }
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::error::DraftErrorKind
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::error::DraftErrorKind>
+    for crate::api::error::DraftErrorKind
+{
+    fn into_into_dart(self) -> crate::api::error::DraftErrorKind {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::planning_drafts::DraftOperationDto {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.operation.into_into_dart().into_dart(),
+            self.slots.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::planning_drafts::DraftOperationDto
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::planning_drafts::DraftOperationDto>
+    for crate::api::planning_drafts::DraftOperationDto
+{
+    fn into_into_dart(self) -> crate::api::planning_drafts::DraftOperationDto {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::planning_drafts::DraftSlotDto {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.date.into_into_dart().into_dart(),
+            self.slot.into_into_dart().into_dart(),
+            self.components.into_into_dart().into_dart(),
+            self.origin.into_into_dart().into_dart(),
+            self.committed.into_into_dart().into_dart(),
+            self.saved.into_into_dart().into_dart(),
+            self.editable.into_into_dart().into_dart(),
+            self.pending.into_into_dart().into_dart(),
+            self.in_review.into_into_dart().into_dart(),
+            self.state.into_into_dart().into_dart(),
+            self.reason_codes.into_into_dart().into_dart(),
+            self.outcome.into_into_dart().into_dart(),
+            self.excluded.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::planning_drafts::DraftSlotDto
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::planning_drafts::DraftSlotDto>
+    for crate::api::planning_drafts::DraftSlotDto
+{
+    fn into_into_dart(self) -> crate::api::planning_drafts::DraftSlotDto {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::planning_drafts::DraftStateDto {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        match self {
+            Self::Active => 0.into_dart(),
+            Self::NeedsReview => 1.into_dart(),
+            Self::Accepted => 2.into_dart(),
+            Self::Discarded => 3.into_dart(),
+            Self::Expired => 4.into_dart(),
+            _ => unreachable!(),
+        }
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::planning_drafts::DraftStateDto
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::planning_drafts::DraftStateDto>
+    for crate::api::planning_drafts::DraftStateDto
+{
+    fn into_into_dart(self) -> crate::api::planning_drafts::DraftStateDto {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::planning_drafts::DraftViewDto {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.database_session.into_into_dart().into_dart(),
+            self.draft_id.into_into_dart().into_dart(),
+            self.revision.into_into_dart().into_dart(),
+            self.state.into_into_dart().into_dart(),
+            self.anchor.into_into_dart().into_dart(),
+            self.length_days.into_into_dart().into_dart(),
+            self.slots.into_into_dart().into_dart(),
+            self.status.into_into_dart().into_dart(),
+            self.unresolved_issues.into_into_dart().into_dart(),
+            self.assumptions.into_into_dart().into_dart(),
+            self.accept_allowed.into_into_dart().into_dart(),
+            self.undo_available.into_into_dart().into_dart(),
+            self.pending_changes.into_into_dart().into_dart(),
+            self.week_targets.into_into_dart().into_dart(),
+            self.excluded.into_into_dart().into_dart(),
+            self.past_changes_dropped.into_into_dart().into_dart(),
+            self.operation.into_into_dart().into_dart(),
+            self.receipt.into_into_dart().into_dart(),
+            self.expired.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::planning_drafts::DraftViewDto
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::planning_drafts::DraftViewDto>
+    for crate::api::planning_drafts::DraftViewDto
+{
+    fn into_into_dart(self) -> crate::api::planning_drafts::DraftViewDto {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::experiment::ExperimentEventDto {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.session_id.into_into_dart().into_dart(),
+            self.kind.into_into_dart().into_dart(),
+            self.elapsed_ms.into_into_dart().into_dart(),
+            self.changed.into_into_dart().into_dart(),
+            self.exhausted.into_into_dart().into_dart(),
+            self.completed.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::experiment::ExperimentEventDto
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::experiment::ExperimentEventDto>
+    for crate::api::experiment::ExperimentEventDto
+{
+    fn into_into_dart(self) -> crate::api::experiment::ExperimentEventDto {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::experiment::ExperimentEventKindDto {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        match self {
+            Self::Exposure => 0.into_dart(),
+            Self::AlternativeRequested => 1.into_dart(),
+            Self::AlternativeResult => 2.into_dart(),
+            Self::Undo => 3.into_dart(),
+            Self::AcceptSuccess => 4.into_dart(),
+            Self::Discard => 5.into_dart(),
+            Self::Background => 6.into_dart(),
+            Self::Resume => 7.into_dart(),
+            Self::End => 8.into_dart(),
+            _ => unreachable!(),
+        }
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::experiment::ExperimentEventKindDto
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::experiment::ExperimentEventKindDto>
+    for crate::api::experiment::ExperimentEventKindDto
+{
+    fn into_into_dart(self) -> crate::api::experiment::ExperimentEventKindDto {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::experiment::ExperimentLabelDto {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.id.into_into_dart().into_dart(),
+            self.label.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::experiment::ExperimentLabelDto
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::experiment::ExperimentLabelDto>
+    for crate::api::experiment::ExperimentLabelDto
+{
+    fn into_into_dart(self) -> crate::api::experiment::ExperimentLabelDto {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::experiment::ExperimentSessionDto {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.session_id.into_into_dart().into_dart(),
+            self.label_id.into_into_dart().into_dart(),
+            self.label.into_into_dart().into_dart(),
+            self.active.into_into_dart().into_dart(),
+            self.overridden.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::experiment::ExperimentSessionDto
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::experiment::ExperimentSessionDto>
+    for crate::api::experiment::ExperimentSessionDto
+{
+    fn into_into_dart(self) -> crate::api::experiment::ExperimentSessionDto {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::experiment::ExperimentStatusDto {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.enabled.into_into_dart().into_dart(),
+            self.next_enabled.into_into_dart().into_dart(),
+            self.assigned.into_into_dart().into_dart(),
+            self.override_label.into_into_dart().into_dart(),
+            self.override_pending.into_into_dart().into_dart(),
+            self.next_override.into_into_dart().into_dart(),
+            self.events.into_into_dart().into_dart(),
+            self.dropped.into_into_dart().into_dart(),
+            self.labels.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::experiment::ExperimentStatusDto
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::experiment::ExperimentStatusDto>
+    for crate::api::experiment::ExperimentStatusDto
+{
+    fn into_into_dart(self) -> crate::api::experiment::ExperimentStatusDto {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::planning_drafts::ExpiredDraftDto {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.draft_id.into_into_dart().into_dart(),
+            self.anchor.into_into_dart().into_dart(),
+            self.length_days.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::planning_drafts::ExpiredDraftDto
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::planning_drafts::ExpiredDraftDto>
+    for crate::api::planning_drafts::ExpiredDraftDto
+{
+    fn into_into_dart(self) -> crate::api::planning_drafts::ExpiredDraftDto {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
 impl flutter_rust_bridge::IntoDart for crate::api::health::ExportReport {
     fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
         [
@@ -3883,6 +5599,12 @@ impl flutter_rust_bridge::IntoDart for crate::api::error::KimattaError {
                 [8.into_dart(), message.into_into_dart().into_dart()].into_dart()
             }
             crate::api::error::KimattaError::RecipeQuarantined => [9.into_dart()].into_dart(),
+            crate::api::error::KimattaError::Draft { kind, message } => [
+                10.into_dart(),
+                kind.into_into_dart().into_dart(),
+                message.into_into_dart().into_dart(),
+            ]
+            .into_dart(),
             _ => {
                 unimplemented!("");
             }
@@ -3920,6 +5642,83 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::planned_meals::MealComponentD
     for crate::api::planned_meals::MealComponentDto
 {
     fn into_into_dart(self) -> crate::api::planned_meals::MealComponentDto {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::planning_drafts::MealExclusionDto {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.policy_id.into_into_dart().into_dart(),
+            self.kind.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::planning_drafts::MealExclusionDto
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::planning_drafts::MealExclusionDto>
+    for crate::api::planning_drafts::MealExclusionDto
+{
+    fn into_into_dart(self) -> crate::api::planning_drafts::MealExclusionDto {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::planning_drafts::MealExclusionKindDto {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        match self {
+            crate::api::planning_drafts::MealExclusionKindDto::Dish {
+                identity,
+                title,
+                available,
+            } => [
+                0.into_dart(),
+                identity.into_into_dart().into_dart(),
+                title.into_into_dart().into_dart(),
+                available.into_into_dart().into_dart(),
+            ]
+            .into_dart(),
+            crate::api::planning_drafts::MealExclusionKindDto::Phrase { subject } => {
+                [1.into_dart(), subject.into_into_dart().into_dart()].into_dart()
+            }
+            _ => {
+                unimplemented!("");
+            }
+        }
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::planning_drafts::MealExclusionKindDto
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::planning_drafts::MealExclusionKindDto>
+    for crate::api::planning_drafts::MealExclusionKindDto
+{
+    fn into_into_dart(self) -> crate::api::planning_drafts::MealExclusionKindDto {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::planning_drafts::MealExclusionOutcomeDto {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.exclusions.into_into_dart().into_dart(),
+            self.draft.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::planning_drafts::MealExclusionOutcomeDto
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::planning_drafts::MealExclusionOutcomeDto>
+    for crate::api::planning_drafts::MealExclusionOutcomeDto
+{
+    fn into_into_dart(self) -> crate::api::planning_drafts::MealExclusionOutcomeDto {
         self
     }
 }
@@ -4351,6 +6150,28 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::planner::RejectionDto>
     }
 }
 // Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::planning_drafts::RemoveMealExclusionDto {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.context.into_into_dart().into_dart(),
+            self.policy_id.into_into_dart().into_dart(),
+            self.acting.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::planning_drafts::RemoveMealExclusionDto
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::planning_drafts::RemoveMealExclusionDto>
+    for crate::api::planning_drafts::RemoveMealExclusionDto
+{
+    fn into_into_dart(self) -> crate::api::planning_drafts::RemoveMealExclusionDto {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
 impl flutter_rust_bridge::IntoDart for crate::api::planner::RequiredAuthorityDto {
     fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
         match self {
@@ -4440,6 +6261,49 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::planner::ReversibilityDto>
     for crate::api::planner::ReversibilityDto
 {
     fn into_into_dart(self) -> crate::api::planner::ReversibilityDto {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::planning_drafts::ReviewResolutionDto {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.date.into_into_dart().into_dart(),
+            self.slot.into_into_dart().into_dart(),
+            self.use_saved.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::planning_drafts::ReviewResolutionDto
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::planning_drafts::ReviewResolutionDto>
+    for crate::api::planning_drafts::ReviewResolutionDto
+{
+    fn into_into_dart(self) -> crate::api::planning_drafts::ReviewResolutionDto {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::planning_drafts::SavedMealDto {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.components.into_into_dart().into_dart(),
+            self.locked.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::planning_drafts::SavedMealDto
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::planning_drafts::SavedMealDto>
+    for crate::api::planning_drafts::SavedMealDto
+{
+    fn into_into_dart(self) -> crate::api::planning_drafts::SavedMealDto {
         self
     }
 }
@@ -4704,6 +6568,73 @@ impl flutter_rust_bridge::IntoIntoDart<crate::api::planner::SlotCoverageDto>
     }
 }
 // Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::planning_drafts::SlotOriginDto {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        match self {
+            Self::Empty => 0.into_dart(),
+            Self::Saved => 1.into_dart(),
+            Self::Suggested => 2.into_dart(),
+            Self::Chosen => 3.into_dart(),
+            _ => unreachable!(),
+        }
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::planning_drafts::SlotOriginDto
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::planning_drafts::SlotOriginDto>
+    for crate::api::planning_drafts::SlotOriginDto
+{
+    fn into_into_dart(self) -> crate::api::planning_drafts::SlotOriginDto {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::planning_drafts::SlotOutcomeDto {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        match self {
+            Self::Changed => 0.into_dart(),
+            Self::Exhausted => 1.into_dart(),
+            Self::Blocked => 2.into_dart(),
+            _ => unreachable!(),
+        }
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::planning_drafts::SlotOutcomeDto
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::planning_drafts::SlotOutcomeDto>
+    for crate::api::planning_drafts::SlotOutcomeDto
+{
+    fn into_into_dart(self) -> crate::api::planning_drafts::SlotOutcomeDto {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
+impl flutter_rust_bridge::IntoDart for crate::api::planning_drafts::SlotOutcomeRecordDto {
+    fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
+        [
+            self.date.into_into_dart().into_dart(),
+            self.slot.into_into_dart().into_dart(),
+            self.outcome.into_into_dart().into_dart(),
+        ]
+        .into_dart()
+    }
+}
+impl flutter_rust_bridge::for_generated::IntoDartExceptPrimitive
+    for crate::api::planning_drafts::SlotOutcomeRecordDto
+{
+}
+impl flutter_rust_bridge::IntoIntoDart<crate::api::planning_drafts::SlotOutcomeRecordDto>
+    for crate::api::planning_drafts::SlotOutcomeRecordDto
+{
+    fn into_into_dart(self) -> crate::api::planning_drafts::SlotOutcomeRecordDto {
+        self
+    }
+}
+// Codec=Dco (DartCObject based), see doc to use other codecs
 impl flutter_rust_bridge::IntoDart for crate::api::starter::StarterInstallReportDto {
     fn into_dart(self) -> flutter_rust_bridge::for_generated::DartAbi {
         [
@@ -4781,6 +6712,14 @@ impl SseEncode for String {
     }
 }
 
+impl SseEncode for crate::api::planning_drafts::AcceptReceiptDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.ledger_entry_id, serializer);
+        <u32>::sse_encode(self.changed_slots, serializer);
+    }
+}
+
 impl SseEncode for crate::api::planner::ActionProposalDto {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -4796,6 +6735,18 @@ impl SseEncode for crate::api::planner::ActionProposalDto {
         );
         <Option<String>>::sse_encode(self.deadline, serializer);
         <Vec<String>>::sse_encode(self.reason_codes, serializer);
+    }
+}
+
+impl SseEncode for crate::api::planning_drafts::AddMealExclusionsDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <crate::api::planning_drafts::DraftContextDto>::sse_encode(self.context, serializer);
+        <Vec<String>>::sse_encode(self.dishes, serializer);
+        <Option<crate::api::planning_drafts::DraftEnvelopeDto>>::sse_encode(
+            self.acting,
+            serializer,
+        );
     }
 }
 
@@ -4962,6 +6913,262 @@ impl SseEncode for crate::api::recipe::CustomIngredientMissingCategoryDto {
     }
 }
 
+impl SseEncode for crate::api::planning_drafts::DraftActionDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        match self {
+            crate::api::planning_drafts::DraftActionDto::Another { date, slot } => {
+                <i32>::sse_encode(0, serializer);
+                <String>::sse_encode(date, serializer);
+                <crate::api::planning::MealSlotDto>::sse_encode(slot, serializer);
+            }
+            crate::api::planning_drafts::DraftActionDto::Alternatives => {
+                <i32>::sse_encode(1, serializer);
+            }
+            crate::api::planning_drafts::DraftActionDto::SetCommitment { date, slot, locked } => {
+                <i32>::sse_encode(2, serializer);
+                <String>::sse_encode(date, serializer);
+                <crate::api::planning::MealSlotDto>::sse_encode(slot, serializer);
+                <bool>::sse_encode(locked, serializer);
+            }
+            crate::api::planning_drafts::DraftActionDto::Choose {
+                date,
+                slot,
+                components,
+                explicit_replace,
+            } => {
+                <i32>::sse_encode(3, serializer);
+                <String>::sse_encode(date, serializer);
+                <crate::api::planning::MealSlotDto>::sse_encode(slot, serializer);
+                <Vec<crate::api::planned_meals::MealComponentDto>>::sse_encode(
+                    components, serializer,
+                );
+                <bool>::sse_encode(explicit_replace, serializer);
+            }
+            crate::api::planning_drafts::DraftActionDto::Undo => {
+                <i32>::sse_encode(4, serializer);
+            }
+            crate::api::planning_drafts::DraftActionDto::Discard => {
+                <i32>::sse_encode(5, serializer);
+            }
+            crate::api::planning_drafts::DraftActionDto::Reconsider { date, slot } => {
+                <i32>::sse_encode(6, serializer);
+                <Option<String>>::sse_encode(date, serializer);
+                <Option<crate::api::planning::MealSlotDto>>::sse_encode(slot, serializer);
+            }
+            crate::api::planning_drafts::DraftActionDto::Review { resolutions } => {
+                <i32>::sse_encode(7, serializer);
+                <Vec<crate::api::planning_drafts::ReviewResolutionDto>>::sse_encode(
+                    resolutions,
+                    serializer,
+                );
+            }
+            _ => {
+                unimplemented!("");
+            }
+        }
+    }
+}
+
+impl SseEncode for crate::api::planning_drafts::DraftContextDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.household_id, serializer);
+        <String>::sse_encode(self.today, serializer);
+        <i32>::sse_encode(self.offset_cycles, serializer);
+    }
+}
+
+impl SseEncode for crate::api::planning_drafts::DraftEnvelopeDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <crate::api::planning_drafts::DraftContextDto>::sse_encode(self.context, serializer);
+        <String>::sse_encode(self.database_session, serializer);
+        <String>::sse_encode(self.draft_id, serializer);
+        <i64>::sse_encode(self.expected_revision, serializer);
+        <String>::sse_encode(self.request_id, serializer);
+    }
+}
+
+impl SseEncode for crate::api::error::DraftErrorKind {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(
+            match self {
+                crate::api::error::DraftErrorKind::Stale => 0,
+                crate::api::error::DraftErrorKind::NeedsReview => 1,
+                crate::api::error::DraftErrorKind::Closed => 2,
+                crate::api::error::DraftErrorKind::Locked => 3,
+                crate::api::error::DraftErrorKind::Refused => 4,
+                crate::api::error::DraftErrorKind::Conflict => 5,
+                crate::api::error::DraftErrorKind::SessionChanged => 6,
+                crate::api::error::DraftErrorKind::Invalid => 7,
+                _ => {
+                    unimplemented!("");
+                }
+            },
+            serializer,
+        );
+    }
+}
+
+impl SseEncode for crate::api::planning_drafts::DraftOperationDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.operation, serializer);
+        <Vec<crate::api::planning_drafts::SlotOutcomeRecordDto>>::sse_encode(
+            self.slots, serializer,
+        );
+    }
+}
+
+impl SseEncode for crate::api::planning_drafts::DraftSlotDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.date, serializer);
+        <crate::api::planning::MealSlotDto>::sse_encode(self.slot, serializer);
+        <Vec<crate::api::planned_meals::MealComponentDto>>::sse_encode(self.components, serializer);
+        <crate::api::planning_drafts::SlotOriginDto>::sse_encode(self.origin, serializer);
+        <bool>::sse_encode(self.committed, serializer);
+        <Option<crate::api::planning_drafts::SavedMealDto>>::sse_encode(self.saved, serializer);
+        <bool>::sse_encode(self.editable, serializer);
+        <bool>::sse_encode(self.pending, serializer);
+        <bool>::sse_encode(self.in_review, serializer);
+        <crate::api::planner::CoverageStateDto>::sse_encode(self.state, serializer);
+        <Vec<String>>::sse_encode(self.reason_codes, serializer);
+        <Option<crate::api::planning_drafts::SlotOutcomeDto>>::sse_encode(self.outcome, serializer);
+        <u32>::sse_encode(self.excluded, serializer);
+    }
+}
+
+impl SseEncode for crate::api::planning_drafts::DraftStateDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(
+            match self {
+                crate::api::planning_drafts::DraftStateDto::Active => 0,
+                crate::api::planning_drafts::DraftStateDto::NeedsReview => 1,
+                crate::api::planning_drafts::DraftStateDto::Accepted => 2,
+                crate::api::planning_drafts::DraftStateDto::Discarded => 3,
+                crate::api::planning_drafts::DraftStateDto::Expired => 4,
+                _ => {
+                    unimplemented!("");
+                }
+            },
+            serializer,
+        );
+    }
+}
+
+impl SseEncode for crate::api::planning_drafts::DraftViewDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.database_session, serializer);
+        <String>::sse_encode(self.draft_id, serializer);
+        <i64>::sse_encode(self.revision, serializer);
+        <crate::api::planning_drafts::DraftStateDto>::sse_encode(self.state, serializer);
+        <String>::sse_encode(self.anchor, serializer);
+        <u32>::sse_encode(self.length_days, serializer);
+        <Vec<crate::api::planning_drafts::DraftSlotDto>>::sse_encode(self.slots, serializer);
+        <crate::api::planner::OutcomeStatusDto>::sse_encode(self.status, serializer);
+        <Vec<String>>::sse_encode(self.unresolved_issues, serializer);
+        <Vec<String>>::sse_encode(self.assumptions, serializer);
+        <bool>::sse_encode(self.accept_allowed, serializer);
+        <bool>::sse_encode(self.undo_available, serializer);
+        <bool>::sse_encode(self.pending_changes, serializer);
+        <u32>::sse_encode(self.week_targets, serializer);
+        <u32>::sse_encode(self.excluded, serializer);
+        <u32>::sse_encode(self.past_changes_dropped, serializer);
+        <Option<crate::api::planning_drafts::DraftOperationDto>>::sse_encode(
+            self.operation,
+            serializer,
+        );
+        <Option<crate::api::planning_drafts::AcceptReceiptDto>>::sse_encode(
+            self.receipt,
+            serializer,
+        );
+        <Vec<crate::api::planning_drafts::ExpiredDraftDto>>::sse_encode(self.expired, serializer);
+    }
+}
+
+impl SseEncode for crate::api::experiment::ExperimentEventDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.session_id, serializer);
+        <crate::api::experiment::ExperimentEventKindDto>::sse_encode(self.kind, serializer);
+        <u64>::sse_encode(self.elapsed_ms, serializer);
+        <u32>::sse_encode(self.changed, serializer);
+        <u32>::sse_encode(self.exhausted, serializer);
+        <bool>::sse_encode(self.completed, serializer);
+    }
+}
+
+impl SseEncode for crate::api::experiment::ExperimentEventKindDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(
+            match self {
+                crate::api::experiment::ExperimentEventKindDto::Exposure => 0,
+                crate::api::experiment::ExperimentEventKindDto::AlternativeRequested => 1,
+                crate::api::experiment::ExperimentEventKindDto::AlternativeResult => 2,
+                crate::api::experiment::ExperimentEventKindDto::Undo => 3,
+                crate::api::experiment::ExperimentEventKindDto::AcceptSuccess => 4,
+                crate::api::experiment::ExperimentEventKindDto::Discard => 5,
+                crate::api::experiment::ExperimentEventKindDto::Background => 6,
+                crate::api::experiment::ExperimentEventKindDto::Resume => 7,
+                crate::api::experiment::ExperimentEventKindDto::End => 8,
+                _ => {
+                    unimplemented!("");
+                }
+            },
+            serializer,
+        );
+    }
+}
+
+impl SseEncode for crate::api::experiment::ExperimentLabelDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.id, serializer);
+        <String>::sse_encode(self.label, serializer);
+    }
+}
+
+impl SseEncode for crate::api::experiment::ExperimentSessionDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.session_id, serializer);
+        <String>::sse_encode(self.label_id, serializer);
+        <String>::sse_encode(self.label, serializer);
+        <bool>::sse_encode(self.active, serializer);
+        <bool>::sse_encode(self.overridden, serializer);
+    }
+}
+
+impl SseEncode for crate::api::experiment::ExperimentStatusDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <bool>::sse_encode(self.enabled, serializer);
+        <Option<bool>>::sse_encode(self.next_enabled, serializer);
+        <Option<String>>::sse_encode(self.assigned, serializer);
+        <Option<String>>::sse_encode(self.override_label, serializer);
+        <bool>::sse_encode(self.override_pending, serializer);
+        <Option<String>>::sse_encode(self.next_override, serializer);
+        <u32>::sse_encode(self.events, serializer);
+        <u64>::sse_encode(self.dropped, serializer);
+        <Vec<crate::api::experiment::ExperimentLabelDto>>::sse_encode(self.labels, serializer);
+    }
+}
+
+impl SseEncode for crate::api::planning_drafts::ExpiredDraftDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.draft_id, serializer);
+        <String>::sse_encode(self.anchor, serializer);
+        <u32>::sse_encode(self.length_days, serializer);
+    }
+}
+
 impl SseEncode for crate::api::health::ExportReport {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -5075,6 +7282,11 @@ impl SseEncode for crate::api::error::KimattaError {
             crate::api::error::KimattaError::RecipeQuarantined => {
                 <i32>::sse_encode(9, serializer);
             }
+            crate::api::error::KimattaError::Draft { kind, message } => {
+                <i32>::sse_encode(10, serializer);
+                <crate::api::error::DraftErrorKind>::sse_encode(kind, serializer);
+                <String>::sse_encode(message, serializer);
+            }
             _ => {
                 unimplemented!("");
             }
@@ -5152,6 +7364,36 @@ impl SseEncode for Vec<crate::api::recipe::CustomIngredientMissingCategoryDto> {
     }
 }
 
+impl SseEncode for Vec<crate::api::planning_drafts::DraftSlotDto> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(self.len() as _, serializer);
+        for item in self {
+            <crate::api::planning_drafts::DraftSlotDto>::sse_encode(item, serializer);
+        }
+    }
+}
+
+impl SseEncode for Vec<crate::api::experiment::ExperimentLabelDto> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(self.len() as _, serializer);
+        for item in self {
+            <crate::api::experiment::ExperimentLabelDto>::sse_encode(item, serializer);
+        }
+    }
+}
+
+impl SseEncode for Vec<crate::api::planning_drafts::ExpiredDraftDto> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(self.len() as _, serializer);
+        for item in self {
+            <crate::api::planning_drafts::ExpiredDraftDto>::sse_encode(item, serializer);
+        }
+    }
+}
+
 impl SseEncode for Vec<crate::api::recipe::IngredientLineDto> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -5178,6 +7420,16 @@ impl SseEncode for Vec<crate::api::planned_meals::MealComponentDto> {
         <i32>::sse_encode(self.len() as _, serializer);
         for item in self {
             <crate::api::planned_meals::MealComponentDto>::sse_encode(item, serializer);
+        }
+    }
+}
+
+impl SseEncode for Vec<crate::api::planning_drafts::MealExclusionDto> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(self.len() as _, serializer);
+        for item in self {
+            <crate::api::planning_drafts::MealExclusionDto>::sse_encode(item, serializer);
         }
     }
 }
@@ -5282,6 +7534,16 @@ impl SseEncode for Vec<crate::api::restrictions::RestrictionDto> {
     }
 }
 
+impl SseEncode for Vec<crate::api::planning_drafts::ReviewResolutionDto> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(self.len() as _, serializer);
+        for item in self {
+            <crate::api::planning_drafts::ReviewResolutionDto>::sse_encode(item, serializer);
+        }
+    }
+}
+
 impl SseEncode for Vec<crate::api::shopping::ShoppingGroupDto> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -5332,6 +7594,16 @@ impl SseEncode for Vec<crate::api::planner::SlotCoverageDto> {
     }
 }
 
+impl SseEncode for Vec<crate::api::planning_drafts::SlotOutcomeRecordDto> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(self.len() as _, serializer);
+        for item in self {
+            <crate::api::planning_drafts::SlotOutcomeRecordDto>::sse_encode(item, serializer);
+        }
+    }
+}
+
 impl SseEncode for crate::api::planned_meals::MealComponentDto {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -5339,6 +7611,50 @@ impl SseEncode for crate::api::planned_meals::MealComponentDto {
         <Option<String>>::sse_encode(self.recipe_id, serializer);
         <Option<String>>::sse_encode(self.note, serializer);
         <Option<crate::api::planned_meals::ScaleDto>>::sse_encode(self.scale, serializer);
+    }
+}
+
+impl SseEncode for crate::api::planning_drafts::MealExclusionDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.policy_id, serializer);
+        <crate::api::planning_drafts::MealExclusionKindDto>::sse_encode(self.kind, serializer);
+    }
+}
+
+impl SseEncode for crate::api::planning_drafts::MealExclusionKindDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        match self {
+            crate::api::planning_drafts::MealExclusionKindDto::Dish {
+                identity,
+                title,
+                available,
+            } => {
+                <i32>::sse_encode(0, serializer);
+                <String>::sse_encode(identity, serializer);
+                <Option<String>>::sse_encode(title, serializer);
+                <bool>::sse_encode(available, serializer);
+            }
+            crate::api::planning_drafts::MealExclusionKindDto::Phrase { subject } => {
+                <i32>::sse_encode(1, serializer);
+                <String>::sse_encode(subject, serializer);
+            }
+            _ => {
+                unimplemented!("");
+            }
+        }
+    }
+}
+
+impl SseEncode for crate::api::planning_drafts::MealExclusionOutcomeDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <Vec<crate::api::planning_drafts::MealExclusionDto>>::sse_encode(
+            self.exclusions,
+            serializer,
+        );
+        <Option<crate::api::planning_drafts::DraftViewDto>>::sse_encode(self.draft, serializer);
     }
 }
 
@@ -5377,6 +7693,26 @@ impl SseEncode for Option<String> {
     }
 }
 
+impl SseEncode for Option<crate::api::planning_drafts::AcceptReceiptDto> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <bool>::sse_encode(self.is_some(), serializer);
+        if let Some(value) = self {
+            <crate::api::planning_drafts::AcceptReceiptDto>::sse_encode(value, serializer);
+        }
+    }
+}
+
+impl SseEncode for Option<bool> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <bool>::sse_encode(self.is_some(), serializer);
+        if let Some(value) = self {
+            <bool>::sse_encode(value, serializer);
+        }
+    }
+}
+
 impl SseEncode for Option<crate::api::planner::CandidateSourceDto> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -5387,12 +7723,52 @@ impl SseEncode for Option<crate::api::planner::CandidateSourceDto> {
     }
 }
 
+impl SseEncode for Option<crate::api::planning_drafts::DraftEnvelopeDto> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <bool>::sse_encode(self.is_some(), serializer);
+        if let Some(value) = self {
+            <crate::api::planning_drafts::DraftEnvelopeDto>::sse_encode(value, serializer);
+        }
+    }
+}
+
+impl SseEncode for Option<crate::api::planning_drafts::DraftOperationDto> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <bool>::sse_encode(self.is_some(), serializer);
+        if let Some(value) = self {
+            <crate::api::planning_drafts::DraftOperationDto>::sse_encode(value, serializer);
+        }
+    }
+}
+
+impl SseEncode for Option<crate::api::planning_drafts::DraftViewDto> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <bool>::sse_encode(self.is_some(), serializer);
+        if let Some(value) = self {
+            <crate::api::planning_drafts::DraftViewDto>::sse_encode(value, serializer);
+        }
+    }
+}
+
 impl SseEncode for Option<crate::api::recipe::IngredientRefDto> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
         <bool>::sse_encode(self.is_some(), serializer);
         if let Some(value) = self {
             <crate::api::recipe::IngredientRefDto>::sse_encode(value, serializer);
+        }
+    }
+}
+
+impl SseEncode for Option<crate::api::planning::MealSlotDto> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <bool>::sse_encode(self.is_some(), serializer);
+        if let Some(value) = self {
+            <crate::api::planning::MealSlotDto>::sse_encode(value, serializer);
         }
     }
 }
@@ -5427,6 +7803,16 @@ impl SseEncode for Option<crate::api::recipe::RestrictionAssessmentDto> {
     }
 }
 
+impl SseEncode for Option<crate::api::planning_drafts::SavedMealDto> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <bool>::sse_encode(self.is_some(), serializer);
+        if let Some(value) = self {
+            <crate::api::planning_drafts::SavedMealDto>::sse_encode(value, serializer);
+        }
+    }
+}
+
 impl SseEncode for Option<crate::api::planned_meals::ScaleDto> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -5443,6 +7829,16 @@ impl SseEncode for Option<crate::api::shopping::SeparateReasonDto> {
         <bool>::sse_encode(self.is_some(), serializer);
         if let Some(value) = self {
             <crate::api::shopping::SeparateReasonDto>::sse_encode(value, serializer);
+        }
+    }
+}
+
+impl SseEncode for Option<crate::api::planning_drafts::SlotOutcomeDto> {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <bool>::sse_encode(self.is_some(), serializer);
+        if let Some(value) = self {
+            <crate::api::planning_drafts::SlotOutcomeDto>::sse_encode(value, serializer);
         }
     }
 }
@@ -5679,6 +8075,18 @@ impl SseEncode for crate::api::planner::RejectionDto {
     }
 }
 
+impl SseEncode for crate::api::planning_drafts::RemoveMealExclusionDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <crate::api::planning_drafts::DraftContextDto>::sse_encode(self.context, serializer);
+        <String>::sse_encode(self.policy_id, serializer);
+        <Option<crate::api::planning_drafts::DraftEnvelopeDto>>::sse_encode(
+            self.acting,
+            serializer,
+        );
+    }
+}
+
 impl SseEncode for crate::api::planner::RequiredAuthorityDto {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -5738,6 +8146,23 @@ impl SseEncode for crate::api::planner::ReversibilityDto {
             },
             serializer,
         );
+    }
+}
+
+impl SseEncode for crate::api::planning_drafts::ReviewResolutionDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.date, serializer);
+        <crate::api::planning::MealSlotDto>::sse_encode(self.slot, serializer);
+        <bool>::sse_encode(self.use_saved, serializer);
+    }
+}
+
+impl SseEncode for crate::api::planning_drafts::SavedMealDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <Vec<crate::api::planned_meals::MealComponentDto>>::sse_encode(self.components, serializer);
+        <bool>::sse_encode(self.locked, serializer);
     }
 }
 
@@ -5880,6 +8305,50 @@ impl SseEncode for crate::api::planner::SlotCoverageDto {
     }
 }
 
+impl SseEncode for crate::api::planning_drafts::SlotOriginDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(
+            match self {
+                crate::api::planning_drafts::SlotOriginDto::Empty => 0,
+                crate::api::planning_drafts::SlotOriginDto::Saved => 1,
+                crate::api::planning_drafts::SlotOriginDto::Suggested => 2,
+                crate::api::planning_drafts::SlotOriginDto::Chosen => 3,
+                _ => {
+                    unimplemented!("");
+                }
+            },
+            serializer,
+        );
+    }
+}
+
+impl SseEncode for crate::api::planning_drafts::SlotOutcomeDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <i32>::sse_encode(
+            match self {
+                crate::api::planning_drafts::SlotOutcomeDto::Changed => 0,
+                crate::api::planning_drafts::SlotOutcomeDto::Exhausted => 1,
+                crate::api::planning_drafts::SlotOutcomeDto::Blocked => 2,
+                _ => {
+                    unimplemented!("");
+                }
+            },
+            serializer,
+        );
+    }
+}
+
+impl SseEncode for crate::api::planning_drafts::SlotOutcomeRecordDto {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        <String>::sse_encode(self.date, serializer);
+        <crate::api::planning::MealSlotDto>::sse_encode(self.slot, serializer);
+        <crate::api::planning_drafts::SlotOutcomeDto>::sse_encode(self.outcome, serializer);
+    }
+}
+
 impl SseEncode for crate::api::starter::StarterInstallReportDto {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -5895,6 +8364,13 @@ impl SseEncode for u32 {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
         serializer.cursor.write_u32::<NativeEndian>(self).unwrap();
+    }
+}
+
+impl SseEncode for u64 {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        serializer.cursor.write_u64::<NativeEndian>(self).unwrap();
     }
 }
 

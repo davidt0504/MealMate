@@ -432,7 +432,8 @@ fn list_recipe_candidate_info(
     tx: &Transaction<'_>,
     household: &HouseholdId,
 ) -> Result<Vec<RecipeCandidateInfo>, StorageError> {
-    let mut by_recipe: BTreeMap<String, (Vec<String>, Vec<crate::IngredientRef>)> = BTreeMap::new();
+    type Lines = (Vec<String>, Vec<crate::IngredientRef>, Vec<String>);
+    let mut by_recipe: BTreeMap<String, Lines> = BTreeMap::new();
     let mut stmt = tx.prepare(
         "SELECT l.recipe_id, l.name, l.ingredient_id, l.custom_ingredient_id
          FROM recipe_ingredient_line l
@@ -452,6 +453,9 @@ fn list_recipe_candidate_info(
         .collect::<Result<Vec<_>, _>>()?;
     for (recipe_id, name, catalog, custom) in lines {
         let entry = by_recipe.entry(recipe_id).or_default();
+        if catalog.is_none() {
+            entry.2.push(name.clone());
+        }
         entry.0.push(name);
         match (catalog, custom) {
             (Some(id), _) => entry
@@ -488,7 +492,8 @@ fn list_recipe_candidate_info(
         if provenance_id.is_none() {
             return Err(StorageError::CorruptProvenance(id));
         }
-        let (line_names, ingredient_refs) = by_recipe.remove(&id).unwrap_or_default();
+        let (line_names, ingredient_refs, untagged_lines) =
+            by_recipe.remove(&id).unwrap_or_default();
         out.push(RecipeCandidateInfo {
             id: crate::RecipeId::new(&id)?,
             title,
@@ -497,6 +502,7 @@ fn list_recipe_candidate_info(
             line_names,
             ingredient_refs,
             starter_slug,
+            untagged_lines,
         });
     }
     Ok(out)
@@ -1248,6 +1254,12 @@ mod tests {
                     .cloned()
                     .collect(),
                 starter_slug: r.provenance().starter_slug().map(str::to_owned),
+                untagged_lines: r
+                    .lines()
+                    .iter()
+                    .filter(|l| !matches!(l.ingredient(), Some(crate::IngredientRef::Catalog(_))))
+                    .map(|l| l.name().to_owned())
+                    .collect(),
             });
         }
         expected.sort_by(|a, b| a.id.as_str().cmp(b.id.as_str()));

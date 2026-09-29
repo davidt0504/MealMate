@@ -6,6 +6,9 @@ import 'package:meal_mate/app/appearance_provider.dart';
 import 'package:meal_mate/app/theme.dart';
 import 'package:meal_mate/features/household/household_provider.dart';
 import 'package:meal_mate/features/household/household_screen.dart';
+import 'package:meal_mate/features/planning/cover_copy.dart';
+import 'package:meal_mate/features/planning/cover_provider.dart';
+import 'package:meal_mate/features/planning/experiment_provider.dart';
 import 'package:meal_mate/features/planning/planning_cycle.dart';
 import 'package:meal_mate/features/planning/planning_provider.dart';
 import 'package:meal_mate/features/restrictions/restrictions_provider.dart';
@@ -286,6 +289,29 @@ class SettingsScreen extends ConsumerWidget {
             trailing: const Icon(Icons.chevron_right),
             onTap: () => context.go('/settings/restrictions'),
           ),
+          ListTile(
+            key: const ValueKey('settings:exclusions'),
+            title: const Text(exclusionsTitle),
+            subtitle: Text(switch (ref.watch(mealExclusionsProvider)) {
+              AsyncData(value: final list) when list.isEmpty =>
+                exclusionsEmptyCopy,
+              AsyncData(:final value) => describeExclusionCount(value.length),
+              AsyncError(:final error) => describeFailure(
+                error,
+                subject: exclusionsTitle,
+              ),
+              _ => 'Loading…',
+            }),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => context.go('/settings/exclusions'),
+          ),
+          if (ref.watch(testerModeProvider))
+            ListTile(
+              key: const ValueKey('settings:experiment'),
+              title: const Text('Label experiment (tester)'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => context.go('/settings/experiment'),
+            ),
           ListTile(
             title: const Text('Backup'),
             subtitle: const Text(

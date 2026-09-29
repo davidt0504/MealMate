@@ -11,6 +11,9 @@ flutter_rust_bridge = "=2.13.0"
 thiserror = "2"
 kimatta-application = { path = "crates/kimatta-application" }
 kimatta-storage = { path = "crates/kimatta-storage" }
+# Already in the tree through food-domain: the wording experiment's local file (OPT-007 §10).
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
 uuid = { version = "1", features = ["v4"] }
 
 [dev-dependencies]

@@ -56,7 +56,7 @@ extension KimattaErrorPatterns on KimattaError {
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeMap<TResult extends Object?>({TResult Function( KimattaError_InvalidPath value)?  invalidPath,TResult Function( KimattaError_NotOpen value)?  notOpen,TResult Function( KimattaError_Storage value)?  storage,TResult Function( KimattaError_Corrupt value)?  corrupt,TResult Function( KimattaError_Planning value)?  planning,TResult Function( KimattaError_Recipe value)?  recipe,TResult Function( KimattaError_Restriction value)?  restriction,TResult Function( KimattaError_PlannedMeal value)?  plannedMeal,TResult Function( KimattaError_Shopping value)?  shopping,TResult Function( KimattaError_RecipeQuarantined value)?  recipeQuarantined,required TResult orElse(),}){
+@optionalTypeArgs TResult maybeMap<TResult extends Object?>({TResult Function( KimattaError_InvalidPath value)?  invalidPath,TResult Function( KimattaError_NotOpen value)?  notOpen,TResult Function( KimattaError_Storage value)?  storage,TResult Function( KimattaError_Corrupt value)?  corrupt,TResult Function( KimattaError_Planning value)?  planning,TResult Function( KimattaError_Recipe value)?  recipe,TResult Function( KimattaError_Restriction value)?  restriction,TResult Function( KimattaError_PlannedMeal value)?  plannedMeal,TResult Function( KimattaError_Shopping value)?  shopping,TResult Function( KimattaError_RecipeQuarantined value)?  recipeQuarantined,TResult Function( KimattaError_Draft value)?  draft,required TResult orElse(),}){
 final _that = this;
 switch (_that) {
 case KimattaError_InvalidPath() when invalidPath != null:
@@ -69,7 +69,8 @@ return recipe(_that);case KimattaError_Restriction() when restriction != null:
 return restriction(_that);case KimattaError_PlannedMeal() when plannedMeal != null:
 return plannedMeal(_that);case KimattaError_Shopping() when shopping != null:
 return shopping(_that);case KimattaError_RecipeQuarantined() when recipeQuarantined != null:
-return recipeQuarantined(_that);case _:
+return recipeQuarantined(_that);case KimattaError_Draft() when draft != null:
+return draft(_that);case _:
   return orElse();
 
 }
@@ -87,7 +88,7 @@ return recipeQuarantined(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult map<TResult extends Object?>({required TResult Function( KimattaError_InvalidPath value)  invalidPath,required TResult Function( KimattaError_NotOpen value)  notOpen,required TResult Function( KimattaError_Storage value)  storage,required TResult Function( KimattaError_Corrupt value)  corrupt,required TResult Function( KimattaError_Planning value)  planning,required TResult Function( KimattaError_Recipe value)  recipe,required TResult Function( KimattaError_Restriction value)  restriction,required TResult Function( KimattaError_PlannedMeal value)  plannedMeal,required TResult Function( KimattaError_Shopping value)  shopping,required TResult Function( KimattaError_RecipeQuarantined value)  recipeQuarantined,}){
+@optionalTypeArgs TResult map<TResult extends Object?>({required TResult Function( KimattaError_InvalidPath value)  invalidPath,required TResult Function( KimattaError_NotOpen value)  notOpen,required TResult Function( KimattaError_Storage value)  storage,required TResult Function( KimattaError_Corrupt value)  corrupt,required TResult Function( KimattaError_Planning value)  planning,required TResult Function( KimattaError_Recipe value)  recipe,required TResult Function( KimattaError_Restriction value)  restriction,required TResult Function( KimattaError_PlannedMeal value)  plannedMeal,required TResult Function( KimattaError_Shopping value)  shopping,required TResult Function( KimattaError_RecipeQuarantined value)  recipeQuarantined,required TResult Function( KimattaError_Draft value)  draft,}){
 final _that = this;
 switch (_that) {
 case KimattaError_InvalidPath():
@@ -100,7 +101,8 @@ return recipe(_that);case KimattaError_Restriction():
 return restriction(_that);case KimattaError_PlannedMeal():
 return plannedMeal(_that);case KimattaError_Shopping():
 return shopping(_that);case KimattaError_RecipeQuarantined():
-return recipeQuarantined(_that);}
+return recipeQuarantined(_that);case KimattaError_Draft():
+return draft(_that);}
 }
 /// A variant of `map` that fallback to returning `null`.
 ///
@@ -114,7 +116,7 @@ return recipeQuarantined(_that);}
 /// }
 /// ```
 
-@optionalTypeArgs TResult? mapOrNull<TResult extends Object?>({TResult? Function( KimattaError_InvalidPath value)?  invalidPath,TResult? Function( KimattaError_NotOpen value)?  notOpen,TResult? Function( KimattaError_Storage value)?  storage,TResult? Function( KimattaError_Corrupt value)?  corrupt,TResult? Function( KimattaError_Planning value)?  planning,TResult? Function( KimattaError_Recipe value)?  recipe,TResult? Function( KimattaError_Restriction value)?  restriction,TResult? Function( KimattaError_PlannedMeal value)?  plannedMeal,TResult? Function( KimattaError_Shopping value)?  shopping,TResult? Function( KimattaError_RecipeQuarantined value)?  recipeQuarantined,}){
+@optionalTypeArgs TResult? mapOrNull<TResult extends Object?>({TResult? Function( KimattaError_InvalidPath value)?  invalidPath,TResult? Function( KimattaError_NotOpen value)?  notOpen,TResult? Function( KimattaError_Storage value)?  storage,TResult? Function( KimattaError_Corrupt value)?  corrupt,TResult? Function( KimattaError_Planning value)?  planning,TResult? Function( KimattaError_Recipe value)?  recipe,TResult? Function( KimattaError_Restriction value)?  restriction,TResult? Function( KimattaError_PlannedMeal value)?  plannedMeal,TResult? Function( KimattaError_Shopping value)?  shopping,TResult? Function( KimattaError_RecipeQuarantined value)?  recipeQuarantined,TResult? Function( KimattaError_Draft value)?  draft,}){
 final _that = this;
 switch (_that) {
 case KimattaError_InvalidPath() when invalidPath != null:
@@ -127,7 +129,8 @@ return recipe(_that);case KimattaError_Restriction() when restriction != null:
 return restriction(_that);case KimattaError_PlannedMeal() when plannedMeal != null:
 return plannedMeal(_that);case KimattaError_Shopping() when shopping != null:
 return shopping(_that);case KimattaError_RecipeQuarantined() when recipeQuarantined != null:
-return recipeQuarantined(_that);case _:
+return recipeQuarantined(_that);case KimattaError_Draft() when draft != null:
+return draft(_that);case _:
   return null;
 
 }
@@ -144,7 +147,7 @@ return recipeQuarantined(_that);case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult maybeWhen<TResult extends Object?>({TResult Function()?  invalidPath,TResult Function()?  notOpen,TResult Function( String message)?  storage,TResult Function( String message)?  corrupt,TResult Function( String message)?  planning,TResult Function( String message)?  recipe,TResult Function( String message)?  restriction,TResult Function( String message)?  plannedMeal,TResult Function( String message)?  shopping,TResult Function()?  recipeQuarantined,required TResult orElse(),}) {final _that = this;
+@optionalTypeArgs TResult maybeWhen<TResult extends Object?>({TResult Function()?  invalidPath,TResult Function()?  notOpen,TResult Function( String message)?  storage,TResult Function( String message)?  corrupt,TResult Function( String message)?  planning,TResult Function( String message)?  recipe,TResult Function( String message)?  restriction,TResult Function( String message)?  plannedMeal,TResult Function( String message)?  shopping,TResult Function()?  recipeQuarantined,TResult Function( DraftErrorKind kind,  String message)?  draft,required TResult orElse(),}) {final _that = this;
 switch (_that) {
 case KimattaError_InvalidPath() when invalidPath != null:
 return invalidPath();case KimattaError_NotOpen() when notOpen != null:
@@ -156,7 +159,8 @@ return recipe(_that.message);case KimattaError_Restriction() when restriction !=
 return restriction(_that.message);case KimattaError_PlannedMeal() when plannedMeal != null:
 return plannedMeal(_that.message);case KimattaError_Shopping() when shopping != null:
 return shopping(_that.message);case KimattaError_RecipeQuarantined() when recipeQuarantined != null:
-return recipeQuarantined();case _:
+return recipeQuarantined();case KimattaError_Draft() when draft != null:
+return draft(_that.kind,_that.message);case _:
   return orElse();
 
 }
@@ -174,7 +178,7 @@ return recipeQuarantined();case _:
 /// }
 /// ```
 
-@optionalTypeArgs TResult when<TResult extends Object?>({required TResult Function()  invalidPath,required TResult Function()  notOpen,required TResult Function( String message)  storage,required TResult Function( String message)  corrupt,required TResult Function( String message)  planning,required TResult Function( String message)  recipe,required TResult Function( String message)  restriction,required TResult Function( String message)  plannedMeal,required TResult Function( String message)  shopping,required TResult Function()  recipeQuarantined,}) {final _that = this;
+@optionalTypeArgs TResult when<TResult extends Object?>({required TResult Function()  invalidPath,required TResult Function()  notOpen,required TResult Function( String message)  storage,required TResult Function( String message)  corrupt,required TResult Function( String message)  planning,required TResult Function( String message)  recipe,required TResult Function( String message)  restriction,required TResult Function( String message)  plannedMeal,required TResult Function( String message)  shopping,required TResult Function()  recipeQuarantined,required TResult Function( DraftErrorKind kind,  String message)  draft,}) {final _that = this;
 switch (_that) {
 case KimattaError_InvalidPath():
 return invalidPath();case KimattaError_NotOpen():
@@ -186,7 +190,8 @@ return recipe(_that.message);case KimattaError_Restriction():
 return restriction(_that.message);case KimattaError_PlannedMeal():
 return plannedMeal(_that.message);case KimattaError_Shopping():
 return shopping(_that.message);case KimattaError_RecipeQuarantined():
-return recipeQuarantined();}
+return recipeQuarantined();case KimattaError_Draft():
+return draft(_that.kind,_that.message);}
 }
 /// A variant of `when` that fallback to returning `null`
 ///
@@ -200,7 +205,7 @@ return recipeQuarantined();}
 /// }
 /// ```
 
-@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>({TResult? Function()?  invalidPath,TResult? Function()?  notOpen,TResult? Function( String message)?  storage,TResult? Function( String message)?  corrupt,TResult? Function( String message)?  planning,TResult? Function( String message)?  recipe,TResult? Function( String message)?  restriction,TResult? Function( String message)?  plannedMeal,TResult? Function( String message)?  shopping,TResult? Function()?  recipeQuarantined,}) {final _that = this;
+@optionalTypeArgs TResult? whenOrNull<TResult extends Object?>({TResult? Function()?  invalidPath,TResult? Function()?  notOpen,TResult? Function( String message)?  storage,TResult? Function( String message)?  corrupt,TResult? Function( String message)?  planning,TResult? Function( String message)?  recipe,TResult? Function( String message)?  restriction,TResult? Function( String message)?  plannedMeal,TResult? Function( String message)?  shopping,TResult? Function()?  recipeQuarantined,TResult? Function( DraftErrorKind kind,  String message)?  draft,}) {final _that = this;
 switch (_that) {
 case KimattaError_InvalidPath() when invalidPath != null:
 return invalidPath();case KimattaError_NotOpen() when notOpen != null:
@@ -212,7 +217,8 @@ return recipe(_that.message);case KimattaError_Restriction() when restriction !=
 return restriction(_that.message);case KimattaError_PlannedMeal() when plannedMeal != null:
 return plannedMeal(_that.message);case KimattaError_Shopping() when shopping != null:
 return shopping(_that.message);case KimattaError_RecipeQuarantined() when recipeQuarantined != null:
-return recipeQuarantined();case _:
+return recipeQuarantined();case KimattaError_Draft() when draft != null:
+return draft(_that.kind,_that.message);case _:
   return null;
 
 }
@@ -777,5 +783,73 @@ String toString() {
 
 
 
+
+/// @nodoc
+
+
+class KimattaError_Draft extends KimattaError {
+  const KimattaError_Draft({required this.kind, required this.message}): super._();
+  
+
+ final  DraftErrorKind kind;
+ final  String message;
+
+/// Create a copy of KimattaError
+/// with the given fields replaced by the non-null parameter values.
+@JsonKey(includeFromJson: false, includeToJson: false)
+@pragma('vm:prefer-inline')
+$KimattaError_DraftCopyWith<KimattaError_Draft> get copyWith => _$KimattaError_DraftCopyWithImpl<KimattaError_Draft>(this, _$identity);
+
+
+
+@override
+bool operator ==(Object other) {
+  return identical(this, other) || (other.runtimeType == runtimeType&&other is KimattaError_Draft&&(identical(other.kind, kind) || other.kind == kind)&&(identical(other.message, message) || other.message == message));
+}
+
+
+@override
+int get hashCode => Object.hash(runtimeType,kind,message);
+
+@override
+String toString() {
+  return 'KimattaError.draft(kind: $kind, message: $message)';
+}
+
+
+}
+
+/// @nodoc
+abstract mixin class $KimattaError_DraftCopyWith<$Res> implements $KimattaErrorCopyWith<$Res> {
+  factory $KimattaError_DraftCopyWith(KimattaError_Draft value, $Res Function(KimattaError_Draft) _then) = _$KimattaError_DraftCopyWithImpl;
+@useResult
+$Res call({
+ DraftErrorKind kind, String message
+});
+
+
+
+
+}
+/// @nodoc
+class _$KimattaError_DraftCopyWithImpl<$Res>
+    implements $KimattaError_DraftCopyWith<$Res> {
+  _$KimattaError_DraftCopyWithImpl(this._self, this._then);
+
+  final KimattaError_Draft _self;
+  final $Res Function(KimattaError_Draft) _then;
+
+/// Create a copy of KimattaError
+/// with the given fields replaced by the non-null parameter values.
+@pragma('vm:prefer-inline') $Res call({Object? kind = null,Object? message = null,}) {
+  return _then(KimattaError_Draft(
+kind: null == kind ? _self.kind : kind // ignore: cast_nullable_to_non_nullable
+as DraftErrorKind,message: null == message ? _self.message : message // ignore: cast_nullable_to_non_nullable
+as String,
+  ));
+}
+
+
+}
 
 // dart format on

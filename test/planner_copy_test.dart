@@ -35,6 +35,7 @@ final plannerCopySamples = [
   plannerEmptyCopy,
   lockLabel(true),
   lockLabel(false),
+  lockSavedNowCopy,
   describeScale(null),
   describeScale(const ScaleDto(numer: 1, denom: 2)),
   describeScale(const ScaleDto(numer: 3, denom: 2)),
@@ -81,7 +82,7 @@ void main() {
     // surface without failing anything. It cannot see a new unsampled constant in
     // `planner_copy.dart`; that residual is tracked alongside the cover one.
     expect(plannerCopySamples, isNotEmpty);
-    expect(plannerCopySamples.length, 36);
+    expect(plannerCopySamples.length, 37);
     for (final sample in plannerCopySamples) {
       expect(assurance.hasMatch(sample), isFalse, reason: sample);
     }
@@ -111,8 +112,8 @@ void main() {
   });
 
   test('lockLabel states what a lock binds', () {
-    expect(lockLabel(true), 'Locked — automation will not change this meal');
-    expect(lockLabel(false), 'Unlocked');
+    expect(lockLabel(true), 'Locked in — automation will not change this meal');
+    expect(lockLabel(false), 'Not locked in');
   });
 
   test('describeScale renders the five presets and a general fraction', () {

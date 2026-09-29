@@ -133,6 +133,7 @@ class DatabaseGeneration extends Notifier<int> {
     ref.invalidate(shoppingProvider);
     ref.invalidate(plannerProvider);
     ref.invalidate(coverProvider);
+    ref.invalidate(mealExclusionsProvider);
     state++;
   }
 }

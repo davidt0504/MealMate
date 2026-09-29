@@ -38,6 +38,7 @@ fn recipe(id: &str, title: &str, prep: Option<u32>, lines: &[&str]) -> RecipeCan
         line_names: lines.iter().map(|l| (*l).to_owned()).collect(),
         ingredient_refs: lines.iter().map(|l| cat(l)).collect(),
         starter_slug: None,
+        untagged_lines: Vec::new(),
     }
 }
 
@@ -133,6 +134,7 @@ fn base() -> PlanningSnapshot {
         policies: FoodPolicies {
             dining_out_enabled: false,
             hard_vetoes: vec![],
+            recipe_vetoes: vec![],
             slot_windows: BTreeMap::from([(MealSlot::Dinner, 40)]),
             restrictions_reviewed: false,
             unknown_policy_types: vec![],
@@ -2721,10 +2723,11 @@ fn planner_source_has_no_io_imports() {
             checked += 1;
         }
     }
-    // 8 MVP-023 modules plus MVP-025's `invariant_tests.rs`; `fixtures/mod.rs` sits in a
-    // subdirectory this non-recursive walk does not reach, and is cfg-gated out of the
-    // shipped library anyway.
-    assert_eq!(checked, 9);
+    // 8 MVP-023 modules plus MVP-025's `invariant_tests.rs` and OPT-007's `draft.rs` and
+    // `alternatives.rs` and `similarity.rs`;
+    // `fixtures/mod.rs` sits in a subdirectory this non-recursive walk does not reach, and is
+    // cfg-gated out of the shipped library anyway.
+    assert_eq!(checked, 12);
 }
 
 #[test]
@@ -2824,4 +2827,400 @@ fn controller_propose_returns_the_apply_proposal() {
     assert_eq!(p[0].expected_benefit_band, household_core::Band::High);
     assert_eq!(p, run(&base()).proposals);
     assert!(!p[0].reason_codes.is_empty());
+}
+
+// --- OPT-007 §7: similarity to locked-in meals (H6) -------------------------------------------
+
+fn mixed(id: &str, title: &str, catalog: &[&str], untagged: &[&str]) -> RecipeCandidateInfo {
+    RecipeCandidateInfo {
+        id: RecipeId::new(id).unwrap(),
+        title: title.to_owned(),
+        // One serving for one member: no leftovers candidate competes.
+        servings: Some(1),
+        prep_minutes: Some(20),
+        line_names: catalog
+            .iter()
+            .chain(untagged)
+            .map(|l| (*l).to_owned())
+            .collect(),
+        ingredient_refs: catalog.iter().map(|l| cat(l)).collect(),
+        starter_slug: None,
+        untagged_lines: untagged.iter().map(|l| (*l).to_owned()).collect(),
+    }
+}
+
+/// Over the 40-minute dinner window, so Tier 0 rejects it as a fresh candidate while a lock
+/// holds it over: the tests below compare other dishes *with* it, not against a repeat of it.
+fn spaghetti() -> RecipeCandidateInfo {
+    let mut r = mixed(
+        "r-spag",
+        "Spaghetti bolognese",
+        &["ing-spaghetti", "ing-tomato-sauce", "ing-ground-beef"],
+        &[],
+    );
+    r.prep_minutes = Some(50);
+    r
+}
+
+fn lasagna() -> RecipeCandidateInfo {
+    mixed(
+        "r-lasagna",
+        "Lasagna",
+        &["ing-ground-beef", "ing-tomato-paste"],
+        &["lasagna noodles"],
+    )
+}
+
+fn tofu() -> RecipeCandidateInfo {
+    mixed(
+        "r-tofu",
+        "Tofu stir fry",
+        &["ing-tofu", "ing-broccoli"],
+        &[],
+    )
+}
+
+/// No preferences, so only the tiers under test move; starter content absent.
+fn similarity_base(days: u32) -> PlanningSnapshot {
+    let mut s = base();
+    s.length_days = days;
+    s.preferences = Vec::new();
+    s.starter = Vec::new();
+    s.recipes = vec![lasagna(), spaghetti(), tofu()];
+    s
+}
+
+fn proposed_on(r: &PlanningResult, date: &str) -> Vec<MealComponent> {
+    r.proposed
+        .iter()
+        .find(|p| p.date == d(date))
+        .map(|p| p.components.clone())
+        .unwrap_or_default()
+}
+
+fn similar_terms(r: &PlanningResult, date: &str) -> Vec<i64> {
+    r.score
+        .terms
+        .iter()
+        .filter(|t| {
+            t.code == crate::planner::similarity::SIMILAR_TO_COMMITMENT && t.date == Some(d(date))
+        })
+        .map(|t| t.value)
+        .collect()
+}
+
+/// H6 standard. Fails against the pre-OPT-007 scorer: there the lasagna's shared beef earned an
+/// ingredient-overlap reward and it won outright.
+#[test]
+fn a_locked_spaghetti_ranks_a_lasagna_below_an_unrelated_dinner() {
+    let mut s = similarity_base(2);
+    s.existing = vec![meal(
+        "l",
+        "2026-08-29",
+        MealSlot::Dinner,
+        vec![rc("r-spag")],
+        true,
+    )];
+    let r = cover_cycle(&s, &SearchParams::default());
+    assert_eq!(proposed_on(&r, "2026-08-30"), vec![rc("r-tofu")]);
+    // Unlocked, the same spaghetti is no commitment: the lasagna is free to win.
+    s.existing = vec![meal(
+        "l",
+        "2026-08-29",
+        MealSlot::Dinner,
+        vec![rc("r-spag")],
+        false,
+    )];
+    let r = cover_cycle(&s, &SearchParams::default());
+    assert!(similar_terms(&r, "2026-08-30").is_empty());
+}
+
+/// H6 adversarial: a Friday commitment shapes Monday's singleton ranking before the `K` cut,
+/// so even at K=1 Monday's lasagna never survives to be judged against Friday.
+#[test]
+fn a_later_commitment_counts_at_k_1() {
+    let mut s = similarity_base(5);
+    s.existing = vec![meal(
+        "f",
+        "2026-09-02",
+        MealSlot::Dinner,
+        vec![rc("r-spag")],
+        true,
+    )];
+    let params = SearchParams {
+        beam_width: 1,
+        candidates_per_slot: 1,
+        ..SearchParams::default()
+    };
+    let r = cover_cycle(&s, &params);
+    assert_eq!(proposed_on(&r, "2026-08-29"), vec![rc("r-tofu")]);
+}
+
+#[test]
+fn a_higher_tier_preference_still_beats_the_similarity_term() {
+    let mut s = similarity_base(2);
+    s.existing = vec![meal(
+        "l",
+        "2026-08-29",
+        MealSlot::Dinner,
+        vec![rc("r-spag")],
+        true,
+    )];
+    s.preferences = vec![prefs("m1", &[(Sentiment::Like, "lasagna")])];
+    let r = cover_cycle(&s, &SearchParams::default());
+    assert_eq!(proposed_on(&r, "2026-08-30"), vec![rc("r-lasagna")]);
+    assert_eq!(
+        similar_terms(&r, "2026-08-30"),
+        vec![-4],
+        "recorded, and outranked"
+    );
+}
+
+/// One term per distinct committed occurrence, never two for one pair.
+#[test]
+fn each_commitment_pair_is_charged_once() {
+    let mut s = similarity_base(3);
+    s.recipes = vec![lasagna(), spaghetti()];
+    s.existing = vec![
+        meal(
+            "a",
+            "2026-08-29",
+            MealSlot::Dinner,
+            vec![rc("r-spag")],
+            true,
+        ),
+        meal(
+            "b",
+            "2026-08-30",
+            MealSlot::Dinner,
+            vec![rc("r-spag")],
+            true,
+        ),
+    ];
+    let r = cover_cycle(&s, &SearchParams::default());
+    assert_eq!(proposed_on(&r, "2026-08-31"), vec![rc("r-lasagna")]);
+    assert_eq!(similar_terms(&r, "2026-08-31"), vec![-4, -4]);
+    // The committed meals are never charged against each other or themselves.
+    assert!(similar_terms(&r, "2026-08-29").is_empty());
+    assert!(similar_terms(&r, "2026-08-30").is_empty());
+}
+
+/// Two locked meals of one family cannot change, so they are never charged against each other:
+/// the term would shift every plan equally and only put fabricated evidence in the ledger.
+#[test]
+fn two_committed_meals_of_one_family_are_not_charged_against_each_other() {
+    let mut s = similarity_base(3);
+    s.recipes = vec![lasagna(), spaghetti()];
+    s.existing = vec![
+        meal(
+            "a",
+            "2026-08-29",
+            MealSlot::Dinner,
+            vec![rc("r-spag")],
+            true,
+        ),
+        meal(
+            "b",
+            "2026-08-30",
+            MealSlot::Dinner,
+            vec![rc("r-lasagna")],
+            true,
+        ),
+    ];
+    let r = cover_cycle(&s, &SearchParams::default());
+    assert!(similar_terms(&r, "2026-08-29").is_empty());
+    assert!(similar_terms(&r, "2026-08-30").is_empty());
+}
+
+/// An exact repeat is `REPEAT_IN_CYCLE`'s to charge, not also a family match.
+#[test]
+fn an_exact_repeat_is_not_double_charged() {
+    let mut s = similarity_base(2);
+    let mut quick = spaghetti();
+    quick.prep_minutes = Some(20);
+    s.recipes = vec![quick];
+    s.existing = vec![meal(
+        "l",
+        "2026-08-29",
+        MealSlot::Dinner,
+        vec![rc("r-spag")],
+        true,
+    )];
+    let r = cover_cycle(&s, &SearchParams::default());
+    assert_eq!(proposed_on(&r, "2026-08-30"), vec![rc("r-spag")]);
+    assert!(similar_terms(&r, "2026-08-30").is_empty());
+    assert!(r
+        .score
+        .terms
+        .iter()
+        .any(|t| t.code == REPEAT_IN_CYCLE && t.date == Some(d("2026-08-30"))));
+}
+
+#[test]
+fn a_shared_protein_or_unknown_evidence_is_no_family() {
+    let burger = mixed(
+        "r-burger",
+        "Burger",
+        &["ing-ground-beef", "ing-hamburger-buns"],
+        &[],
+    );
+    let chili = mixed(
+        "r-chili",
+        "Chili",
+        &["ing-ground-beef", "ing-diced-tomatoes", "ing-kidney-beans"],
+        &[],
+    );
+    let plain = mixed("r-plain", "Plain", &[], &["salt", "olive oil", "onion"]);
+    let mut s = similarity_base(2);
+    s.recipes = vec![burger, chili, plain];
+    s.existing = vec![meal(
+        "l",
+        "2026-08-29",
+        MealSlot::Dinner,
+        vec![rc("r-burger")],
+        true,
+    )];
+    let r = cover_cycle(&s, &SearchParams::default());
+    assert!(similar_terms(&r, "2026-08-30").is_empty());
+    s.existing = vec![meal(
+        "l",
+        "2026-08-29",
+        MealSlot::Dinner,
+        vec![rc("r-plain")],
+        true,
+    )];
+    let r = cover_cycle(&s, &SearchParams::default());
+    assert!(similar_terms(&r, "2026-08-30").is_empty());
+}
+
+#[test]
+fn reversed_input_order_gives_the_identical_answer() {
+    let mut s = similarity_base(4);
+    s.existing = vec![
+        meal(
+            "a",
+            "2026-08-29",
+            MealSlot::Dinner,
+            vec![rc("r-spag")],
+            true,
+        ),
+        meal(
+            "b",
+            "2026-09-01",
+            MealSlot::Dinner,
+            vec![rc("r-tofu")],
+            true,
+        ),
+    ];
+    let forward = cover_cycle(&s, &SearchParams::default());
+    let mut reversed = s.clone();
+    reversed.recipes.reverse();
+    reversed.existing.reverse();
+    let backward = cover_cycle(&reversed, &SearchParams::default());
+    assert_eq!(forward.proposed, backward.proposed);
+    assert_eq!(forward.score, backward.score);
+}
+
+/// Ingredient reuse is still rewarded between genuinely different dishes.
+#[test]
+fn different_dishes_keep_their_ingredient_reuse_reward() {
+    let mut s = similarity_base(2);
+    let bowl = mixed(
+        "r-bowl",
+        "Beef rice bowl",
+        &["ing-ground-beef", "ing-rice"],
+        &[],
+    );
+    s.recipes = vec![bowl];
+    s.existing = vec![meal(
+        "l",
+        "2026-08-29",
+        MealSlot::Dinner,
+        vec![rc("r-spag")],
+        true,
+    )];
+    s.recipes.push(spaghetti());
+    let r = cover_cycle(&s, &SearchParams::default());
+    assert_eq!(proposed_on(&r, "2026-08-30"), vec![rc("r-bowl")]);
+    assert!(r
+        .score
+        .terms
+        .iter()
+        .any(|t| t.code == INGREDIENT_OVERLAP && t.date == Some(d("2026-08-30"))));
+}
+
+// --- OPT-007 §8: dish identity rules ---------------------------------------------------------------
+
+fn dish_policy(id: &str, dish: &str, enabled: bool) -> Policy {
+    Policy::new(
+        PolicyId::new(id).unwrap(),
+        HouseholdId::new("h").unwrap(),
+        "food",
+        FoodPolicies::RECIPE_VETO,
+        BTreeMap::from([("dish".to_owned(), dish.to_owned())]),
+        enabled,
+        EvidenceSource::ExplicitUser,
+    )
+    .unwrap()
+}
+
+#[test]
+fn dish_rules_parse_by_identity_and_malformed_ones_are_reported() {
+    let p = FoodPolicies::from_policies(&[
+        dish_policy("a", "recipe:r-b", true),
+        dish_policy("b", "starter:chili", true),
+        dish_policy("c", "recipe:r-off", false),
+        dish_policy("d", "tacos", true),
+        dish_policy("e", "recipe: ", false),
+    ]);
+    assert_eq!(p.recipe_vetoes, vec!["recipe:r-b", "starter:chili"]);
+    assert_eq!(p.unknown_policy_types, vec![FoodPolicies::RECIPE_VETO]);
+    assert!(p.hard_vetoes.is_empty(), "never read as a phrase");
+}
+
+#[test]
+fn an_empty_dish_rule_list_leaves_the_canonical_text_as_it_was() {
+    let s = base();
+    let mut with = s.clone();
+    with.policies.recipe_vetoes = vec!["recipe:r-b".to_owned()];
+    assert!(!s.canonical_text().contains("recipe_vetoes"));
+    assert_ne!(s.snapshot_hash(), with.snapshot_hash());
+}
+
+/// Identity, not words: the vetoed dish is rejected whatever it shares, an installed starter is
+/// the same dish as its stub, and a locked occurrence of it is held over, not moved.
+#[test]
+fn a_dish_rule_rejects_that_dish_only_including_its_installed_starter_form() {
+    let mut s = base();
+    s.recipes.push(RecipeCandidateInfo {
+        starter_slug: Some("chili".to_owned()),
+        ..recipe("r-chili", "Chili", Some(20), &["beans"])
+    });
+    s.policies.recipe_vetoes = vec!["starter:chili".to_owned()];
+    let r = cover_cycle(&s, &SearchParams::default());
+    assert!(r
+        .proposed
+        .iter()
+        .all(|p| p.components != vec![rc("r-chili")]));
+    assert!(r
+        .rejections
+        .iter()
+        .any(|x| x.code == HARD_VETO && x.candidate_text.contains("r-chili")));
+    assert!(!r
+        .rejections
+        .iter()
+        .any(|x| x.code == HARD_VETO && !x.candidate_text.contains("r-chili")));
+    s.existing = vec![meal(
+        "l",
+        "2026-08-29",
+        MealSlot::Dinner,
+        vec![rc("r-chili")],
+        true,
+    )];
+    let r = cover_cycle(&s, &SearchParams::default());
+    assert_eq!(r.slots[0].state, CoverageState::LockedByUser);
+    assert!(r.slots[0]
+        .reason_codes
+        .iter()
+        .any(|c| c == &format!("{LOCK_HELD_OVER}:{HARD_VETO}")));
 }

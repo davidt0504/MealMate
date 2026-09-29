@@ -5,12 +5,14 @@
 
 import 'api/decisions.dart';
 import 'api/error.dart';
+import 'api/experiment.dart';
 import 'api/health.dart';
 import 'api/household.dart';
 import 'api/pantry.dart';
 import 'api/planned_meals.dart';
 import 'api/planner.dart';
 import 'api/planning.dart';
+import 'api/planning_drafts.dart';
 import 'api/recipe.dart';
 import 'api/restrictions.dart';
 import 'api/shopping.dart';
@@ -80,7 +82,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.13.0';
 
   @override
-  int get rustContentHash => 1046333278;
+  int get rustContentHash => -1627482760;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -92,8 +94,16 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
 }
 
 abstract class RustLibApi extends BaseApi {
+  Future<DraftViewDto> crateApiPlanningDraftsAcceptPlanningDraft({
+    required DraftEnvelopeDto envelope,
+  });
+
   Future<CustomIngredientDto> crateApiRecipeAddCustomIngredient({
     required CustomIngredientDto item,
+  });
+
+  Future<MealExclusionOutcomeDto> crateApiPlanningDraftsAddMealExclusions({
+    required AddMealExclusionsDto request,
   });
 
   Future<RecipeDto> crateApiRecipeArchiveRecipe({
@@ -135,9 +145,44 @@ abstract class RustLibApi extends BaseApi {
     required String defaultAnchorDate,
   });
 
+  Future<int> crateApiExperimentExperimentExport({
+    required String dir,
+    required String destPath,
+  });
+
+  Future<bool> crateApiExperimentExperimentRecord({
+    required String dir,
+    required ExperimentEventDto event,
+  });
+
+  Future<void> crateApiExperimentExperimentReset({required String dir});
+
+  Future<void> crateApiExperimentExperimentSetEnabled({
+    required String dir,
+    required bool enabled,
+  });
+
+  Future<void> crateApiExperimentExperimentSetOverride({
+    required String dir,
+    String? labelId,
+  });
+
+  Future<ExperimentSessionDto> crateApiExperimentExperimentStartSession({
+    required String dir,
+  });
+
+  Future<ExperimentStatusDto> crateApiExperimentExperimentStatus({
+    required String dir,
+  });
+
   Future<ExportReport> crateApiHealthExportDatabase({required String destPath});
 
   Future<void> crateApiHealthInitApp();
+
+  Future<DraftViewDto> crateApiPlanningDraftsInspectPlanningDraft({
+    required DraftContextDto context,
+    required String draftId,
+  });
 
   Future<StarterInstallReportDto> crateApiStarterInstallStarterContent({
     required String householdId,
@@ -161,6 +206,10 @@ abstract class RustLibApi extends BaseApi {
 
   Future<List<CustomIngredientMissingCategoryDto>>
   crateApiRecipeListCustomIngredientsMissingCategory({
+    required String householdId,
+  });
+
+  Future<List<MealExclusionDto>> crateApiPlanningDraftsListMealExclusions({
     required String householdId,
   });
 
@@ -198,7 +247,16 @@ abstract class RustLibApi extends BaseApi {
     required String toDate,
   });
 
+  Future<DraftViewDto> crateApiPlanningDraftsMutatePlanningDraft({
+    required DraftEnvelopeDto envelope,
+    required DraftActionDto action,
+  });
+
   Future<HealthReport> crateApiHealthOpenDatabase({required String dbPath});
+
+  Future<DraftViewDto> crateApiPlanningDraftsOpenPlanningDraft({
+    required DraftContextDto context,
+  });
 
   Future<PlanningCycleDto> crateApiPlanningPlanningCycleWindow({
     required String householdId,
@@ -208,6 +266,10 @@ abstract class RustLibApi extends BaseApi {
 
   Future<PlanDecisionOutcomeDto> crateApiDecisionsRecordPlanDecision({
     required PlanDecisionRequestDto request,
+  });
+
+  Future<MealExclusionOutcomeDto> crateApiPlanningDraftsRemoveMealExclusion({
+    required RemoveMealExclusionDto request,
   });
 
   Future<HouseholdDto> crateApiHouseholdRenameHousehold({
@@ -310,6 +372,39 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   });
 
   @override
+  Future<DraftViewDto> crateApiPlanningDraftsAcceptPlanningDraft({
+    required DraftEnvelopeDto envelope,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_box_autoadd_draft_envelope_dto(envelope, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 1,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_draft_view_dto,
+          decodeErrorData: sse_decode_kimatta_error,
+        ),
+        constMeta: kCrateApiPlanningDraftsAcceptPlanningDraftConstMeta,
+        argValues: [envelope],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiPlanningDraftsAcceptPlanningDraftConstMeta =>
+      const TaskConstMeta(
+        debugName: "accept_planning_draft",
+        argNames: ["envelope"],
+      );
+
+  @override
   Future<CustomIngredientDto> crateApiRecipeAddCustomIngredient({
     required CustomIngredientDto item,
   }) {
@@ -321,7 +416,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 1,
+            funcId: 2,
             port: port_,
           );
         },
@@ -343,6 +438,39 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
+  Future<MealExclusionOutcomeDto> crateApiPlanningDraftsAddMealExclusions({
+    required AddMealExclusionsDto request,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_box_autoadd_add_meal_exclusions_dto(request, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 3,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_meal_exclusion_outcome_dto,
+          decodeErrorData: sse_decode_kimatta_error,
+        ),
+        constMeta: kCrateApiPlanningDraftsAddMealExclusionsConstMeta,
+        argValues: [request],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiPlanningDraftsAddMealExclusionsConstMeta =>
+      const TaskConstMeta(
+        debugName: "add_meal_exclusions",
+        argNames: ["request"],
+      );
+
+  @override
   Future<RecipeDto> crateApiRecipeArchiveRecipe({
     required String householdId,
     required String recipeId,
@@ -358,7 +486,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 2,
+            funcId: 4,
             port: port_,
           );
         },
@@ -388,7 +516,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 3,
+            funcId: 5,
             port: port_,
           );
         },
@@ -418,7 +546,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 4,
+            funcId: 6,
             port: port_,
           );
         },
@@ -445,7 +573,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       SyncTask(
         callFfi: () {
           final serializer = SseSerializer(generalizedFrbRustBinding);
-          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 5)!;
+          return pdeCallFfi(generalizedFrbRustBinding, serializer, funcId: 7)!;
         },
         codec: SseCodec(
           decodeSuccessData: sse_decode_String,
@@ -473,7 +601,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 6,
+            funcId: 8,
             port: port_,
           );
         },
@@ -505,7 +633,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 7,
+            funcId: 9,
             port: port_,
           );
         },
@@ -540,7 +668,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 8,
+            funcId: 10,
             port: port_,
           );
         },
@@ -577,7 +705,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 9,
+            funcId: 11,
             port: port_,
           );
         },
@@ -612,7 +740,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 10,
+            funcId: 12,
             port: port_,
           );
         },
@@ -634,6 +762,237 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
+  Future<int> crateApiExperimentExperimentExport({
+    required String dir,
+    required String destPath,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(dir, serializer);
+          sse_encode_String(destPath, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 13,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_u_32,
+          decodeErrorData: sse_decode_kimatta_error,
+        ),
+        constMeta: kCrateApiExperimentExperimentExportConstMeta,
+        argValues: [dir, destPath],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiExperimentExperimentExportConstMeta =>
+      const TaskConstMeta(
+        debugName: "experiment_export",
+        argNames: ["dir", "destPath"],
+      );
+
+  @override
+  Future<bool> crateApiExperimentExperimentRecord({
+    required String dir,
+    required ExperimentEventDto event,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(dir, serializer);
+          sse_encode_box_autoadd_experiment_event_dto(event, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 14,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_bool,
+          decodeErrorData: sse_decode_kimatta_error,
+        ),
+        constMeta: kCrateApiExperimentExperimentRecordConstMeta,
+        argValues: [dir, event],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiExperimentExperimentRecordConstMeta =>
+      const TaskConstMeta(
+        debugName: "experiment_record",
+        argNames: ["dir", "event"],
+      );
+
+  @override
+  Future<void> crateApiExperimentExperimentReset({required String dir}) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(dir, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 15,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_kimatta_error,
+        ),
+        constMeta: kCrateApiExperimentExperimentResetConstMeta,
+        argValues: [dir],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiExperimentExperimentResetConstMeta =>
+      const TaskConstMeta(debugName: "experiment_reset", argNames: ["dir"]);
+
+  @override
+  Future<void> crateApiExperimentExperimentSetEnabled({
+    required String dir,
+    required bool enabled,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(dir, serializer);
+          sse_encode_bool(enabled, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 16,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_kimatta_error,
+        ),
+        constMeta: kCrateApiExperimentExperimentSetEnabledConstMeta,
+        argValues: [dir, enabled],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiExperimentExperimentSetEnabledConstMeta =>
+      const TaskConstMeta(
+        debugName: "experiment_set_enabled",
+        argNames: ["dir", "enabled"],
+      );
+
+  @override
+  Future<void> crateApiExperimentExperimentSetOverride({
+    required String dir,
+    String? labelId,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(dir, serializer);
+          sse_encode_opt_String(labelId, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 17,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_unit,
+          decodeErrorData: sse_decode_kimatta_error,
+        ),
+        constMeta: kCrateApiExperimentExperimentSetOverrideConstMeta,
+        argValues: [dir, labelId],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiExperimentExperimentSetOverrideConstMeta =>
+      const TaskConstMeta(
+        debugName: "experiment_set_override",
+        argNames: ["dir", "labelId"],
+      );
+
+  @override
+  Future<ExperimentSessionDto> crateApiExperimentExperimentStartSession({
+    required String dir,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(dir, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 18,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_experiment_session_dto,
+          decodeErrorData: sse_decode_kimatta_error,
+        ),
+        constMeta: kCrateApiExperimentExperimentStartSessionConstMeta,
+        argValues: [dir],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiExperimentExperimentStartSessionConstMeta =>
+      const TaskConstMeta(
+        debugName: "experiment_start_session",
+        argNames: ["dir"],
+      );
+
+  @override
+  Future<ExperimentStatusDto> crateApiExperimentExperimentStatus({
+    required String dir,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(dir, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 19,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_experiment_status_dto,
+          decodeErrorData: null,
+        ),
+        constMeta: kCrateApiExperimentExperimentStatusConstMeta,
+        argValues: [dir],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiExperimentExperimentStatusConstMeta =>
+      const TaskConstMeta(debugName: "experiment_status", argNames: ["dir"]);
+
+  @override
   Future<ExportReport> crateApiHealthExportDatabase({
     required String destPath,
   }) {
@@ -645,7 +1004,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 11,
+            funcId: 20,
             port: port_,
           );
         },
@@ -672,7 +1031,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 12,
+            funcId: 21,
             port: port_,
           );
         },
@@ -691,6 +1050,41 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       const TaskConstMeta(debugName: "init_app", argNames: []);
 
   @override
+  Future<DraftViewDto> crateApiPlanningDraftsInspectPlanningDraft({
+    required DraftContextDto context,
+    required String draftId,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_box_autoadd_draft_context_dto(context, serializer);
+          sse_encode_String(draftId, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 22,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_draft_view_dto,
+          decodeErrorData: sse_decode_kimatta_error,
+        ),
+        constMeta: kCrateApiPlanningDraftsInspectPlanningDraftConstMeta,
+        argValues: [context, draftId],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiPlanningDraftsInspectPlanningDraftConstMeta =>
+      const TaskConstMeta(
+        debugName: "inspect_planning_draft",
+        argNames: ["context", "draftId"],
+      );
+
+  @override
   Future<StarterInstallReportDto> crateApiStarterInstallStarterContent({
     required String householdId,
   }) {
@@ -702,7 +1096,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 13,
+            funcId: 23,
             port: port_,
           );
         },
@@ -732,7 +1126,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 14,
+            funcId: 24,
             port: port_,
           );
         },
@@ -762,7 +1156,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 15,
+            funcId: 25,
             port: port_,
           );
         },
@@ -789,7 +1183,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 16,
+            funcId: 26,
             port: port_,
           );
         },
@@ -816,7 +1210,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 17,
+            funcId: 27,
             port: port_,
           );
         },
@@ -846,7 +1240,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 18,
+            funcId: 28,
             port: port_,
           );
         },
@@ -879,7 +1273,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 19,
+            funcId: 29,
             port: port_,
           );
         },
@@ -913,7 +1307,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 20,
+            funcId: 30,
             port: port_,
           );
         },
@@ -937,6 +1331,39 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
+  Future<List<MealExclusionDto>> crateApiPlanningDraftsListMealExclusions({
+    required String householdId,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_String(householdId, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 31,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_list_meal_exclusion_dto,
+          decodeErrorData: sse_decode_kimatta_error,
+        ),
+        constMeta: kCrateApiPlanningDraftsListMealExclusionsConstMeta,
+        argValues: [householdId],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiPlanningDraftsListMealExclusionsConstMeta =>
+      const TaskConstMeta(
+        debugName: "list_meal_exclusions",
+        argNames: ["householdId"],
+      );
+
+  @override
   Future<List<PantryEntryDto>> crateApiPantryListPantry({
     required String householdId,
   }) {
@@ -948,7 +1375,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 21,
+            funcId: 32,
             port: port_,
           );
         },
@@ -982,7 +1409,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 22,
+            funcId: 33,
             port: port_,
           );
         },
@@ -1015,7 +1442,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 23,
+            funcId: 34,
             port: port_,
           );
         },
@@ -1047,7 +1474,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 24,
+            funcId: 35,
             port: port_,
           );
         },
@@ -1082,7 +1509,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 25,
+            funcId: 36,
             port: port_,
           );
         },
@@ -1114,7 +1541,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 26,
+            funcId: 37,
             port: port_,
           );
         },
@@ -1151,7 +1578,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 27,
+            funcId: 38,
             port: port_,
           );
         },
@@ -1173,6 +1600,41 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
+  Future<DraftViewDto> crateApiPlanningDraftsMutatePlanningDraft({
+    required DraftEnvelopeDto envelope,
+    required DraftActionDto action,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_box_autoadd_draft_envelope_dto(envelope, serializer);
+          sse_encode_box_autoadd_draft_action_dto(action, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 39,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_draft_view_dto,
+          decodeErrorData: sse_decode_kimatta_error,
+        ),
+        constMeta: kCrateApiPlanningDraftsMutatePlanningDraftConstMeta,
+        argValues: [envelope, action],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiPlanningDraftsMutatePlanningDraftConstMeta =>
+      const TaskConstMeta(
+        debugName: "mutate_planning_draft",
+        argNames: ["envelope", "action"],
+      );
+
+  @override
   Future<HealthReport> crateApiHealthOpenDatabase({required String dbPath}) {
     return handler.executeNormal(
       NormalTask(
@@ -1182,7 +1644,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 28,
+            funcId: 40,
             port: port_,
           );
         },
@@ -1201,6 +1663,39 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       const TaskConstMeta(debugName: "open_database", argNames: ["dbPath"]);
 
   @override
+  Future<DraftViewDto> crateApiPlanningDraftsOpenPlanningDraft({
+    required DraftContextDto context,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_box_autoadd_draft_context_dto(context, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 41,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_draft_view_dto,
+          decodeErrorData: sse_decode_kimatta_error,
+        ),
+        constMeta: kCrateApiPlanningDraftsOpenPlanningDraftConstMeta,
+        argValues: [context],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiPlanningDraftsOpenPlanningDraftConstMeta =>
+      const TaskConstMeta(
+        debugName: "open_planning_draft",
+        argNames: ["context"],
+      );
+
+  @override
   Future<PlanningCycleDto> crateApiPlanningPlanningCycleWindow({
     required String householdId,
     required String today,
@@ -1216,7 +1711,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 29,
+            funcId: 42,
             port: port_,
           );
         },
@@ -1249,7 +1744,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 30,
+            funcId: 43,
             port: port_,
           );
         },
@@ -1271,6 +1766,39 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
+  Future<MealExclusionOutcomeDto> crateApiPlanningDraftsRemoveMealExclusion({
+    required RemoveMealExclusionDto request,
+  }) {
+    return handler.executeNormal(
+      NormalTask(
+        callFfi: (port_) {
+          final serializer = SseSerializer(generalizedFrbRustBinding);
+          sse_encode_box_autoadd_remove_meal_exclusion_dto(request, serializer);
+          pdeCallFfi(
+            generalizedFrbRustBinding,
+            serializer,
+            funcId: 44,
+            port: port_,
+          );
+        },
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_meal_exclusion_outcome_dto,
+          decodeErrorData: sse_decode_kimatta_error,
+        ),
+        constMeta: kCrateApiPlanningDraftsRemoveMealExclusionConstMeta,
+        argValues: [request],
+        apiImpl: this,
+      ),
+    );
+  }
+
+  TaskConstMeta get kCrateApiPlanningDraftsRemoveMealExclusionConstMeta =>
+      const TaskConstMeta(
+        debugName: "remove_meal_exclusion",
+        argNames: ["request"],
+      );
+
+  @override
   Future<HouseholdDto> crateApiHouseholdRenameHousehold({
     required String householdId,
     String? name,
@@ -1284,7 +1812,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 31,
+            funcId: 45,
             port: port_,
           );
         },
@@ -1319,7 +1847,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 32,
+            funcId: 46,
             port: port_,
           );
         },
@@ -1356,7 +1884,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 33,
+            funcId: 47,
             port: port_,
           );
         },
@@ -1391,7 +1919,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 34,
+            funcId: 48,
             port: port_,
           );
         },
@@ -1426,7 +1954,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 35,
+            funcId: 49,
             port: port_,
           );
         },
@@ -1459,7 +1987,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 36,
+            funcId: 50,
             port: port_,
           );
         },
@@ -1495,7 +2023,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 37,
+            funcId: 51,
             port: port_,
           );
         },
@@ -1526,7 +2054,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 38,
+            funcId: 52,
             port: port_,
           );
         },
@@ -1558,7 +2086,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 39,
+            funcId: 53,
             port: port_,
           );
         },
@@ -1591,7 +2119,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 40,
+            funcId: 54,
             port: port_,
           );
         },
@@ -1628,7 +2156,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 41,
+            funcId: 55,
             port: port_,
           );
         },
@@ -1665,7 +2193,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 42,
+            funcId: 56,
             port: port_,
           );
         },
@@ -1702,7 +2230,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 43,
+            funcId: 57,
             port: port_,
           );
         },
@@ -1737,7 +2265,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 44,
+            funcId: 58,
             port: port_,
           );
         },
@@ -1774,7 +2302,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 45,
+            funcId: 59,
             port: port_,
           );
         },
@@ -1811,7 +2339,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 46,
+            funcId: 60,
             port: port_,
           );
         },
@@ -1850,7 +2378,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
           pdeCallFfi(
             generalizedFrbRustBinding,
             serializer,
-            funcId: 47,
+            funcId: 61,
             port: port_,
           );
         },
@@ -1878,6 +2406,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  AcceptReceiptDto dco_decode_accept_receipt_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 2)
+      throw Exception('unexpected arr length: expect 2 but see ${arr.length}');
+    return AcceptReceiptDto(
+      ledgerEntryId: dco_decode_String(arr[0]),
+      changedSlots: dco_decode_u_32(arr[1]),
+    );
+  }
+
+  @protected
   ActionProposalDto dco_decode_action_proposal_dto(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
@@ -1893,6 +2433,19 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       requiredAuthority: dco_decode_required_authority_dto(arr[6]),
       deadline: dco_decode_opt_String(arr[7]),
       reasonCodes: dco_decode_list_String(arr[8]),
+    );
+  }
+
+  @protected
+  AddMealExclusionsDto dco_decode_add_meal_exclusions_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 3)
+      throw Exception('unexpected arr length: expect 3 but see ${arr.length}');
+    return AddMealExclusionsDto(
+      context: dco_decode_draft_context_dto(arr[0]),
+      dishes: dco_decode_list_String(arr[1]),
+      acting: dco_decode_opt_box_autoadd_draft_envelope_dto(arr[2]),
     );
   }
 
@@ -1927,6 +2480,26 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  AcceptReceiptDto dco_decode_box_autoadd_accept_receipt_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_accept_receipt_dto(raw);
+  }
+
+  @protected
+  AddMealExclusionsDto dco_decode_box_autoadd_add_meal_exclusions_dto(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_add_meal_exclusions_dto(raw);
+  }
+
+  @protected
+  bool dco_decode_box_autoadd_bool(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw as bool;
+  }
+
+  @protected
   CandidateSourceDto dco_decode_box_autoadd_candidate_source_dto(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return dco_decode_candidate_source_dto(raw);
@@ -1949,9 +2522,51 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  DraftActionDto dco_decode_box_autoadd_draft_action_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_draft_action_dto(raw);
+  }
+
+  @protected
+  DraftContextDto dco_decode_box_autoadd_draft_context_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_draft_context_dto(raw);
+  }
+
+  @protected
+  DraftEnvelopeDto dco_decode_box_autoadd_draft_envelope_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_draft_envelope_dto(raw);
+  }
+
+  @protected
+  DraftOperationDto dco_decode_box_autoadd_draft_operation_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_draft_operation_dto(raw);
+  }
+
+  @protected
+  DraftViewDto dco_decode_box_autoadd_draft_view_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_draft_view_dto(raw);
+  }
+
+  @protected
+  ExperimentEventDto dco_decode_box_autoadd_experiment_event_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_experiment_event_dto(raw);
+  }
+
+  @protected
   IngredientRefDto dco_decode_box_autoadd_ingredient_ref_dto(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return dco_decode_ingredient_ref_dto(raw);
+  }
+
+  @protected
+  MealSlotDto dco_decode_box_autoadd_meal_slot_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_meal_slot_dto(raw);
   }
 
   @protected
@@ -1975,11 +2590,25 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  RemoveMealExclusionDto dco_decode_box_autoadd_remove_meal_exclusion_dto(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_remove_meal_exclusion_dto(raw);
+  }
+
+  @protected
   RestrictionAssessmentDto dco_decode_box_autoadd_restriction_assessment_dto(
     dynamic raw,
   ) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return dco_decode_restriction_assessment_dto(raw);
+  }
+
+  @protected
+  SavedMealDto dco_decode_box_autoadd_saved_meal_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_saved_meal_dto(raw);
   }
 
   @protected
@@ -2008,6 +2637,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   ) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return dco_decode_shopping_manual_item_dto(raw);
+  }
+
+  @protected
+  SlotOutcomeDto dco_decode_box_autoadd_slot_outcome_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_slot_outcome_dto(raw);
   }
 
   @protected
@@ -2126,6 +2761,233 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  DraftActionDto dco_decode_draft_action_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    switch (raw[0]) {
+      case 0:
+        return DraftActionDto_Another(
+          date: dco_decode_String(raw[1]),
+          slot: dco_decode_meal_slot_dto(raw[2]),
+        );
+      case 1:
+        return DraftActionDto_Alternatives();
+      case 2:
+        return DraftActionDto_SetCommitment(
+          date: dco_decode_String(raw[1]),
+          slot: dco_decode_meal_slot_dto(raw[2]),
+          locked: dco_decode_bool(raw[3]),
+        );
+      case 3:
+        return DraftActionDto_Choose(
+          date: dco_decode_String(raw[1]),
+          slot: dco_decode_meal_slot_dto(raw[2]),
+          components: dco_decode_list_meal_component_dto(raw[3]),
+          explicitReplace: dco_decode_bool(raw[4]),
+        );
+      case 4:
+        return DraftActionDto_Undo();
+      case 5:
+        return DraftActionDto_Discard();
+      case 6:
+        return DraftActionDto_Reconsider(
+          date: dco_decode_opt_String(raw[1]),
+          slot: dco_decode_opt_box_autoadd_meal_slot_dto(raw[2]),
+        );
+      case 7:
+        return DraftActionDto_Review(
+          resolutions: dco_decode_list_review_resolution_dto(raw[1]),
+        );
+      default:
+        throw Exception("unreachable");
+    }
+  }
+
+  @protected
+  DraftContextDto dco_decode_draft_context_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 3)
+      throw Exception('unexpected arr length: expect 3 but see ${arr.length}');
+    return DraftContextDto(
+      householdId: dco_decode_String(arr[0]),
+      today: dco_decode_String(arr[1]),
+      offsetCycles: dco_decode_i_32(arr[2]),
+    );
+  }
+
+  @protected
+  DraftEnvelopeDto dco_decode_draft_envelope_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 5)
+      throw Exception('unexpected arr length: expect 5 but see ${arr.length}');
+    return DraftEnvelopeDto(
+      context: dco_decode_draft_context_dto(arr[0]),
+      databaseSession: dco_decode_String(arr[1]),
+      draftId: dco_decode_String(arr[2]),
+      expectedRevision: dco_decode_i_64(arr[3]),
+      requestId: dco_decode_String(arr[4]),
+    );
+  }
+
+  @protected
+  DraftErrorKind dco_decode_draft_error_kind(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return DraftErrorKind.values[raw as int];
+  }
+
+  @protected
+  DraftOperationDto dco_decode_draft_operation_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 2)
+      throw Exception('unexpected arr length: expect 2 but see ${arr.length}');
+    return DraftOperationDto(
+      operation: dco_decode_String(arr[0]),
+      slots: dco_decode_list_slot_outcome_record_dto(arr[1]),
+    );
+  }
+
+  @protected
+  DraftSlotDto dco_decode_draft_slot_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 13)
+      throw Exception('unexpected arr length: expect 13 but see ${arr.length}');
+    return DraftSlotDto(
+      date: dco_decode_String(arr[0]),
+      slot: dco_decode_meal_slot_dto(arr[1]),
+      components: dco_decode_list_meal_component_dto(arr[2]),
+      origin: dco_decode_slot_origin_dto(arr[3]),
+      committed: dco_decode_bool(arr[4]),
+      saved: dco_decode_opt_box_autoadd_saved_meal_dto(arr[5]),
+      editable: dco_decode_bool(arr[6]),
+      pending: dco_decode_bool(arr[7]),
+      inReview: dco_decode_bool(arr[8]),
+      state: dco_decode_coverage_state_dto(arr[9]),
+      reasonCodes: dco_decode_list_String(arr[10]),
+      outcome: dco_decode_opt_box_autoadd_slot_outcome_dto(arr[11]),
+      excluded: dco_decode_u_32(arr[12]),
+    );
+  }
+
+  @protected
+  DraftStateDto dco_decode_draft_state_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return DraftStateDto.values[raw as int];
+  }
+
+  @protected
+  DraftViewDto dco_decode_draft_view_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 19)
+      throw Exception('unexpected arr length: expect 19 but see ${arr.length}');
+    return DraftViewDto(
+      databaseSession: dco_decode_String(arr[0]),
+      draftId: dco_decode_String(arr[1]),
+      revision: dco_decode_i_64(arr[2]),
+      state: dco_decode_draft_state_dto(arr[3]),
+      anchor: dco_decode_String(arr[4]),
+      lengthDays: dco_decode_u_32(arr[5]),
+      slots: dco_decode_list_draft_slot_dto(arr[6]),
+      status: dco_decode_outcome_status_dto(arr[7]),
+      unresolvedIssues: dco_decode_list_String(arr[8]),
+      assumptions: dco_decode_list_String(arr[9]),
+      acceptAllowed: dco_decode_bool(arr[10]),
+      undoAvailable: dco_decode_bool(arr[11]),
+      pendingChanges: dco_decode_bool(arr[12]),
+      weekTargets: dco_decode_u_32(arr[13]),
+      excluded: dco_decode_u_32(arr[14]),
+      pastChangesDropped: dco_decode_u_32(arr[15]),
+      operation: dco_decode_opt_box_autoadd_draft_operation_dto(arr[16]),
+      receipt: dco_decode_opt_box_autoadd_accept_receipt_dto(arr[17]),
+      expired: dco_decode_list_expired_draft_dto(arr[18]),
+    );
+  }
+
+  @protected
+  ExperimentEventDto dco_decode_experiment_event_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 6)
+      throw Exception('unexpected arr length: expect 6 but see ${arr.length}');
+    return ExperimentEventDto(
+      sessionId: dco_decode_String(arr[0]),
+      kind: dco_decode_experiment_event_kind_dto(arr[1]),
+      elapsedMs: dco_decode_u_64(arr[2]),
+      changed: dco_decode_u_32(arr[3]),
+      exhausted: dco_decode_u_32(arr[4]),
+      completed: dco_decode_bool(arr[5]),
+    );
+  }
+
+  @protected
+  ExperimentEventKindDto dco_decode_experiment_event_kind_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return ExperimentEventKindDto.values[raw as int];
+  }
+
+  @protected
+  ExperimentLabelDto dco_decode_experiment_label_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 2)
+      throw Exception('unexpected arr length: expect 2 but see ${arr.length}');
+    return ExperimentLabelDto(
+      id: dco_decode_String(arr[0]),
+      label: dco_decode_String(arr[1]),
+    );
+  }
+
+  @protected
+  ExperimentSessionDto dco_decode_experiment_session_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 5)
+      throw Exception('unexpected arr length: expect 5 but see ${arr.length}');
+    return ExperimentSessionDto(
+      sessionId: dco_decode_String(arr[0]),
+      labelId: dco_decode_String(arr[1]),
+      label: dco_decode_String(arr[2]),
+      active: dco_decode_bool(arr[3]),
+      overridden: dco_decode_bool(arr[4]),
+    );
+  }
+
+  @protected
+  ExperimentStatusDto dco_decode_experiment_status_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 9)
+      throw Exception('unexpected arr length: expect 9 but see ${arr.length}');
+    return ExperimentStatusDto(
+      enabled: dco_decode_bool(arr[0]),
+      nextEnabled: dco_decode_opt_box_autoadd_bool(arr[1]),
+      assigned: dco_decode_opt_String(arr[2]),
+      overrideLabel: dco_decode_opt_String(arr[3]),
+      overridePending: dco_decode_bool(arr[4]),
+      nextOverride: dco_decode_opt_String(arr[5]),
+      events: dco_decode_u_32(arr[6]),
+      dropped: dco_decode_u_64(arr[7]),
+      labels: dco_decode_list_experiment_label_dto(arr[8]),
+    );
+  }
+
+  @protected
+  ExpiredDraftDto dco_decode_expired_draft_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 3)
+      throw Exception('unexpected arr length: expect 3 but see ${arr.length}');
+    return ExpiredDraftDto(
+      draftId: dco_decode_String(arr[0]),
+      anchor: dco_decode_String(arr[1]),
+      lengthDays: dco_decode_u_32(arr[2]),
+    );
+  }
+
+  @protected
   ExportReport dco_decode_export_report(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
@@ -2229,6 +3091,11 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         return KimattaError_Shopping(message: dco_decode_String(raw[1]));
       case 9:
         return KimattaError_RecipeQuarantined();
+      case 10:
+        return KimattaError_Draft(
+          kind: dco_decode_draft_error_kind(raw[1]),
+          message: dco_decode_String(raw[2]),
+        );
       default:
         throw Exception("unreachable");
     }
@@ -2284,6 +3151,24 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  List<DraftSlotDto> dco_decode_list_draft_slot_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>).map(dco_decode_draft_slot_dto).toList();
+  }
+
+  @protected
+  List<ExperimentLabelDto> dco_decode_list_experiment_label_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>).map(dco_decode_experiment_label_dto).toList();
+  }
+
+  @protected
+  List<ExpiredDraftDto> dco_decode_list_expired_draft_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>).map(dco_decode_expired_draft_dto).toList();
+  }
+
+  @protected
   List<IngredientLineDto> dco_decode_list_ingredient_line_dto(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return (raw as List<dynamic>).map(dco_decode_ingredient_line_dto).toList();
@@ -2299,6 +3184,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   List<MealComponentDto> dco_decode_list_meal_component_dto(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return (raw as List<dynamic>).map(dco_decode_meal_component_dto).toList();
+  }
+
+  @protected
+  List<MealExclusionDto> dco_decode_list_meal_exclusion_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>).map(dco_decode_meal_exclusion_dto).toList();
   }
 
   @protected
@@ -2362,6 +3253,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  List<ReviewResolutionDto> dco_decode_list_review_resolution_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>)
+        .map(dco_decode_review_resolution_dto)
+        .toList();
+  }
+
+  @protected
   List<ShoppingGroupDto> dco_decode_list_shopping_group_dto(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return (raw as List<dynamic>).map(dco_decode_shopping_group_dto).toList();
@@ -2400,6 +3299,16 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  List<SlotOutcomeRecordDto> dco_decode_list_slot_outcome_record_dto(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>)
+        .map(dco_decode_slot_outcome_record_dto)
+        .toList();
+  }
+
+  @protected
   MealComponentDto dco_decode_meal_component_dto(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
@@ -2410,6 +3319,47 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       recipeId: dco_decode_opt_String(arr[1]),
       note: dco_decode_opt_String(arr[2]),
       scale: dco_decode_opt_box_autoadd_scale_dto(arr[3]),
+    );
+  }
+
+  @protected
+  MealExclusionDto dco_decode_meal_exclusion_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 2)
+      throw Exception('unexpected arr length: expect 2 but see ${arr.length}');
+    return MealExclusionDto(
+      policyId: dco_decode_String(arr[0]),
+      kind: dco_decode_meal_exclusion_kind_dto(arr[1]),
+    );
+  }
+
+  @protected
+  MealExclusionKindDto dco_decode_meal_exclusion_kind_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    switch (raw[0]) {
+      case 0:
+        return MealExclusionKindDto_Dish(
+          identity: dco_decode_String(raw[1]),
+          title: dco_decode_opt_String(raw[2]),
+          available: dco_decode_bool(raw[3]),
+        );
+      case 1:
+        return MealExclusionKindDto_Phrase(subject: dco_decode_String(raw[1]));
+      default:
+        throw Exception("unreachable");
+    }
+  }
+
+  @protected
+  MealExclusionOutcomeDto dco_decode_meal_exclusion_outcome_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 2)
+      throw Exception('unexpected arr length: expect 2 but see ${arr.length}');
+    return MealExclusionOutcomeDto(
+      exclusions: dco_decode_list_meal_exclusion_dto(arr[0]),
+      draft: dco_decode_opt_box_autoadd_draft_view_dto(arr[1]),
     );
   }
 
@@ -2438,6 +3388,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  AcceptReceiptDto? dco_decode_opt_box_autoadd_accept_receipt_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw == null ? null : dco_decode_box_autoadd_accept_receipt_dto(raw);
+  }
+
+  @protected
+  bool? dco_decode_opt_box_autoadd_bool(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw == null ? null : dco_decode_box_autoadd_bool(raw);
+  }
+
+  @protected
   CandidateSourceDto? dco_decode_opt_box_autoadd_candidate_source_dto(
     dynamic raw,
   ) {
@@ -2448,9 +3410,35 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  DraftEnvelopeDto? dco_decode_opt_box_autoadd_draft_envelope_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw == null ? null : dco_decode_box_autoadd_draft_envelope_dto(raw);
+  }
+
+  @protected
+  DraftOperationDto? dco_decode_opt_box_autoadd_draft_operation_dto(
+    dynamic raw,
+  ) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw == null ? null : dco_decode_box_autoadd_draft_operation_dto(raw);
+  }
+
+  @protected
+  DraftViewDto? dco_decode_opt_box_autoadd_draft_view_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw == null ? null : dco_decode_box_autoadd_draft_view_dto(raw);
+  }
+
+  @protected
   IngredientRefDto? dco_decode_opt_box_autoadd_ingredient_ref_dto(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw == null ? null : dco_decode_box_autoadd_ingredient_ref_dto(raw);
+  }
+
+  @protected
+  MealSlotDto? dco_decode_opt_box_autoadd_meal_slot_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw == null ? null : dco_decode_box_autoadd_meal_slot_dto(raw);
   }
 
   @protected
@@ -2475,6 +3463,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  SavedMealDto? dco_decode_opt_box_autoadd_saved_meal_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw == null ? null : dco_decode_box_autoadd_saved_meal_dto(raw);
+  }
+
+  @protected
   ScaleDto? dco_decode_opt_box_autoadd_scale_dto(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw == null ? null : dco_decode_box_autoadd_scale_dto(raw);
@@ -2486,6 +3480,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   ) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw == null ? null : dco_decode_box_autoadd_separate_reason_dto(raw);
+  }
+
+  @protected
+  SlotOutcomeDto? dco_decode_opt_box_autoadd_slot_outcome_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw == null ? null : dco_decode_box_autoadd_slot_outcome_dto(raw);
   }
 
   @protected
@@ -2725,6 +3725,19 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  RemoveMealExclusionDto dco_decode_remove_meal_exclusion_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 3)
+      throw Exception('unexpected arr length: expect 3 but see ${arr.length}');
+    return RemoveMealExclusionDto(
+      context: dco_decode_draft_context_dto(arr[0]),
+      policyId: dco_decode_String(arr[1]),
+      acting: dco_decode_opt_box_autoadd_draft_envelope_dto(arr[2]),
+    );
+  }
+
+  @protected
   RequiredAuthorityDto dco_decode_required_authority_dto(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return RequiredAuthorityDto.values[raw as int];
@@ -2762,6 +3775,31 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   ReversibilityDto dco_decode_reversibility_dto(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return ReversibilityDto.values[raw as int];
+  }
+
+  @protected
+  ReviewResolutionDto dco_decode_review_resolution_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 3)
+      throw Exception('unexpected arr length: expect 3 but see ${arr.length}');
+    return ReviewResolutionDto(
+      date: dco_decode_String(arr[0]),
+      slot: dco_decode_meal_slot_dto(arr[1]),
+      useSaved: dco_decode_bool(arr[2]),
+    );
+  }
+
+  @protected
+  SavedMealDto dco_decode_saved_meal_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 2)
+      throw Exception('unexpected arr length: expect 2 but see ${arr.length}');
+    return SavedMealDto(
+      components: dco_decode_list_meal_component_dto(arr[0]),
+      locked: dco_decode_bool(arr[1]),
+    );
   }
 
   @protected
@@ -2912,6 +3950,31 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  SlotOriginDto dco_decode_slot_origin_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return SlotOriginDto.values[raw as int];
+  }
+
+  @protected
+  SlotOutcomeDto dco_decode_slot_outcome_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return SlotOutcomeDto.values[raw as int];
+  }
+
+  @protected
+  SlotOutcomeRecordDto dco_decode_slot_outcome_record_dto(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 3)
+      throw Exception('unexpected arr length: expect 3 but see ${arr.length}');
+    return SlotOutcomeRecordDto(
+      date: dco_decode_String(arr[0]),
+      slot: dco_decode_meal_slot_dto(arr[1]),
+      outcome: dco_decode_slot_outcome_dto(arr[2]),
+    );
+  }
+
+  @protected
   StarterInstallReportDto dco_decode_starter_install_report_dto(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     final arr = raw as List<dynamic>;
@@ -2930,6 +3993,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   int dco_decode_u_32(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw as int;
+  }
+
+  @protected
+  BigInt dco_decode_u_64(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dcoDecodeU64(raw);
   }
 
   @protected
@@ -2973,6 +4042,17 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  AcceptReceiptDto sse_decode_accept_receipt_dto(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_ledgerEntryId = sse_decode_String(deserializer);
+    var var_changedSlots = sse_decode_u_32(deserializer);
+    return AcceptReceiptDto(
+      ledgerEntryId: var_ledgerEntryId,
+      changedSlots: var_changedSlots,
+    );
+  }
+
+  @protected
   ActionProposalDto sse_decode_action_proposal_dto(
     SseDeserializer deserializer,
   ) {
@@ -2996,6 +4076,23 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       requiredAuthority: var_requiredAuthority,
       deadline: var_deadline,
       reasonCodes: var_reasonCodes,
+    );
+  }
+
+  @protected
+  AddMealExclusionsDto sse_decode_add_meal_exclusions_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_context = sse_decode_draft_context_dto(deserializer);
+    var var_dishes = sse_decode_list_String(deserializer);
+    var var_acting = sse_decode_opt_box_autoadd_draft_envelope_dto(
+      deserializer,
+    );
+    return AddMealExclusionsDto(
+      context: var_context,
+      dishes: var_dishes,
+      acting: var_acting,
     );
   }
 
@@ -3038,6 +4135,28 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  AcceptReceiptDto sse_decode_box_autoadd_accept_receipt_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_accept_receipt_dto(deserializer));
+  }
+
+  @protected
+  AddMealExclusionsDto sse_decode_box_autoadd_add_meal_exclusions_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_add_meal_exclusions_dto(deserializer));
+  }
+
+  @protected
+  bool sse_decode_box_autoadd_bool(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_bool(deserializer));
+  }
+
+  @protected
   CandidateSourceDto sse_decode_box_autoadd_candidate_source_dto(
     SseDeserializer deserializer,
   ) {
@@ -3062,11 +4181,67 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  DraftActionDto sse_decode_box_autoadd_draft_action_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_draft_action_dto(deserializer));
+  }
+
+  @protected
+  DraftContextDto sse_decode_box_autoadd_draft_context_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_draft_context_dto(deserializer));
+  }
+
+  @protected
+  DraftEnvelopeDto sse_decode_box_autoadd_draft_envelope_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_draft_envelope_dto(deserializer));
+  }
+
+  @protected
+  DraftOperationDto sse_decode_box_autoadd_draft_operation_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_draft_operation_dto(deserializer));
+  }
+
+  @protected
+  DraftViewDto sse_decode_box_autoadd_draft_view_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_draft_view_dto(deserializer));
+  }
+
+  @protected
+  ExperimentEventDto sse_decode_box_autoadd_experiment_event_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_experiment_event_dto(deserializer));
+  }
+
+  @protected
   IngredientRefDto sse_decode_box_autoadd_ingredient_ref_dto(
     SseDeserializer deserializer,
   ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return (sse_decode_ingredient_ref_dto(deserializer));
+  }
+
+  @protected
+  MealSlotDto sse_decode_box_autoadd_meal_slot_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_meal_slot_dto(deserializer));
   }
 
   @protected
@@ -3092,11 +4267,27 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  RemoveMealExclusionDto sse_decode_box_autoadd_remove_meal_exclusion_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_remove_meal_exclusion_dto(deserializer));
+  }
+
+  @protected
   RestrictionAssessmentDto sse_decode_box_autoadd_restriction_assessment_dto(
     SseDeserializer deserializer,
   ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return (sse_decode_restriction_assessment_dto(deserializer));
+  }
+
+  @protected
+  SavedMealDto sse_decode_box_autoadd_saved_meal_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_saved_meal_dto(deserializer));
   }
 
   @protected
@@ -3127,6 +4318,14 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return (sse_decode_shopping_manual_item_dto(deserializer));
+  }
+
+  @protected
+  SlotOutcomeDto sse_decode_box_autoadd_slot_outcome_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_slot_outcome_dto(deserializer));
   }
 
   @protected
@@ -3269,6 +4468,291 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  DraftActionDto sse_decode_draft_action_dto(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var tag_ = sse_decode_i_32(deserializer);
+    switch (tag_) {
+      case 0:
+        var var_date = sse_decode_String(deserializer);
+        var var_slot = sse_decode_meal_slot_dto(deserializer);
+        return DraftActionDto_Another(date: var_date, slot: var_slot);
+      case 1:
+        return DraftActionDto_Alternatives();
+      case 2:
+        var var_date = sse_decode_String(deserializer);
+        var var_slot = sse_decode_meal_slot_dto(deserializer);
+        var var_locked = sse_decode_bool(deserializer);
+        return DraftActionDto_SetCommitment(
+          date: var_date,
+          slot: var_slot,
+          locked: var_locked,
+        );
+      case 3:
+        var var_date = sse_decode_String(deserializer);
+        var var_slot = sse_decode_meal_slot_dto(deserializer);
+        var var_components = sse_decode_list_meal_component_dto(deserializer);
+        var var_explicitReplace = sse_decode_bool(deserializer);
+        return DraftActionDto_Choose(
+          date: var_date,
+          slot: var_slot,
+          components: var_components,
+          explicitReplace: var_explicitReplace,
+        );
+      case 4:
+        return DraftActionDto_Undo();
+      case 5:
+        return DraftActionDto_Discard();
+      case 6:
+        var var_date = sse_decode_opt_String(deserializer);
+        var var_slot = sse_decode_opt_box_autoadd_meal_slot_dto(deserializer);
+        return DraftActionDto_Reconsider(date: var_date, slot: var_slot);
+      case 7:
+        var var_resolutions = sse_decode_list_review_resolution_dto(
+          deserializer,
+        );
+        return DraftActionDto_Review(resolutions: var_resolutions);
+      default:
+        throw UnimplementedError('');
+    }
+  }
+
+  @protected
+  DraftContextDto sse_decode_draft_context_dto(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_householdId = sse_decode_String(deserializer);
+    var var_today = sse_decode_String(deserializer);
+    var var_offsetCycles = sse_decode_i_32(deserializer);
+    return DraftContextDto(
+      householdId: var_householdId,
+      today: var_today,
+      offsetCycles: var_offsetCycles,
+    );
+  }
+
+  @protected
+  DraftEnvelopeDto sse_decode_draft_envelope_dto(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_context = sse_decode_draft_context_dto(deserializer);
+    var var_databaseSession = sse_decode_String(deserializer);
+    var var_draftId = sse_decode_String(deserializer);
+    var var_expectedRevision = sse_decode_i_64(deserializer);
+    var var_requestId = sse_decode_String(deserializer);
+    return DraftEnvelopeDto(
+      context: var_context,
+      databaseSession: var_databaseSession,
+      draftId: var_draftId,
+      expectedRevision: var_expectedRevision,
+      requestId: var_requestId,
+    );
+  }
+
+  @protected
+  DraftErrorKind sse_decode_draft_error_kind(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var inner = sse_decode_i_32(deserializer);
+    return DraftErrorKind.values[inner];
+  }
+
+  @protected
+  DraftOperationDto sse_decode_draft_operation_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_operation = sse_decode_String(deserializer);
+    var var_slots = sse_decode_list_slot_outcome_record_dto(deserializer);
+    return DraftOperationDto(operation: var_operation, slots: var_slots);
+  }
+
+  @protected
+  DraftSlotDto sse_decode_draft_slot_dto(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_date = sse_decode_String(deserializer);
+    var var_slot = sse_decode_meal_slot_dto(deserializer);
+    var var_components = sse_decode_list_meal_component_dto(deserializer);
+    var var_origin = sse_decode_slot_origin_dto(deserializer);
+    var var_committed = sse_decode_bool(deserializer);
+    var var_saved = sse_decode_opt_box_autoadd_saved_meal_dto(deserializer);
+    var var_editable = sse_decode_bool(deserializer);
+    var var_pending = sse_decode_bool(deserializer);
+    var var_inReview = sse_decode_bool(deserializer);
+    var var_state = sse_decode_coverage_state_dto(deserializer);
+    var var_reasonCodes = sse_decode_list_String(deserializer);
+    var var_outcome = sse_decode_opt_box_autoadd_slot_outcome_dto(deserializer);
+    var var_excluded = sse_decode_u_32(deserializer);
+    return DraftSlotDto(
+      date: var_date,
+      slot: var_slot,
+      components: var_components,
+      origin: var_origin,
+      committed: var_committed,
+      saved: var_saved,
+      editable: var_editable,
+      pending: var_pending,
+      inReview: var_inReview,
+      state: var_state,
+      reasonCodes: var_reasonCodes,
+      outcome: var_outcome,
+      excluded: var_excluded,
+    );
+  }
+
+  @protected
+  DraftStateDto sse_decode_draft_state_dto(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var inner = sse_decode_i_32(deserializer);
+    return DraftStateDto.values[inner];
+  }
+
+  @protected
+  DraftViewDto sse_decode_draft_view_dto(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_databaseSession = sse_decode_String(deserializer);
+    var var_draftId = sse_decode_String(deserializer);
+    var var_revision = sse_decode_i_64(deserializer);
+    var var_state = sse_decode_draft_state_dto(deserializer);
+    var var_anchor = sse_decode_String(deserializer);
+    var var_lengthDays = sse_decode_u_32(deserializer);
+    var var_slots = sse_decode_list_draft_slot_dto(deserializer);
+    var var_status = sse_decode_outcome_status_dto(deserializer);
+    var var_unresolvedIssues = sse_decode_list_String(deserializer);
+    var var_assumptions = sse_decode_list_String(deserializer);
+    var var_acceptAllowed = sse_decode_bool(deserializer);
+    var var_undoAvailable = sse_decode_bool(deserializer);
+    var var_pendingChanges = sse_decode_bool(deserializer);
+    var var_weekTargets = sse_decode_u_32(deserializer);
+    var var_excluded = sse_decode_u_32(deserializer);
+    var var_pastChangesDropped = sse_decode_u_32(deserializer);
+    var var_operation = sse_decode_opt_box_autoadd_draft_operation_dto(
+      deserializer,
+    );
+    var var_receipt = sse_decode_opt_box_autoadd_accept_receipt_dto(
+      deserializer,
+    );
+    var var_expired = sse_decode_list_expired_draft_dto(deserializer);
+    return DraftViewDto(
+      databaseSession: var_databaseSession,
+      draftId: var_draftId,
+      revision: var_revision,
+      state: var_state,
+      anchor: var_anchor,
+      lengthDays: var_lengthDays,
+      slots: var_slots,
+      status: var_status,
+      unresolvedIssues: var_unresolvedIssues,
+      assumptions: var_assumptions,
+      acceptAllowed: var_acceptAllowed,
+      undoAvailable: var_undoAvailable,
+      pendingChanges: var_pendingChanges,
+      weekTargets: var_weekTargets,
+      excluded: var_excluded,
+      pastChangesDropped: var_pastChangesDropped,
+      operation: var_operation,
+      receipt: var_receipt,
+      expired: var_expired,
+    );
+  }
+
+  @protected
+  ExperimentEventDto sse_decode_experiment_event_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_sessionId = sse_decode_String(deserializer);
+    var var_kind = sse_decode_experiment_event_kind_dto(deserializer);
+    var var_elapsedMs = sse_decode_u_64(deserializer);
+    var var_changed = sse_decode_u_32(deserializer);
+    var var_exhausted = sse_decode_u_32(deserializer);
+    var var_completed = sse_decode_bool(deserializer);
+    return ExperimentEventDto(
+      sessionId: var_sessionId,
+      kind: var_kind,
+      elapsedMs: var_elapsedMs,
+      changed: var_changed,
+      exhausted: var_exhausted,
+      completed: var_completed,
+    );
+  }
+
+  @protected
+  ExperimentEventKindDto sse_decode_experiment_event_kind_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var inner = sse_decode_i_32(deserializer);
+    return ExperimentEventKindDto.values[inner];
+  }
+
+  @protected
+  ExperimentLabelDto sse_decode_experiment_label_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_id = sse_decode_String(deserializer);
+    var var_label = sse_decode_String(deserializer);
+    return ExperimentLabelDto(id: var_id, label: var_label);
+  }
+
+  @protected
+  ExperimentSessionDto sse_decode_experiment_session_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_sessionId = sse_decode_String(deserializer);
+    var var_labelId = sse_decode_String(deserializer);
+    var var_label = sse_decode_String(deserializer);
+    var var_active = sse_decode_bool(deserializer);
+    var var_overridden = sse_decode_bool(deserializer);
+    return ExperimentSessionDto(
+      sessionId: var_sessionId,
+      labelId: var_labelId,
+      label: var_label,
+      active: var_active,
+      overridden: var_overridden,
+    );
+  }
+
+  @protected
+  ExperimentStatusDto sse_decode_experiment_status_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_enabled = sse_decode_bool(deserializer);
+    var var_nextEnabled = sse_decode_opt_box_autoadd_bool(deserializer);
+    var var_assigned = sse_decode_opt_String(deserializer);
+    var var_overrideLabel = sse_decode_opt_String(deserializer);
+    var var_overridePending = sse_decode_bool(deserializer);
+    var var_nextOverride = sse_decode_opt_String(deserializer);
+    var var_events = sse_decode_u_32(deserializer);
+    var var_dropped = sse_decode_u_64(deserializer);
+    var var_labels = sse_decode_list_experiment_label_dto(deserializer);
+    return ExperimentStatusDto(
+      enabled: var_enabled,
+      nextEnabled: var_nextEnabled,
+      assigned: var_assigned,
+      overrideLabel: var_overrideLabel,
+      overridePending: var_overridePending,
+      nextOverride: var_nextOverride,
+      events: var_events,
+      dropped: var_dropped,
+      labels: var_labels,
+    );
+  }
+
+  @protected
+  ExpiredDraftDto sse_decode_expired_draft_dto(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_draftId = sse_decode_String(deserializer);
+    var var_anchor = sse_decode_String(deserializer);
+    var var_lengthDays = sse_decode_u_32(deserializer);
+    return ExpiredDraftDto(
+      draftId: var_draftId,
+      anchor: var_anchor,
+      lengthDays: var_lengthDays,
+    );
+  }
+
+  @protected
   ExportReport sse_decode_export_report(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var var_path = sse_decode_String(deserializer);
@@ -3386,6 +4870,10 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         return KimattaError_Shopping(message: var_message);
       case 9:
         return KimattaError_RecipeQuarantined();
+      case 10:
+        var var_kind = sse_decode_draft_error_kind(deserializer);
+        var var_message = sse_decode_String(deserializer);
+        return KimattaError_Draft(kind: var_kind, message: var_message);
       default:
         throw UnimplementedError('');
     }
@@ -3487,6 +4975,48 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  List<DraftSlotDto> sse_decode_list_draft_slot_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <DraftSlotDto>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_draft_slot_dto(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
+  List<ExperimentLabelDto> sse_decode_list_experiment_label_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <ExperimentLabelDto>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_experiment_label_dto(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
+  List<ExpiredDraftDto> sse_decode_list_expired_draft_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <ExpiredDraftDto>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_expired_draft_dto(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
   List<IngredientLineDto> sse_decode_list_ingredient_line_dto(
     SseDeserializer deserializer,
   ) {
@@ -3524,6 +5054,20 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     var ans_ = <MealComponentDto>[];
     for (var idx_ = 0; idx_ < len_; ++idx_) {
       ans_.add(sse_decode_meal_component_dto(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
+  List<MealExclusionDto> sse_decode_list_meal_exclusion_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <MealExclusionDto>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_meal_exclusion_dto(deserializer));
     }
     return ans_;
   }
@@ -3653,6 +5197,20 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  List<ReviewResolutionDto> sse_decode_list_review_resolution_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <ReviewResolutionDto>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_review_resolution_dto(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
   List<ShoppingGroupDto> sse_decode_list_shopping_group_dto(
     SseDeserializer deserializer,
   ) {
@@ -3723,6 +5281,20 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  List<SlotOutcomeRecordDto> sse_decode_list_slot_outcome_record_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <SlotOutcomeRecordDto>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_slot_outcome_record_dto(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
   MealComponentDto sse_decode_meal_component_dto(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var var_kind = sse_decode_String(deserializer);
@@ -3734,6 +5306,52 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       recipeId: var_recipeId,
       note: var_note,
       scale: var_scale,
+    );
+  }
+
+  @protected
+  MealExclusionDto sse_decode_meal_exclusion_dto(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_policyId = sse_decode_String(deserializer);
+    var var_kind = sse_decode_meal_exclusion_kind_dto(deserializer);
+    return MealExclusionDto(policyId: var_policyId, kind: var_kind);
+  }
+
+  @protected
+  MealExclusionKindDto sse_decode_meal_exclusion_kind_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var tag_ = sse_decode_i_32(deserializer);
+    switch (tag_) {
+      case 0:
+        var var_identity = sse_decode_String(deserializer);
+        var var_title = sse_decode_opt_String(deserializer);
+        var var_available = sse_decode_bool(deserializer);
+        return MealExclusionKindDto_Dish(
+          identity: var_identity,
+          title: var_title,
+          available: var_available,
+        );
+      case 1:
+        var var_subject = sse_decode_String(deserializer);
+        return MealExclusionKindDto_Phrase(subject: var_subject);
+      default:
+        throw UnimplementedError('');
+    }
+  }
+
+  @protected
+  MealExclusionOutcomeDto sse_decode_meal_exclusion_outcome_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_exclusions = sse_decode_list_meal_exclusion_dto(deserializer);
+    var var_draft = sse_decode_opt_box_autoadd_draft_view_dto(deserializer);
+    return MealExclusionOutcomeDto(
+      exclusions: var_exclusions,
+      draft: var_draft,
     );
   }
 
@@ -3764,6 +5382,30 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  AcceptReceiptDto? sse_decode_opt_box_autoadd_accept_receipt_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    if (sse_decode_bool(deserializer)) {
+      return (sse_decode_box_autoadd_accept_receipt_dto(deserializer));
+    } else {
+      return null;
+    }
+  }
+
+  @protected
+  bool? sse_decode_opt_box_autoadd_bool(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    if (sse_decode_bool(deserializer)) {
+      return (sse_decode_box_autoadd_bool(deserializer));
+    } else {
+      return null;
+    }
+  }
+
+  @protected
   CandidateSourceDto? sse_decode_opt_box_autoadd_candidate_source_dto(
     SseDeserializer deserializer,
   ) {
@@ -3777,6 +5419,45 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  DraftEnvelopeDto? sse_decode_opt_box_autoadd_draft_envelope_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    if (sse_decode_bool(deserializer)) {
+      return (sse_decode_box_autoadd_draft_envelope_dto(deserializer));
+    } else {
+      return null;
+    }
+  }
+
+  @protected
+  DraftOperationDto? sse_decode_opt_box_autoadd_draft_operation_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    if (sse_decode_bool(deserializer)) {
+      return (sse_decode_box_autoadd_draft_operation_dto(deserializer));
+    } else {
+      return null;
+    }
+  }
+
+  @protected
+  DraftViewDto? sse_decode_opt_box_autoadd_draft_view_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    if (sse_decode_bool(deserializer)) {
+      return (sse_decode_box_autoadd_draft_view_dto(deserializer));
+    } else {
+      return null;
+    }
+  }
+
+  @protected
   IngredientRefDto? sse_decode_opt_box_autoadd_ingredient_ref_dto(
     SseDeserializer deserializer,
   ) {
@@ -3784,6 +5465,19 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
 
     if (sse_decode_bool(deserializer)) {
       return (sse_decode_box_autoadd_ingredient_ref_dto(deserializer));
+    } else {
+      return null;
+    }
+  }
+
+  @protected
+  MealSlotDto? sse_decode_opt_box_autoadd_meal_slot_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    if (sse_decode_bool(deserializer)) {
+      return (sse_decode_box_autoadd_meal_slot_dto(deserializer));
     } else {
       return null;
     }
@@ -3830,6 +5524,19 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  SavedMealDto? sse_decode_opt_box_autoadd_saved_meal_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    if (sse_decode_bool(deserializer)) {
+      return (sse_decode_box_autoadd_saved_meal_dto(deserializer));
+    } else {
+      return null;
+    }
+  }
+
+  @protected
   ScaleDto? sse_decode_opt_box_autoadd_scale_dto(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
 
@@ -3848,6 +5555,19 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
 
     if (sse_decode_bool(deserializer)) {
       return (sse_decode_box_autoadd_separate_reason_dto(deserializer));
+    } else {
+      return null;
+    }
+  }
+
+  @protected
+  SlotOutcomeDto? sse_decode_opt_box_autoadd_slot_outcome_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    if (sse_decode_bool(deserializer)) {
+      return (sse_decode_box_autoadd_slot_outcome_dto(deserializer));
     } else {
       return null;
     }
@@ -4154,6 +5874,23 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  RemoveMealExclusionDto sse_decode_remove_meal_exclusion_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_context = sse_decode_draft_context_dto(deserializer);
+    var var_policyId = sse_decode_String(deserializer);
+    var var_acting = sse_decode_opt_box_autoadd_draft_envelope_dto(
+      deserializer,
+    );
+    return RemoveMealExclusionDto(
+      context: var_context,
+      policyId: var_policyId,
+      acting: var_acting,
+    );
+  }
+
+  @protected
   RequiredAuthorityDto sse_decode_required_authority_dto(
     SseDeserializer deserializer,
   ) {
@@ -4203,6 +5940,29 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var inner = sse_decode_i_32(deserializer);
     return ReversibilityDto.values[inner];
+  }
+
+  @protected
+  ReviewResolutionDto sse_decode_review_resolution_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_date = sse_decode_String(deserializer);
+    var var_slot = sse_decode_meal_slot_dto(deserializer);
+    var var_useSaved = sse_decode_bool(deserializer);
+    return ReviewResolutionDto(
+      date: var_date,
+      slot: var_slot,
+      useSaved: var_useSaved,
+    );
+  }
+
+  @protected
+  SavedMealDto sse_decode_saved_meal_dto(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_components = sse_decode_list_meal_component_dto(deserializer);
+    var var_locked = sse_decode_bool(deserializer);
+    return SavedMealDto(components: var_components, locked: var_locked);
   }
 
   @protected
@@ -4383,6 +6143,35 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  SlotOriginDto sse_decode_slot_origin_dto(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var inner = sse_decode_i_32(deserializer);
+    return SlotOriginDto.values[inner];
+  }
+
+  @protected
+  SlotOutcomeDto sse_decode_slot_outcome_dto(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var inner = sse_decode_i_32(deserializer);
+    return SlotOutcomeDto.values[inner];
+  }
+
+  @protected
+  SlotOutcomeRecordDto sse_decode_slot_outcome_record_dto(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_date = sse_decode_String(deserializer);
+    var var_slot = sse_decode_meal_slot_dto(deserializer);
+    var var_outcome = sse_decode_slot_outcome_dto(deserializer);
+    return SlotOutcomeRecordDto(
+      date: var_date,
+      slot: var_slot,
+      outcome: var_outcome,
+    );
+  }
+
+  @protected
   StarterInstallReportDto sse_decode_starter_install_report_dto(
     SseDeserializer deserializer,
   ) {
@@ -4405,6 +6194,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   int sse_decode_u_32(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return deserializer.buffer.getUint32();
+  }
+
+  @protected
+  BigInt sse_decode_u_64(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return deserializer.buffer.getBigUint64();
   }
 
   @protected
@@ -4451,6 +6246,16 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_accept_receipt_dto(
+    AcceptReceiptDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.ledgerEntryId, serializer);
+    sse_encode_u_32(self.changedSlots, serializer);
+  }
+
+  @protected
   void sse_encode_action_proposal_dto(
     ActionProposalDto self,
     SseSerializer serializer,
@@ -4465,6 +6270,17 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_required_authority_dto(self.requiredAuthority, serializer);
     sse_encode_opt_String(self.deadline, serializer);
     sse_encode_list_String(self.reasonCodes, serializer);
+  }
+
+  @protected
+  void sse_encode_add_meal_exclusions_dto(
+    AddMealExclusionsDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_draft_context_dto(self.context, serializer);
+    sse_encode_list_String(self.dishes, serializer);
+    sse_encode_opt_box_autoadd_draft_envelope_dto(self.acting, serializer);
   }
 
   @protected
@@ -4496,6 +6312,30 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_box_autoadd_accept_receipt_dto(
+    AcceptReceiptDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_accept_receipt_dto(self, serializer);
+  }
+
+  @protected
+  void sse_encode_box_autoadd_add_meal_exclusions_dto(
+    AddMealExclusionsDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_add_meal_exclusions_dto(self, serializer);
+  }
+
+  @protected
+  void sse_encode_box_autoadd_bool(bool self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_bool(self, serializer);
+  }
+
+  @protected
   void sse_encode_box_autoadd_candidate_source_dto(
     CandidateSourceDto self,
     SseSerializer serializer,
@@ -4523,12 +6363,75 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_box_autoadd_draft_action_dto(
+    DraftActionDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_draft_action_dto(self, serializer);
+  }
+
+  @protected
+  void sse_encode_box_autoadd_draft_context_dto(
+    DraftContextDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_draft_context_dto(self, serializer);
+  }
+
+  @protected
+  void sse_encode_box_autoadd_draft_envelope_dto(
+    DraftEnvelopeDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_draft_envelope_dto(self, serializer);
+  }
+
+  @protected
+  void sse_encode_box_autoadd_draft_operation_dto(
+    DraftOperationDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_draft_operation_dto(self, serializer);
+  }
+
+  @protected
+  void sse_encode_box_autoadd_draft_view_dto(
+    DraftViewDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_draft_view_dto(self, serializer);
+  }
+
+  @protected
+  void sse_encode_box_autoadd_experiment_event_dto(
+    ExperimentEventDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_experiment_event_dto(self, serializer);
+  }
+
+  @protected
   void sse_encode_box_autoadd_ingredient_ref_dto(
     IngredientRefDto self,
     SseSerializer serializer,
   ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_ingredient_ref_dto(self, serializer);
+  }
+
+  @protected
+  void sse_encode_box_autoadd_meal_slot_dto(
+    MealSlotDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_meal_slot_dto(self, serializer);
   }
 
   @protected
@@ -4559,12 +6462,30 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_box_autoadd_remove_meal_exclusion_dto(
+    RemoveMealExclusionDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_remove_meal_exclusion_dto(self, serializer);
+  }
+
+  @protected
   void sse_encode_box_autoadd_restriction_assessment_dto(
     RestrictionAssessmentDto self,
     SseSerializer serializer,
   ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_restriction_assessment_dto(self, serializer);
+  }
+
+  @protected
+  void sse_encode_box_autoadd_saved_meal_dto(
+    SavedMealDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_saved_meal_dto(self, serializer);
   }
 
   @protected
@@ -4601,6 +6522,15 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_shopping_manual_item_dto(self, serializer);
+  }
+
+  @protected
+  void sse_encode_box_autoadd_slot_outcome_dto(
+    SlotOutcomeDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_slot_outcome_dto(self, serializer);
   }
 
   @protected
@@ -4709,6 +6639,221 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_draft_action_dto(
+    DraftActionDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    switch (self) {
+      case DraftActionDto_Another(date: final date, slot: final slot):
+        sse_encode_i_32(0, serializer);
+        sse_encode_String(date, serializer);
+        sse_encode_meal_slot_dto(slot, serializer);
+      case DraftActionDto_Alternatives():
+        sse_encode_i_32(1, serializer);
+      case DraftActionDto_SetCommitment(
+        date: final date,
+        slot: final slot,
+        locked: final locked,
+      ):
+        sse_encode_i_32(2, serializer);
+        sse_encode_String(date, serializer);
+        sse_encode_meal_slot_dto(slot, serializer);
+        sse_encode_bool(locked, serializer);
+      case DraftActionDto_Choose(
+        date: final date,
+        slot: final slot,
+        components: final components,
+        explicitReplace: final explicitReplace,
+      ):
+        sse_encode_i_32(3, serializer);
+        sse_encode_String(date, serializer);
+        sse_encode_meal_slot_dto(slot, serializer);
+        sse_encode_list_meal_component_dto(components, serializer);
+        sse_encode_bool(explicitReplace, serializer);
+      case DraftActionDto_Undo():
+        sse_encode_i_32(4, serializer);
+      case DraftActionDto_Discard():
+        sse_encode_i_32(5, serializer);
+      case DraftActionDto_Reconsider(date: final date, slot: final slot):
+        sse_encode_i_32(6, serializer);
+        sse_encode_opt_String(date, serializer);
+        sse_encode_opt_box_autoadd_meal_slot_dto(slot, serializer);
+      case DraftActionDto_Review(resolutions: final resolutions):
+        sse_encode_i_32(7, serializer);
+        sse_encode_list_review_resolution_dto(resolutions, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_draft_context_dto(
+    DraftContextDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.householdId, serializer);
+    sse_encode_String(self.today, serializer);
+    sse_encode_i_32(self.offsetCycles, serializer);
+  }
+
+  @protected
+  void sse_encode_draft_envelope_dto(
+    DraftEnvelopeDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_draft_context_dto(self.context, serializer);
+    sse_encode_String(self.databaseSession, serializer);
+    sse_encode_String(self.draftId, serializer);
+    sse_encode_i_64(self.expectedRevision, serializer);
+    sse_encode_String(self.requestId, serializer);
+  }
+
+  @protected
+  void sse_encode_draft_error_kind(
+    DraftErrorKind self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.index, serializer);
+  }
+
+  @protected
+  void sse_encode_draft_operation_dto(
+    DraftOperationDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.operation, serializer);
+    sse_encode_list_slot_outcome_record_dto(self.slots, serializer);
+  }
+
+  @protected
+  void sse_encode_draft_slot_dto(DraftSlotDto self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.date, serializer);
+    sse_encode_meal_slot_dto(self.slot, serializer);
+    sse_encode_list_meal_component_dto(self.components, serializer);
+    sse_encode_slot_origin_dto(self.origin, serializer);
+    sse_encode_bool(self.committed, serializer);
+    sse_encode_opt_box_autoadd_saved_meal_dto(self.saved, serializer);
+    sse_encode_bool(self.editable, serializer);
+    sse_encode_bool(self.pending, serializer);
+    sse_encode_bool(self.inReview, serializer);
+    sse_encode_coverage_state_dto(self.state, serializer);
+    sse_encode_list_String(self.reasonCodes, serializer);
+    sse_encode_opt_box_autoadd_slot_outcome_dto(self.outcome, serializer);
+    sse_encode_u_32(self.excluded, serializer);
+  }
+
+  @protected
+  void sse_encode_draft_state_dto(
+    DraftStateDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.index, serializer);
+  }
+
+  @protected
+  void sse_encode_draft_view_dto(DraftViewDto self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.databaseSession, serializer);
+    sse_encode_String(self.draftId, serializer);
+    sse_encode_i_64(self.revision, serializer);
+    sse_encode_draft_state_dto(self.state, serializer);
+    sse_encode_String(self.anchor, serializer);
+    sse_encode_u_32(self.lengthDays, serializer);
+    sse_encode_list_draft_slot_dto(self.slots, serializer);
+    sse_encode_outcome_status_dto(self.status, serializer);
+    sse_encode_list_String(self.unresolvedIssues, serializer);
+    sse_encode_list_String(self.assumptions, serializer);
+    sse_encode_bool(self.acceptAllowed, serializer);
+    sse_encode_bool(self.undoAvailable, serializer);
+    sse_encode_bool(self.pendingChanges, serializer);
+    sse_encode_u_32(self.weekTargets, serializer);
+    sse_encode_u_32(self.excluded, serializer);
+    sse_encode_u_32(self.pastChangesDropped, serializer);
+    sse_encode_opt_box_autoadd_draft_operation_dto(self.operation, serializer);
+    sse_encode_opt_box_autoadd_accept_receipt_dto(self.receipt, serializer);
+    sse_encode_list_expired_draft_dto(self.expired, serializer);
+  }
+
+  @protected
+  void sse_encode_experiment_event_dto(
+    ExperimentEventDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.sessionId, serializer);
+    sse_encode_experiment_event_kind_dto(self.kind, serializer);
+    sse_encode_u_64(self.elapsedMs, serializer);
+    sse_encode_u_32(self.changed, serializer);
+    sse_encode_u_32(self.exhausted, serializer);
+    sse_encode_bool(self.completed, serializer);
+  }
+
+  @protected
+  void sse_encode_experiment_event_kind_dto(
+    ExperimentEventKindDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.index, serializer);
+  }
+
+  @protected
+  void sse_encode_experiment_label_dto(
+    ExperimentLabelDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.id, serializer);
+    sse_encode_String(self.label, serializer);
+  }
+
+  @protected
+  void sse_encode_experiment_session_dto(
+    ExperimentSessionDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.sessionId, serializer);
+    sse_encode_String(self.labelId, serializer);
+    sse_encode_String(self.label, serializer);
+    sse_encode_bool(self.active, serializer);
+    sse_encode_bool(self.overridden, serializer);
+  }
+
+  @protected
+  void sse_encode_experiment_status_dto(
+    ExperimentStatusDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_bool(self.enabled, serializer);
+    sse_encode_opt_box_autoadd_bool(self.nextEnabled, serializer);
+    sse_encode_opt_String(self.assigned, serializer);
+    sse_encode_opt_String(self.overrideLabel, serializer);
+    sse_encode_bool(self.overridePending, serializer);
+    sse_encode_opt_String(self.nextOverride, serializer);
+    sse_encode_u_32(self.events, serializer);
+    sse_encode_u_64(self.dropped, serializer);
+    sse_encode_list_experiment_label_dto(self.labels, serializer);
+  }
+
+  @protected
+  void sse_encode_expired_draft_dto(
+    ExpiredDraftDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.draftId, serializer);
+    sse_encode_String(self.anchor, serializer);
+    sse_encode_u_32(self.lengthDays, serializer);
+  }
+
+  @protected
   void sse_encode_export_report(ExportReport self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_String(self.path, serializer);
@@ -4805,6 +6950,10 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         sse_encode_String(message, serializer);
       case KimattaError_RecipeQuarantined():
         sse_encode_i_32(9, serializer);
+      case KimattaError_Draft(kind: final kind, message: final message):
+        sse_encode_i_32(10, serializer);
+        sse_encode_draft_error_kind(kind, serializer);
+        sse_encode_String(message, serializer);
     }
   }
 
@@ -4890,6 +7039,42 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_list_draft_slot_dto(
+    List<DraftSlotDto> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_draft_slot_dto(item, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_list_experiment_label_dto(
+    List<ExperimentLabelDto> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_experiment_label_dto(item, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_list_expired_draft_dto(
+    List<ExpiredDraftDto> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_expired_draft_dto(item, serializer);
+    }
+  }
+
+  @protected
   void sse_encode_list_ingredient_line_dto(
     List<IngredientLineDto> self,
     SseSerializer serializer,
@@ -4922,6 +7107,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_i_32(self.length, serializer);
     for (final item in self) {
       sse_encode_meal_component_dto(item, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_list_meal_exclusion_dto(
+    List<MealExclusionDto> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_meal_exclusion_dto(item, serializer);
     }
   }
 
@@ -5042,6 +7239,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_list_review_resolution_dto(
+    List<ReviewResolutionDto> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_review_resolution_dto(item, serializer);
+    }
+  }
+
+  @protected
   void sse_encode_list_shopping_group_dto(
     List<ShoppingGroupDto> self,
     SseSerializer serializer,
@@ -5102,6 +7311,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_list_slot_outcome_record_dto(
+    List<SlotOutcomeRecordDto> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_slot_outcome_record_dto(item, serializer);
+    }
+  }
+
+  @protected
   void sse_encode_meal_component_dto(
     MealComponentDto self,
     SseSerializer serializer,
@@ -5111,6 +7332,48 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_opt_String(self.recipeId, serializer);
     sse_encode_opt_String(self.note, serializer);
     sse_encode_opt_box_autoadd_scale_dto(self.scale, serializer);
+  }
+
+  @protected
+  void sse_encode_meal_exclusion_dto(
+    MealExclusionDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.policyId, serializer);
+    sse_encode_meal_exclusion_kind_dto(self.kind, serializer);
+  }
+
+  @protected
+  void sse_encode_meal_exclusion_kind_dto(
+    MealExclusionKindDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    switch (self) {
+      case MealExclusionKindDto_Dish(
+        identity: final identity,
+        title: final title,
+        available: final available,
+      ):
+        sse_encode_i_32(0, serializer);
+        sse_encode_String(identity, serializer);
+        sse_encode_opt_String(title, serializer);
+        sse_encode_bool(available, serializer);
+      case MealExclusionKindDto_Phrase(subject: final subject):
+        sse_encode_i_32(1, serializer);
+        sse_encode_String(subject, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_meal_exclusion_outcome_dto(
+    MealExclusionOutcomeDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_list_meal_exclusion_dto(self.exclusions, serializer);
+    sse_encode_opt_box_autoadd_draft_view_dto(self.draft, serializer);
   }
 
   @protected
@@ -5137,6 +7400,29 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_opt_box_autoadd_accept_receipt_dto(
+    AcceptReceiptDto? self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    sse_encode_bool(self != null, serializer);
+    if (self != null) {
+      sse_encode_box_autoadd_accept_receipt_dto(self, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_opt_box_autoadd_bool(bool? self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    sse_encode_bool(self != null, serializer);
+    if (self != null) {
+      sse_encode_box_autoadd_bool(self, serializer);
+    }
+  }
+
+  @protected
   void sse_encode_opt_box_autoadd_candidate_source_dto(
     CandidateSourceDto? self,
     SseSerializer serializer,
@@ -5150,6 +7436,45 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_opt_box_autoadd_draft_envelope_dto(
+    DraftEnvelopeDto? self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    sse_encode_bool(self != null, serializer);
+    if (self != null) {
+      sse_encode_box_autoadd_draft_envelope_dto(self, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_opt_box_autoadd_draft_operation_dto(
+    DraftOperationDto? self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    sse_encode_bool(self != null, serializer);
+    if (self != null) {
+      sse_encode_box_autoadd_draft_operation_dto(self, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_opt_box_autoadd_draft_view_dto(
+    DraftViewDto? self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    sse_encode_bool(self != null, serializer);
+    if (self != null) {
+      sse_encode_box_autoadd_draft_view_dto(self, serializer);
+    }
+  }
+
+  @protected
   void sse_encode_opt_box_autoadd_ingredient_ref_dto(
     IngredientRefDto? self,
     SseSerializer serializer,
@@ -5159,6 +7484,19 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_bool(self != null, serializer);
     if (self != null) {
       sse_encode_box_autoadd_ingredient_ref_dto(self, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_opt_box_autoadd_meal_slot_dto(
+    MealSlotDto? self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    sse_encode_bool(self != null, serializer);
+    if (self != null) {
+      sse_encode_box_autoadd_meal_slot_dto(self, serializer);
     }
   }
 
@@ -5202,6 +7540,19 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_opt_box_autoadd_saved_meal_dto(
+    SavedMealDto? self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    sse_encode_bool(self != null, serializer);
+    if (self != null) {
+      sse_encode_box_autoadd_saved_meal_dto(self, serializer);
+    }
+  }
+
+  @protected
   void sse_encode_opt_box_autoadd_scale_dto(
     ScaleDto? self,
     SseSerializer serializer,
@@ -5224,6 +7575,19 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_bool(self != null, serializer);
     if (self != null) {
       sse_encode_box_autoadd_separate_reason_dto(self, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_opt_box_autoadd_slot_outcome_dto(
+    SlotOutcomeDto? self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    sse_encode_bool(self != null, serializer);
+    if (self != null) {
+      sse_encode_box_autoadd_slot_outcome_dto(self, serializer);
     }
   }
 
@@ -5454,6 +7818,17 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_remove_meal_exclusion_dto(
+    RemoveMealExclusionDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_draft_context_dto(self.context, serializer);
+    sse_encode_String(self.policyId, serializer);
+    sse_encode_opt_box_autoadd_draft_envelope_dto(self.acting, serializer);
+  }
+
+  @protected
   void sse_encode_required_authority_dto(
     RequiredAuthorityDto self,
     SseSerializer serializer,
@@ -5498,6 +7873,24 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   ) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_i_32(self.index, serializer);
+  }
+
+  @protected
+  void sse_encode_review_resolution_dto(
+    ReviewResolutionDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.date, serializer);
+    sse_encode_meal_slot_dto(self.slot, serializer);
+    sse_encode_bool(self.useSaved, serializer);
+  }
+
+  @protected
+  void sse_encode_saved_meal_dto(SavedMealDto self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_list_meal_component_dto(self.components, serializer);
+    sse_encode_bool(self.locked, serializer);
   }
 
   @protected
@@ -5636,6 +8029,35 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_slot_origin_dto(
+    SlotOriginDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.index, serializer);
+  }
+
+  @protected
+  void sse_encode_slot_outcome_dto(
+    SlotOutcomeDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.index, serializer);
+  }
+
+  @protected
+  void sse_encode_slot_outcome_record_dto(
+    SlotOutcomeRecordDto self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.date, serializer);
+    sse_encode_meal_slot_dto(self.slot, serializer);
+    sse_encode_slot_outcome_dto(self.outcome, serializer);
+  }
+
+  @protected
   void sse_encode_starter_install_report_dto(
     StarterInstallReportDto self,
     SseSerializer serializer,
@@ -5652,6 +8074,12 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   void sse_encode_u_32(int self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     serializer.buffer.putUint32(self);
+  }
+
+  @protected
+  void sse_encode_u_64(BigInt self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    serializer.buffer.putBigUint64(self);
   }
 
   @protected

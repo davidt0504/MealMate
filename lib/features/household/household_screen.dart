@@ -46,6 +46,9 @@ String describeFailure(
   // Added with the variant itself (MVP-016), as every arm above was, so the shopping
   // screen cannot surface a raw freezed `toString()`.
   KimattaError_Shopping(:final message) => '$subject unavailable: $message',
+  // A refused draft command (OPT-007): Rust sends user prose, and the command was refused
+  // rather than the subject being unavailable.
+  KimattaError_Draft(:final message) => '$subject: $message',
   _ => '$subject unavailable: $error',
 };
 

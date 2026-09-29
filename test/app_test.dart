@@ -1,7 +1,5 @@
 import 'dart:async';
 
-import 'package:flutter_rust_bridge/flutter_rust_bridge.dart' show Int64List;
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -41,6 +39,9 @@ import 'package:meal_mate/features/planning/cover_copy.dart';
 import 'package:meal_mate/features/planning/cover_provider.dart';
 import 'package:meal_mate/src/rust/api/decisions.dart';
 import 'package:meal_mate/src/rust/api/planner.dart';
+import 'package:meal_mate/src/rust/api/planning_drafts.dart';
+import 'package:meal_mate/src/rust/api/experiment.dart';
+import 'package:meal_mate/features/planning/experiment_provider.dart';
 import 'package:meal_mate/features/shopping/shopping_copy.dart';
 import 'package:meal_mate/features/shopping/shopping_provider.dart';
 import 'package:meal_mate/src/rust/api/shopping.dart';
@@ -599,8 +600,7 @@ class _FakePantryNotifier extends PantryNotifier {
   _setMark;
   final Future<PantryEntryDto> Function(String, IngredientRefDto, bool)?
   _setRestockFlag;
-  final Future<PantryEntryDto> Function(String, IngredientRefDto)?
-  _setUsedUp;
+  final Future<PantryEntryDto> Function(String, IngredientRefDto)? _setUsedUp;
 
   @override
   Future<List<PantryEntryDto>> fetchPantry(String householdId) async =>
@@ -643,9 +643,7 @@ class _FakePantryNotifier extends PantryNotifier {
   ) async {
     final fake = _setUsedUp;
     if (fake == null) {
-      throw StateError(
-        'this test taps Used up without a `setUsedUp:` hook',
-      );
+      throw StateError('this test taps Used up without a `setUsedUp:` hook');
     }
     return fake(householdId, ingredient);
   }
@@ -1131,7 +1129,8 @@ Widget harness({
   Future<StarterInstallReportDto> Function(String)? starterInstall,
   FutureOr<List<PantryEntryDto>> Function()? pantry,
   Future<PantryEntryDto> Function(String, IngredientRefDto, bool)? setMark,
-  Future<PantryEntryDto> Function(String, IngredientRefDto, bool)? setRestockFlag,
+  Future<PantryEntryDto> Function(String, IngredientRefDto, bool)?
+  setRestockFlag,
   Future<PantryEntryDto> Function(String, IngredientRefDto)? usedUp,
   FutureOr<List<String>> Function()? storeCategories,
   FutureOr<PlanningCycleDto> Function(int)? cycleWindow,
@@ -1147,15 +1146,30 @@ Widget harness({
   Future<void> Function(String, String)? resetShopping,
   Future<List<IngredientRefDto>> Function(List<IngredientRefDto>, bool)?
   setPantryMarks,
-  FutureOr<CoverCycleOutcomeDto> Function(CoverCycleRequestDto)? cover,
-  Future<PlanDecisionOutcomeDto> Function(PlanDecisionRequestDto)? decide,
+  CoverFake? cover,
+  ExperimentFake? experiment,
+  bool tester = false,
+  FutureOr<List<MealExclusionDto>> Function()? mealExclusions,
+  Future<MealExclusionOutcomeDto> Function(RemoveMealExclusionDto)? removeRule,
   BackupActions? backup,
 }) => ProviderScope(
   overrides: [
     appearanceProvider.overrideWith(() => _FakeAppearanceNotifier(appearance)),
     // Unconditional, like the planner's: the Cover route is reachable from Plan, and an
     // un-overridden provider would reach the real bridge.
-    coverProvider.overrideWith(() => _FakeCoverNotifier(cover, decide)),
+    coverProvider.overrideWith(() => _FakeCoverNotifier(cover ?? CoverFake())),
+    // Unconditional: Cover starts an experiment session on every visit, and the real seams
+    // would reach path_provider and the bridge.
+    experimentDirProvider.overrideWith((_) async => '/support'),
+    experimentBackendProvider.overrideWithValue(experiment ?? ExperimentFake()),
+    activeClockProvider.overrideWith(
+      (_) => experiment?.clock ?? ManualStopwatch(),
+    ),
+    testerModeProvider.overrideWithValue(tester),
+    // Unconditional: Settings lists the rules, and the real notifier would reach the bridge.
+    mealExclusionsProvider.overrideWith(
+      () => _FakeMealExclusionsNotifier(mealExclusions, removeRule),
+    ),
     // Unconditional, as the planner override is: the destinations, restoration,
     // accessibility and text-scale tests all visit Shopping.
     shoppingProvider.overrideWith(
@@ -1257,84 +1271,290 @@ class _FakeAppearanceNotifier extends AppearanceNotifier {
   AppearanceSelection build() => _initial;
 }
 
-/// A Cover outcome, defaults benign: one covered slot, no attention, quiet assumptions.
-CoverCycleOutcomeDto coverOutcome({
-  OutcomeStatusDto status = OutcomeStatusDto.covered,
-  List<SlotCoverageDto> slots = const [
-    SlotCoverageDto(
-      date: '2026-08-29',
-      slot: MealSlotDto.dinner,
-      state: CoverageStateDto.covered,
-      components: [MealComponentDto(kind: 'recipe', recipeId: 'r-1')],
-      reasonCodes: [],
-    ),
+/// One draft slot, defaults benign: `okSummary`'s recipe on the first dinner, suggested.
+DraftSlotDto draftSlot({
+  String date = '2026-08-29',
+  MealSlotDto slot = MealSlotDto.dinner,
+  List<MealComponentDto> components = const [
+    MealComponentDto(kind: 'recipe', recipeId: 'r-1'),
   ],
-  List<AttentionRequestDto> attention = const [],
+  SlotOriginDto origin = SlotOriginDto.suggested,
+  bool committed = false,
+  SavedMealDto? saved,
+  bool editable = true,
+  bool pending = true,
+  bool inReview = false,
+  CoverageStateDto state = CoverageStateDto.covered,
+  List<String> reasonCodes = const [],
+  SlotOutcomeDto? outcome,
+}) => DraftSlotDto(
+  date: date,
+  slot: slot,
+  components: components,
+  origin: origin,
+  committed: committed,
+  saved: saved,
+  editable: editable,
+  pending: pending,
+  inReview: inReview,
+  state: state,
+  reasonCodes: reasonCodes,
+  outcome: outcome,
+  excluded: 0,
+);
+
+/// A draft view, defaults benign: one covered, pending, acceptable suggestion.
+DraftViewDto draftView({
+  String session = 's-1',
+  String draftId = 'd-1',
+  int revision = 0,
+  DraftStateDto state = DraftStateDto.active,
+  List<DraftSlotDto>? slots,
+  OutcomeStatusDto status = OutcomeStatusDto.covered,
   List<String> assumptions = const ['PANTRY_INCOMPLETE'],
-  bool applied = false,
-}) => CoverCycleOutcomeDto(
-  result: PlanningResultDto(
-    algorithmVersion: 2,
-    snapshotHash: 'aaaaaaaaaaaaaaaa',
+  bool acceptAllowed = true,
+  bool undoAvailable = false,
+  bool? pendingChanges,
+  int weekTargets = 1,
+  DraftOperationDto? operation,
+  AcceptReceiptDto? receipt,
+  List<ExpiredDraftDto> expired = const [],
+  int pastChangesDropped = 0,
+}) {
+  final all = slots ?? [draftSlot()];
+  return DraftViewDto(
+    databaseSession: session,
+    draftId: draftId,
+    revision: revision,
+    state: state,
+    anchor: '2026-08-29',
+    lengthDays: 7,
+    slots: all,
     status: status,
-    horizonFrom: '2026-08-29',
-    horizonTo: '2026-09-04',
-    slots: slots,
-    proposed: const [],
-    rejections: const [],
     unresolvedIssues: const [],
     assumptions: assumptions,
-    reasonCodes: const [],
-    proposals: const [],
-    attention: attention,
-    search: const SearchTraceDto(
-      beamWidth: 8,
-      candidatesPerSlot: 12,
-      slotOrder: 'chronological',
-      statesScored: 1,
-    ),
-    scoreTiers: Int64List(6),
-  ),
-  ledgerEntryId: 'le-1',
-  applied: applied,
-  changedSlots: applied ? 1 : 0,
+    acceptAllowed: acceptAllowed,
+    undoAvailable: undoAvailable,
+    pendingChanges: pendingChanges ?? all.any((s) => s.pending && s.editable),
+    weekTargets: weekTargets,
+    excluded: 0,
+    pastChangesDropped: pastChangesDropped,
+    operation: operation,
+    receipt: receipt,
+    expired: expired,
+  );
+}
+
+/// What Accept returns: the saved plan and a receipt.
+DraftViewDto acceptedView({String session = 's-1'}) => draftView(
+  session: session,
+  revision: 1,
+  state: DraftStateDto.accepted,
+  slots: [draftSlot(origin: SlotOriginDto.saved, pending: false)],
+  acceptAllowed: false,
+  weekTargets: 0,
+  receipt: const AcceptReceiptDto(ledgerEntryId: 'le-1', changedSlots: 1),
 );
 
-AttentionRequestDto attentionRequest({
-  String id = 'food:infeasible:2026-08-29:dinner',
-  UrgencyDto urgency = UrgencyDto.high,
-  List<String> options = const [],
-  List<String> codes = const ['PLAN_INFEASIBLE'],
-}) => AttentionRequestDto(
-  id: id,
-  controllerId: 'food',
-  urgency: urgency,
-  decisionBenefitBand: BandDto.high,
-  estimatedEffortBand: BandDto.low,
-  options: options,
-  reasonCodes: codes,
-);
+/// The draft backend, scripted: every command is recorded, and a test supplies only the
+/// answers it cares about. Unscripted mutations fail loudly rather than pass silently.
+class CoverFake {
+  CoverFake({
+    this.open,
+    this.mutate,
+    this.accept,
+    this.exclude,
+    this.inspect,
+    this.decide,
+  });
 
-/// The Cover seams, faked like every other notifier: `cover` maps `apply` to an outcome;
-/// `decide` captures the decision requests the screen issues.
+  final FutureOr<DraftViewDto> Function(DraftContextDto)? open;
+  final FutureOr<DraftViewDto> Function(DraftEnvelopeDto, DraftActionDto)?
+  mutate;
+  final FutureOr<DraftViewDto> Function(DraftEnvelopeDto)? accept;
+  final FutureOr<MealExclusionOutcomeDto> Function(AddMealExclusionsDto)?
+  exclude;
+  final FutureOr<DraftViewDto> Function(String)? inspect;
+  final FutureOr<PlanDecisionOutcomeDto> Function(PlanDecisionRequestDto)?
+  decide;
+
+  final opens = <DraftContextDto>[];
+  final mutations = <(DraftEnvelopeDto, DraftActionDto)>[];
+  final accepts = <DraftEnvelopeDto>[];
+  final exclusions = <AddMealExclusionsDto>[];
+  final decisions = <PlanDecisionRequestDto>[];
+}
+
 class _FakeCoverNotifier extends CoverNotifier {
-  _FakeCoverNotifier(this._cover, this._decide);
+  _FakeCoverNotifier(this._fake);
 
-  final FutureOr<CoverCycleOutcomeDto> Function(CoverCycleRequestDto)? _cover;
-  final Future<PlanDecisionOutcomeDto> Function(PlanDecisionRequestDto)?
-  _decide;
+  final CoverFake _fake;
 
   @override
-  Future<CoverCycleOutcomeDto> runCover(CoverCycleRequestDto request) async =>
-      (_cover ?? (_) => coverOutcome())(request);
+  Future<DraftViewDto> openDraft(DraftContextDto context) async {
+    _fake.opens.add(context);
+    return (_fake.open ?? (_) => draftView())(context);
+  }
+
+  @override
+  Future<DraftViewDto> mutateDraft(
+    DraftEnvelopeDto envelope,
+    DraftActionDto action,
+  ) async {
+    _fake.mutations.add((envelope, action));
+    final fake = _fake.mutate;
+    if (fake == null) {
+      throw StateError('this test mutates a draft without a `mutate:` hook');
+    }
+    return fake(envelope, action);
+  }
+
+  @override
+  Future<DraftViewDto> acceptDraft(DraftEnvelopeDto envelope) async {
+    _fake.accepts.add(envelope);
+    return (_fake.accept ?? (_) => acceptedView())(envelope);
+  }
+
+  @override
+  Future<MealExclusionOutcomeDto> addExclusions(
+    AddMealExclusionsDto request,
+  ) async {
+    _fake.exclusions.add(request);
+    final fake = _fake.exclude;
+    if (fake == null) {
+      throw StateError('this test excludes a meal without an `exclude:` hook');
+    }
+    return fake(request);
+  }
+
+  @override
+  Future<DraftViewDto> inspectDraft(
+    DraftContextDto context,
+    String draftId,
+  ) async => (_fake.inspect ?? (_) => draftView(draftId: draftId))(draftId);
 
   @override
   Future<PlanDecisionOutcomeDto> recordDecision(
     PlanDecisionRequestDto request,
-  ) {
-    final fake = _decide;
+  ) async {
+    _fake.decisions.add(request);
+    final fake = _fake.decide;
     if (fake == null) {
       throw StateError('this test records a decision without a `decide:` hook');
+    }
+    return fake(request);
+  }
+}
+
+/// A stopwatch a test moves by hand: active time is whatever the test says it is.
+class ManualStopwatch implements Stopwatch {
+  int ms = 0;
+  bool running = false;
+
+  @override
+  void start() => running = true;
+
+  @override
+  void stop() => running = false;
+
+  @override
+  void reset() => ms = 0;
+
+  @override
+  bool get isRunning => running;
+
+  @override
+  int get elapsedMilliseconds => ms;
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
+/// The experiment backend, scripted: one session answer, every event and control recorded.
+class ExperimentFake extends ExperimentBackend {
+  ExperimentFake({
+    this.session = const ExperimentSessionDto(
+      sessionId: 'x-1',
+      labelId: 'new_mix',
+      label: 'New mix',
+      active: false,
+      overridden: false,
+    ),
+    this.failRecord = false,
+    this.failExport = false,
+  });
+
+  final ExperimentSessionDto session;
+  final bool failRecord;
+  final bool failExport;
+  final clock = ManualStopwatch();
+  final events = <ExperimentEventDto>[];
+  final controls = <String>[];
+  int sessions = 0;
+
+  @override
+  Future<ExperimentSessionDto> startSession(String dir) async {
+    sessions++;
+    return session;
+  }
+
+  @override
+  Future<bool> record(String dir, ExperimentEventDto event) async {
+    if (failRecord) throw const KimattaError.storage(message: 'disk full');
+    events.add(event);
+    return true;
+  }
+
+  @override
+  Future<ExperimentStatusDto> status(String dir) async => ExperimentStatusDto(
+    enabled: false,
+    assigned: 'another_plan',
+    overridePending: false,
+    events: events.length,
+    dropped: BigInt.zero,
+    labels: const [
+      ExperimentLabelDto(id: 'new_mix', label: 'New mix'),
+      ExperimentLabelDto(id: 'another_plan', label: 'Another plan'),
+    ],
+  );
+
+  @override
+  Future<void> setEnabled(String dir, bool enabled) async =>
+      controls.add('enabled:$enabled');
+
+  @override
+  Future<void> setOverride(String dir, String? labelId) async =>
+      controls.add('override:$labelId');
+
+  @override
+  Future<void> reset(String dir) async => controls.add('reset');
+
+  @override
+  Future<int> export(String dir, String destPath) async {
+    if (failExport) throw const KimattaError.storage(message: 'disk full');
+    controls.add('export:$destPath');
+    return events.length;
+  }
+}
+
+class _FakeMealExclusionsNotifier extends MealExclusionsNotifier {
+  _FakeMealExclusionsNotifier(this._list, this._remove);
+
+  final FutureOr<List<MealExclusionDto>> Function()? _list;
+  final Future<MealExclusionOutcomeDto> Function(RemoveMealExclusionDto)?
+  _remove;
+
+  @override
+  Future<List<MealExclusionDto>> listExclusions(String householdId) async =>
+      (_list ?? () => const <MealExclusionDto>[])();
+
+  @override
+  Future<MealExclusionOutcomeDto> removeExclusion(
+    RemoveMealExclusionDto request,
+  ) {
+    final fake = _remove;
+    if (fake == null) {
+      throw StateError('this test removes a rule without a `removeRule:` hook');
     }
     return fake(request);
   }
@@ -1565,532 +1785,739 @@ void main() {
     expect(title('Plan'), findsOneWidget);
   });
 
-  testWidgets('cover surfaces exactly the material questions (AC-3)', (
-    tester,
-  ) async {
-    usePixel5(tester);
-    // Material side: two High requests render two question cards and the count banner.
-    await tester.pumpWidget(
-      harness(
-        cover: (req) => coverOutcome(
-          status: OutcomeStatusDto.needsAttention,
-          attention: [
-            attentionRequest(),
-            attentionRequest(
-              id: 'food:wording:2026-08-30:dinner',
-              codes: ['HARD_CONSTRAINT_UNRESOLVED'],
-            ),
-          ],
-        ),
-        initial: '/plan/cover',
-      ),
-    );
-    await tester.pumpAndSettle();
-    final needsBanner = find.text(needsYouCopy(2));
-    expect(needsBanner, findsOneWidget);
-    final needsContext = tester.element(needsBanner);
-    expect(
-      tester.widget<Text>(needsBanner).style!.color,
-      Theme.of(needsContext).colorScheme.tertiary,
-    );
-    expect(find.text(infeasibleQuestionCopy), findsOneWidget);
-    expect(find.text(wordingQuestionCopy), findsOneWidget);
-    // NeedsAttention hides Accept (AC-4 refusal path).
-    expect(find.text('Accept'), findsNothing);
-  });
+  // --- OPT-007: the Cover draft ------------------------------------------------------------
 
-  testWidgets('a low-value-only cover result asks no question (AC-3)', (
+  Future<void> openMore(WidgetTester tester, String date) async {
+    await tester.tap(find.byKey(ValueKey('cover:more:$date:dinner')));
+    await tester.pumpAndSettle();
+  }
+
+  testWidgets('a pending draft says so, and names what stays locked in', (
     tester,
   ) async {
     usePixel5(tester);
     await tester.pumpWidget(
       harness(
-        cover: (req) => coverOutcome(assumptions: const ['PANTRY_INCOMPLETE']),
+        cover: CoverFake(
+          open: (_) => draftView(
+            slots: [
+              draftSlot(),
+              draftSlot(date: '2026-08-30', committed: true),
+            ],
+          ),
+        ),
+        recipes: () => const [okSummary],
         initial: '/plan/cover',
       ),
     );
     await tester.pumpAndSettle();
-    expect(find.text(coveredCopy), findsOneWidget);
-    expect(find.text(questionsHeading), findsNothing);
-    // Pantry stays quiet: non-blocking, no disclosure entry (invariant 6).
-    expect(find.text(assumptionsHeading), findsNothing);
-    final accept = find.widgetWithText(FilledButton, 'Accept');
-    expect(accept, findsOneWidget);
-    final acceptContext = tester.element(accept);
+    expect(find.text(pendingCopy), findsOneWidget);
+    expect(find.text(lockedStayCopy), findsOneWidget);
+    expect(find.text('New mix'), findsOneWidget);
     expect(
       tester
-          .widget<FilledButton>(accept)
-          .style!
-          .backgroundColor!
-          .resolve(<WidgetState>{}),
-      Theme.of(acceptContext).colorScheme.tertiary,
+          .widget<FilledButton>(find.byKey(const ValueKey('cover:accept')))
+          .onPressed,
+      isNotNull,
+    );
+    // A locked-in card offers no Another; an eligible one does.
+    expect(
+      find.byKey(const ValueKey('cover:another:2026-08-29:dinner')),
+      findsOneWidget,
     );
     expect(
-      tester.widget<Text>(find.text(coveredCopy)).style!.color,
-      isNot(Theme.of(acceptContext).colorScheme.tertiary),
+      find.byKey(const ValueKey('cover:another:2026-08-30:dinner')),
+      findsNothing,
     );
+    expect(find.text('Pancakes'), findsNWidgets(2));
   });
 
-  testWidgets(
-    'accept reaches the seam with apply and links shopping (AC-4/5)',
-    (tester) async {
-      usePixel5(tester);
-      final applies = <bool>[];
-      await tester.pumpWidget(
-        harness(
-          cover: (req) {
-            applies.add(req.apply);
-            return coverOutcome(applied: req.apply);
-          },
-          initial: '/plan/cover',
-        ),
-      );
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Accept'));
-      await tester.pumpAndSettle();
-      expect(applies, [false, true], reason: 'preview then one-tap apply');
-      expect(find.text(shoppingReadyCopy), findsOneWidget);
-      await tester.tap(find.text(shoppingReadyCopy));
-      await tester.pumpAndSettle();
-      expect(title('Shopping'), findsOneWidget);
-    },
-  );
-
-  // FIX-001 item 4 (dossier MVP-033_ACCEPT_FEEDBACK): once the plan is written the primary
-  // control gives way to a calm confirmation, so it cannot read as still actionable.
-  testWidgets('a successful accept replaces Accept with the confirmation', (
+  testWidgets('Another sends one slot on the view it came from', (
     tester,
   ) async {
     usePixel5(tester);
+    final fake = CoverFake(
+      open: (_) => draftView(),
+      mutate: (_, _) => draftView(
+        revision: 1,
+        slots: [
+          draftSlot(
+            components: const [
+              MealComponentDto(kind: 'recipe', recipeId: 'r-2'),
+            ],
+            outcome: SlotOutcomeDto.changed,
+          ),
+        ],
+      ),
+    );
     await tester.pumpWidget(
       harness(
-        cover: (req) => coverOutcome(applied: req.apply),
+        cover: fake,
+        recipes: () => const [okSummary, conflictSummary],
         initial: '/plan/cover',
       ),
     );
     await tester.pumpAndSettle();
-    expect(find.widgetWithText(FilledButton, 'Accept'), findsOneWidget);
-    await tester.tap(find.text('Accept'));
+    await tester.tap(
+      find.byKey(const ValueKey('cover:another:2026-08-29:dinner')),
+    );
     await tester.pumpAndSettle();
-    expect(find.widgetWithText(FilledButton, 'Accept'), findsNothing);
-    expect(find.text(acceptedCopy), findsOneWidget);
-    expect(find.text(shoppingReadyCopy), findsOneWidget);
+    expect(fake.mutations, hasLength(1));
+    final (envelope, action) = fake.mutations.single;
+    expect(
+      action,
+      const DraftActionDto.another(
+        date: '2026-08-29',
+        slot: MealSlotDto.dinner,
+      ),
+    );
+    expect(envelope.draftId, 'd-1');
+    expect(envelope.databaseSession, 's-1');
+    expect(envelope.expectedRevision, 0);
+    expect(envelope.requestId, isNotEmpty);
+    expect(find.text('Butter toast'), findsOneWidget);
+    expect(find.text('Pancakes'), findsNothing);
   });
 
-  // Expected-to-pass regression pin: a failed write must keep the one way to retry it.
-  testWidgets('a failed accept leaves Accept in place and enabled', (
+  testWidgets('Lock in edits the draft only; the saved plan is not written', (
     tester,
   ) async {
     usePixel5(tester);
-    await tester.pumpWidget(
-      harness(
-        cover: (req) => req.apply
-            ? throw const KimattaError.storage(message: 'disk full')
-            : coverOutcome(),
-        initial: '/plan/cover',
-      ),
+    var saved = 0;
+    final fake = CoverFake(
+      mutate: (_, _) =>
+          draftView(revision: 1, slots: [draftSlot(committed: true)]),
     );
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Accept'));
-    await tester.pumpAndSettle();
-    final accept = find.widgetWithText(FilledButton, 'Accept');
-    expect(accept, findsOneWidget);
-    expect(tester.widget<FilledButton>(accept).onPressed, isNotNull);
-    expect(find.text(acceptedCopy), findsNothing);
-    expect(find.text(shoppingReadyCopy), findsNothing);
-    expect(find.text('Cover My Week unavailable: disk full'), findsOneWidget);
-  });
-
-  testWidgets('a second tap cannot apply the plan twice', (tester) async {
-    usePixel5(tester);
-    final applies = <bool>[];
-    final gate = Completer<CoverCycleOutcomeDto>();
     await tester.pumpWidget(
       harness(
-        cover: (req) {
-          applies.add(req.apply);
-          return req.apply ? gate.future : coverOutcome();
+        cover: fake,
+        lockPlanned: (_, _, _) async {
+          saved++;
+          return okPlanned;
+        },
+        savePlanned: (m) async {
+          saved++;
+          return m;
         },
         initial: '/plan/cover',
       ),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Accept'));
-    await tester.pump();
-    await tester.tap(find.text('Accept'), warnIfMissed: false);
-    await tester.pump();
-    gate.complete(coverOutcome(applied: true));
+    await tester.tap(
+      find.byKey(const ValueKey('cover:lock:2026-08-29:dinner')),
+    );
     await tester.pumpAndSettle();
-    expect(applies, [false, true]);
-    expect(find.widgetWithText(FilledButton, 'Accept'), findsNothing);
+    expect(
+      fake.mutations.single.$2,
+      const DraftActionDto.setCommitment(
+        date: '2026-08-29',
+        slot: MealSlotDto.dinner,
+        locked: true,
+      ),
+    );
+    expect(saved, 0);
+    expect(find.text('Locked in'), findsOneWidget);
   });
 
-  // Expected-to-pass regression pin: Accept keys on what was written, and a later decision
-  // re-previews with `applied: false`, so a changed plan must get its Accept back.
+  /// The per-meal controls a screen reader must be able to activate, not just announce: a
+  /// label wrapper that excludes its child's semantics drops the tap action with them, and the
+  /// hit-test taps above would not notice.
+  final dinnerWhere = '2026-08-29 ${slotLabel(MealSlotDto.dinner)}';
+
+  testWidgets('Another and Lock in carry a tap action and their state', (
+    tester,
+  ) async {
+    usePixel5(tester);
+    final handle = tester.ensureSemantics();
+    await tester.pumpWidget(
+      harness(
+        cover: CoverFake(
+          open: (_) => draftView(
+            slots: [
+              draftSlot(),
+              draftSlot(date: '2026-08-30', committed: true),
+            ],
+          ),
+        ),
+        initial: '/plan/cover',
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      tester.getSemantics(
+        find.bySemanticsLabel('Another meal for $dinnerWhere'),
+      ),
+      isSemantics(isButton: true, hasTapAction: true, isEnabled: true),
+    );
+    expect(
+      tester.getSemantics(find.bySemanticsLabel('Lock in $dinnerWhere')),
+      isSemantics(hasTapAction: true, isEnabled: true, isSelected: false),
+    );
+    expect(
+      tester.getSemantics(
+        find.bySemanticsLabel(
+          'Locked in, 2026-08-30 ${slotLabel(MealSlotDto.dinner)}',
+        ),
+      ),
+      isSemantics(hasTapAction: true, isSelected: true),
+    );
+    handle.dispose();
+  });
+
+  testWidgets('Another and Lock in are reachable by semantics action', (
+    tester,
+  ) async {
+    usePixel5(tester);
+    final handle = tester.ensureSemantics();
+    final fake = CoverFake(mutate: (_, _) => draftView(revision: 1));
+    await tester.pumpWidget(harness(cover: fake, initial: '/plan/cover'));
+    await tester.pumpAndSettle();
+    tester.semantics.tap(
+      find.semantics.byLabel('Another meal for $dinnerWhere'),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      fake.mutations.single.$2,
+      const DraftActionDto.another(
+        date: '2026-08-29',
+        slot: MealSlotDto.dinner,
+      ),
+    );
+    tester.semantics.tap(find.semantics.byLabel('Lock in $dinnerWhere'));
+    await tester.pumpAndSettle();
+    expect(fake.mutations, hasLength(2));
+    expect(
+      fake.mutations.last.$2,
+      const DraftActionDto.setCommitment(
+        date: '2026-08-29',
+        slot: MealSlotDto.dinner,
+        locked: true,
+      ),
+    );
+    handle.dispose();
+  });
+
+  testWidgets('while a change is in flight, Another and Lock in are off', (
+    tester,
+  ) async {
+    usePixel5(tester);
+    final handle = tester.ensureSemantics();
+    final held = Completer<DraftViewDto>();
+    final fake = CoverFake(mutate: (_, _) => held.future);
+    await tester.pumpWidget(harness(cover: fake, initial: '/plan/cover'));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const ValueKey('cover:another:2026-08-29:dinner')),
+    );
+    await tester.pump();
+    expect(
+      tester.getSemantics(
+        find.bySemanticsLabel('Another meal for $dinnerWhere'),
+      ),
+      isSemantics(
+        isButton: true,
+        hasTapAction: false,
+        hasEnabledState: true,
+        isEnabled: false,
+      ),
+    );
+    expect(
+      tester.getSemantics(find.bySemanticsLabel('Lock in $dinnerWhere')),
+      isSemantics(hasTapAction: false, hasEnabledState: true, isEnabled: false),
+    );
+    held.complete(draftView(revision: 1));
+    await tester.pumpAndSettle();
+    handle.dispose();
+  });
+
+  testWidgets('with every meal locked in, the week action says why it is off', (
+    tester,
+  ) async {
+    usePixel5(tester);
+    await tester.pumpWidget(
+      harness(
+        cover: CoverFake(
+          open: (_) =>
+              draftView(slots: [draftSlot(committed: true)], weekTargets: 0),
+        ),
+        initial: '/plan/cover',
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .widget<OutlinedButton>(find.byKey(const ValueKey('cover:week')))
+          .onPressed,
+      isNull,
+    );
+    expect(find.text(allLockedCopy), findsOneWidget);
+  });
+
+  testWidgets('the week action is one request for the whole draft', (
+    tester,
+  ) async {
+    usePixel5(tester);
+    final fake = CoverFake(mutate: (_, _) => draftView(revision: 1));
+    await tester.pumpWidget(harness(cover: fake, initial: '/plan/cover'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('cover:week')));
+    await tester.pumpAndSettle();
+    expect(fake.mutations.single.$2, const DraftActionDto.alternatives());
+  });
+
+  testWidgets('an exhausted day says so and offers Choose and Reconsider', (
+    tester,
+  ) async {
+    usePixel5(tester);
+    final fake = CoverFake(
+      open: (_) =>
+          draftView(slots: [draftSlot(outcome: SlotOutcomeDto.exhausted)]),
+      mutate: (_, _) => draftView(revision: 1),
+    );
+    await tester.pumpWidget(harness(cover: fake, initial: '/plan/cover'));
+    await tester.pumpAndSettle();
+    expect(find.text(exhaustedCopy('2026-08-29')), findsOneWidget);
+    expect(find.widgetWithText(TextButton, 'Choose'), findsOneWidget);
+    await tester.tap(
+      find.byKey(const ValueKey('cover:reconsider:2026-08-29:dinner')),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      fake.mutations.single.$2,
+      const DraftActionDto.reconsider(
+        date: '2026-08-29',
+        slot: MealSlotDto.dinner,
+      ),
+    );
+  });
+
   testWidgets(
-    'a decision after accept brings Accept back and drops the confirmation',
+    'Choose on a locked-in meal is a replacement: cancel sends nothing, a pick does',
     (tester) async {
       usePixel5(tester);
+      final fake = CoverFake(
+        open: (_) => draftView(slots: [draftSlot(committed: true)]),
+        mutate: (_, _) =>
+            draftView(revision: 1, slots: [draftSlot(committed: true)]),
+      );
       await tester.pumpWidget(
         harness(
-          cover: (req) => coverOutcome(applied: req.apply),
-          decide: (_) async => const PlanDecisionOutcomeDto(
-            ledgerEntryId: 'le-2',
-            priorStatus: OutcomeStatusDto.covered,
-            resultingStatus: OutcomeStatusDto.covered,
-          ),
-          recipes: () => const [okSummary],
+          cover: fake,
+          recipes: () => const [okSummary, conflictSummary],
           initial: '/plan/cover',
         ),
       );
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Accept'));
+      await openMore(tester, '2026-08-29');
+      await tester.tap(find.text('Choose a replacement'));
       await tester.pumpAndSettle();
-      expect(find.text(acceptedCopy), findsOneWidget);
-
-      await tester.tap(find.text('Swap'));
+      expect(find.text(replaceSheetTitle), findsOneWidget);
+      expect(find.text(replaceWarningCopy), findsOneWidget);
+      await tester.tapAt(const Offset(10, 10));
       await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const ValueKey('cover:pick:r-1')));
+      expect(fake.mutations, isEmpty, reason: 'cancelling changes nothing');
+      await openMore(tester, '2026-08-29');
+      await tester.tap(find.text('Choose a replacement'));
       await tester.pumpAndSettle();
-      expect(find.widgetWithText(FilledButton, 'Accept'), findsOneWidget);
-      expect(find.text(acceptedCopy), findsNothing);
-      expect(find.text(shoppingReadyCopy), findsNothing);
+      await tester.tap(find.byKey(const ValueKey('cover:pick:r-2')));
+      await tester.pumpAndSettle();
+      expect(
+        fake.mutations.single.$2,
+        const DraftActionDto.choose(
+          date: '2026-08-29',
+          slot: MealSlotDto.dinner,
+          components: [MealComponentDto(kind: 'recipe', recipeId: 'r-2')],
+          explicitReplace: true,
+        ),
+      );
     },
   );
 
   testWidgets(
-    'a locked cover slot is marked and offers no swap or veto (AC-2)',
+    'Never suggest confirms, cancels, and sends the dish with its draft',
     (tester) async {
       usePixel5(tester);
-      await tester.pumpWidget(
-        harness(
-          cover: (req) => coverOutcome(
-            slots: const [
-              SlotCoverageDto(
-                date: '2026-08-29',
-                slot: MealSlotDto.dinner,
-                state: CoverageStateDto.lockedByUser,
-                components: [MealComponentDto(kind: 'recipe', recipeId: 'r-1')],
-                reasonCodes: [],
+      final fake = CoverFake(
+        exclude: (request) => MealExclusionOutcomeDto(
+          exclusions: const [
+            MealExclusionDto(
+              policyId: 'p-1',
+              kind: MealExclusionKindDto.dish(
+                identity: 'recipe:r-1',
+                title: 'Pancakes',
+                available: true,
+              ),
+            ),
+          ],
+          draft: draftView(
+            revision: 1,
+            status: OutcomeStatusDto.needsAttention,
+            acceptAllowed: false,
+            slots: [
+              draftSlot(
+                state: CoverageStateDto.needsAttention,
+                reasonCodes: const ['HARD_VETO'],
               ),
             ],
           ),
-          initial: '/plan/cover',
         ),
-      );
-      await tester.pumpAndSettle();
-      expect(
-        find.byWidgetPredicate(
-          (w) => w is Semantics && w.properties.label == lockLabel(true),
-        ),
-        findsOneWidget,
-      );
-      expect(find.byIcon(Icons.lock), findsOneWidget);
-      expect(find.text('Swap'), findsNothing);
-      expect(find.text('Never suggest'), findsNothing);
-    },
-  );
-
-  testWidgets('swap and reviewed-marker reach the decision seam (AC-4)', (
-    tester,
-  ) async {
-    usePixel5(tester);
-    final decisions = <PlanDecisionDto>[];
-    await tester.pumpWidget(
-      harness(
-        cover: (req) => coverOutcome(
-          status: OutcomeStatusDto.tentativelyCovered,
-          assumptions: const [
-            'PANTRY_INCOMPLETE',
-            'RESTRICTIONS_NOT_CONFIGURED',
-          ],
-        ),
-        decide: (req) async {
-          decisions.add(req.decision);
-          return const PlanDecisionOutcomeDto(
-            ledgerEntryId: 'le-2',
-            priorStatus: OutcomeStatusDto.tentativelyCovered,
-            resultingStatus: OutcomeStatusDto.tentativelyCovered,
-          );
-        },
-        recipes: () => const [okSummary],
-        initial: '/plan/cover',
-      ),
-    );
-    await tester.pumpAndSettle();
-    // Two taps: Swap on the tile, then a recipe in the picker.
-    await tester.tap(find.text('Swap'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('cover:pick:r-1')));
-    await tester.pumpAndSettle();
-    expect(decisions, hasLength(1));
-    expect(
-      decisions.single,
-      const PlanDecisionDto.swap(
-        date: '2026-08-29',
-        slot: MealSlotDto.dinner,
-        components: [MealComponentDto(kind: 'recipe', recipeId: 'r-1')],
-      ),
-    );
-    // The reviewed-marker row shows only while the assumption is present; one tap records.
-    await tester.tap(find.text(reviewedRowNoneLabel));
-    await tester.pumpAndSettle();
-    expect(decisions.last, const PlanDecisionDto.restrictionsReviewed());
-  });
-
-  // The one irreversible action on the screen. The native test drives the bridge with a
-  // hand-built DTO, so only this can catch a wrong `subject` — the recipe id instead of the
-  // title would tokenise to nothing and silently veto nothing.
-  testWidgets('the veto path confirms, cancels, and reaches the seam (AC-4)', (
-    tester,
-  ) async {
-    usePixel5(tester);
-    final decisions = <PlanDecisionDto>[];
-    await tester.pumpWidget(
-      harness(
-        cover: (req) => coverOutcome(),
-        decide: (req) async {
-          decisions.add(req.decision);
-          return const PlanDecisionOutcomeDto(
-            ledgerEntryId: 'le-3',
-            priorStatus: OutcomeStatusDto.covered,
-            resultingStatus: OutcomeStatusDto.covered,
-          );
-        },
-        recipes: () => const [okSummary],
-        initial: '/plan/cover',
-      ),
-    );
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Never suggest'));
-    await tester.pumpAndSettle();
-    expect(find.text(vetoConfirmTitle('Pancakes')), findsOneWidget);
-    expect(find.text(vetoConfirmBody('Pancakes')), findsOneWidget);
-    // Cancelling is a real answer: nothing reaches the seam.
-    await tester.tap(find.text('Cancel'));
-    await tester.pumpAndSettle();
-    expect(decisions, isEmpty);
-    // Both the tile button and the dialog's confirm read "Never suggest".
-    await tester.tap(find.text('Never suggest'));
-    await tester.pumpAndSettle();
-    await tester.tap(
-      find.descendant(
-        of: find.byType(AlertDialog),
-        matching: find.text('Never suggest'),
-      ),
-    );
-    await tester.pumpAndSettle();
-    expect(
-      decisions.single,
-      const PlanDecisionDto.veto(
-        subject: 'Pancakes',
-        date: '2026-08-29',
-        slot: MealSlotDto.dinner,
-      ),
-    );
-  });
-
-  // An option the screen cannot name is not a control: `wording_only` options are the
-  // household's own restriction phrases, which never parse as `recipe:` tokens.
-  testWidgets('unnameable options render no chip of their own', (tester) async {
-    usePixel5(tester);
-    await tester.pumpWidget(
-      harness(
-        cover: (req) => coverOutcome(
-          status: OutcomeStatusDto.needsAttention,
-          attention: [
-            attentionRequest(
-              codes: const ['HARD_CONSTRAINT_UNRESOLVED'],
-              options: const ['no shellfish', 'nothing with peanuts'],
-            ),
-          ],
-        ),
-        recipes: () => const [okSummary],
-        initial: '/plan/cover',
-      ),
-    );
-    await tester.pumpAndSettle();
-    final card = find.byKey(
-      const ValueKey('cover:question:food:infeasible:2026-08-29:dinner'),
-    );
-    // Only the card's own generic Swap chip, and the header label is not duplicated.
-    expect(
-      find.descendant(of: card, matching: find.byType(ActionChip)),
-      findsOneWidget,
-    );
-    expect(
-      find.descendant(of: card, matching: find.text('2026-08-29 · Dinner')),
-      findsOneWidget,
-    );
-  });
-
-  // A wording question is raised from `chosen` with no filter on slot state, and Tier 0 keeps
-  // a locked candidate feasible, so a locked slot does reach this card. Its Swap could never
-  // succeed — `record_decision` refuses a swap onto a locked row (invariant 18) — so offering
-  // it was a dead end. `_slotTile` has always gated its own Swap on the lock; the card now
-  // does the same, and says why in the household's terms rather than automation's.
-  testWidgets('a question on a locked slot offers no swap, and says why', (
-    tester,
-  ) async {
-    usePixel5(tester);
-    await tester.pumpWidget(
-      harness(
-        cover: (req) => coverOutcome(
-          status: OutcomeStatusDto.tentativelyCovered,
-          slots: const [
-            SlotCoverageDto(
-              date: '2026-08-29',
-              slot: MealSlotDto.dinner,
-              state: CoverageStateDto.lockedByUser,
-              components: [MealComponentDto(kind: 'recipe', recipeId: 'r-1')],
-              reasonCodes: [],
-            ),
-          ],
-          attention: [
-            attentionRequest(
-              id: 'food:wording:2026-08-29:dinner',
-              codes: const ['HARD_CONSTRAINT_UNRESOLVED'],
-              options: const ['no shellfish'],
-            ),
-          ],
-        ),
-        recipes: () => const [okSummary],
-        initial: '/plan/cover',
-      ),
-    );
-    await tester.pumpAndSettle();
-    final card = find.byKey(
-      const ValueKey('cover:question:food:wording:2026-08-29:dinner'),
-    );
-    expect(
-      find.descendant(of: card, matching: find.byType(ActionChip)),
-      findsNothing,
-    );
-    expect(
-      find.descendant(of: card, matching: find.text(questionLockedCopy)),
-      findsOneWidget,
-    );
-    // The question itself still stands — the card explains the missing action, it does not
-    // withdraw the question.
-    expect(
-      find.descendant(of: card, matching: find.text(wordingQuestionCopy)),
-      findsOneWidget,
-    );
-  });
-
-  // Expected-to-pass: pins the gate's deliberate open branch. A question whose `(date, slot)`
-  // is not among the rendered slots has no lock state to read, so it keeps its Swap chip —
-  // the refusal below it is now honest prose either way.
-  testWidgets('a question addressing no rendered slot keeps its swap chip', (
-    tester,
-  ) async {
-    usePixel5(tester);
-    await tester.pumpWidget(
-      harness(
-        cover: (req) => coverOutcome(
-          status: OutcomeStatusDto.needsAttention,
-          attention: [
-            attentionRequest(
-              id: 'food:wording:2026-09-01:dinner',
-              codes: const ['HARD_CONSTRAINT_UNRESOLVED'],
-            ),
-          ],
-        ),
-        recipes: () => const [okSummary],
-        initial: '/plan/cover',
-      ),
-    );
-    await tester.pumpAndSettle();
-    expect(
-      find.descendant(
-        of: find.byKey(
-          const ValueKey('cover:question:food:wording:2026-09-01:dinner'),
-        ),
-        matching: find.byType(ActionChip),
-      ),
-      findsOneWidget,
-    );
-  });
-
-  // Expected-to-pass: `_report` and the `_busy` release in `finally` already work; this is the
-  // coverage pin they never had, on a screen where every mutation is irreversible or
-  // lock-bearing. The message is the one `error.rs` maps `SwapOntoLockedSlot` to — the test
-  // constructs the error itself, so a reword there must be mirrored here.
-  testWidgets(
-    'a refused decision surfaces as a snackbar and frees the screen',
-    (tester) async {
-      usePixel5(tester);
-      const refusal = KimattaError.planning(
-        message: 'that meal is locked, so it cannot be swapped',
       );
       await tester.pumpWidget(
         harness(
-          cover: (req) => coverOutcome(),
-          decide: (req) async => throw refusal,
+          cover: fake,
           recipes: () => const [okSummary],
           initial: '/plan/cover',
         ),
       );
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Swap'));
+      await openMore(tester, '2026-08-29');
+      await tester.tap(find.text('Never suggest'));
       await tester.pumpAndSettle();
-      await tester.tap(find.byKey(const ValueKey('cover:pick:r-1')));
+      expect(find.text(neverSuggestTitle), findsOneWidget);
+      expect(find.text(neverSuggestBody(['Pancakes'])), findsOneWidget);
+      await tester.tap(find.text('Cancel'));
       await tester.pumpAndSettle();
-      expect(
-        find.descendant(
-          of: find.byType(SnackBar),
-          matching: find.text(
-            describeFailure(refusal, subject: 'Cover My Week'),
-          ),
-        ),
-        findsOneWidget,
-      );
-      // `_busy` is released in `finally`, so the screen is not left inert after a refusal.
+      expect(fake.exclusions, isEmpty);
+      await openMore(tester, '2026-08-29');
+      await tester.tap(find.text('Never suggest'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(FilledButton, 'Never suggest'));
+      await tester.pumpAndSettle();
+      final request = fake.exclusions.single;
+      expect(request.dishes, ['recipe:r-1']);
+      expect(request.acting?.draftId, 'd-1');
+      // The meal stays, with its conflict; nothing is replanned.
+      expect(find.text('Pancakes'), findsOneWidget);
+      expect(find.text(slotProblemCopy(const ['HARD_VETO'])!), findsOneWidget);
       expect(
         tester
-            .widget<TextButton>(find.widgetWithText(TextButton, 'Swap'))
+            .widget<FilledButton>(find.byKey(const ValueKey('cover:accept')))
             .onPressed,
-        isNotNull,
+        isNull,
       );
     },
   );
 
-  testWidgets('only a resolvable recipe option becomes a swap chip', (
-    tester,
-  ) async {
+  testWidgets('a fallback card offers no dish rule', (tester) async {
     usePixel5(tester);
     await tester.pumpWidget(
       harness(
-        cover: (req) => coverOutcome(
-          status: OutcomeStatusDto.needsAttention,
-          attention: [
-            // Resolvable, unresolvable id, and a multi-component join.
-            attentionRequest(
-              options: const [
-                'recipe:r-1:1/1',
-                'recipe:r-missing:1/1',
-                'recipe:r-1:1/1,recipe:r-2:1/1',
-              ],
-            ),
-          ],
+        cover: CoverFake(
+          open: (_) => draftView(
+            slots: [
+              draftSlot(
+                components: const [MealComponentDto(kind: 'frozen_quick')],
+              ),
+            ],
+          ),
         ),
-        recipes: () => const [okSummary],
         initial: '/plan/cover',
       ),
     );
     await tester.pumpAndSettle();
-    final card = find.byKey(
-      const ValueKey('cover:question:food:infeasible:2026-08-29:dinner'),
-    );
     expect(
-      find.descendant(of: card, matching: find.text(swapToLabel('Pancakes'))),
+      find.byKey(const ValueKey('cover:another:2026-08-29:dinner')),
+      findsNothing,
+    );
+    await openMore(tester, '2026-08-29');
+    expect(find.text('Never suggest'), findsNothing);
+    expect(find.text('Choose'), findsOneWidget);
+  });
+
+  testWidgets('a refused Accept reports and keeps the draft', (tester) async {
+    usePixel5(tester);
+    final fake = CoverFake(
+      accept: (_) => throw const KimattaError.draft(
+        kind: DraftErrorKind.refused,
+        message: 'some meals need attention before this plan can be accepted',
+      ),
+    );
+    await tester.pumpWidget(harness(cover: fake, initial: '/plan/cover'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('cover:accept')));
+    await tester.pumpAndSettle();
+    expect(fake.accepts, hasLength(1));
+    expect(
+      find.text(
+        'Cover My Week: some meals need attention before this plan can be accepted',
+      ),
       findsOneWidget,
     );
-    // The swap chip plus the card's own Swap — the two unnameable options add nothing.
-    expect(
-      find.descendant(of: card, matching: find.byType(ActionChip)),
-      findsNWidgets(2),
+    expect(find.byKey(const ValueKey('cover:accept')), findsOneWidget);
+    expect(fake.opens, hasLength(1), reason: 'a refusal is not a stale view');
+  });
+
+  testWidgets('a stale refusal reloads the draft', (tester) async {
+    usePixel5(tester);
+    final fake = CoverFake(
+      mutate: (_, _) => throw const KimattaError.draft(
+        kind: DraftErrorKind.stale,
+        message:
+            'this plan changed since the screen loaded; here is the latest',
+      ),
     );
+    await tester.pumpWidget(harness(cover: fake, initial: '/plan/cover'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('cover:week')));
+    await tester.pumpAndSettle();
+    expect(fake.opens, hasLength(2));
+  });
+
+  testWidgets('a second tap while a command runs sends nothing more', (
+    tester,
+  ) async {
+    usePixel5(tester);
+    final gate = Completer<DraftViewDto>();
+    final fake = CoverFake(mutate: (_, _) => gate.future);
+    await tester.pumpWidget(harness(cover: fake, initial: '/plan/cover'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('cover:week')));
+    await tester.pump();
+    await tester.tap(
+      find.byKey(const ValueKey('cover:week')),
+      warnIfMissed: false,
+    );
+    await tester.tap(
+      find.byKey(const ValueKey('cover:another:2026-08-29:dinner')),
+      warnIfMissed: false,
+    );
+    await tester.pump();
+    expect(fake.mutations, hasLength(1));
+    expect(find.text('Pancakes'), findsNothing, reason: 'no library override');
+    gate.complete(draftView(revision: 1));
+    await tester.pumpAndSettle();
+  });
+
+  /// A response built on a view the screen has since replaced — here by a reload under a new
+  /// database session — must not overwrite the newer view.
+  testWidgets('a late answer from an earlier session is ignored', (
+    tester,
+  ) async {
+    usePixel5(tester);
+    final gate = Completer<DraftViewDto>();
+    var opened = 0;
+    final fake = CoverFake(
+      open: (_) => ++opened == 1
+          ? draftView()
+          : draftView(session: 's-2', slots: [draftSlot(committed: true)]),
+      mutate: (_, _) => gate.future,
+    );
+    await tester.pumpWidget(harness(cover: fake, initial: '/plan/cover'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('cover:week')));
+    await tester.pump();
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(Scaffold).first),
+    );
+    container.invalidate(coverProvider(0));
+    // Bounded pumps: the progress bar animates while the first command is still out.
+    await tester.pump();
+    await tester.pump();
+    expect(find.text('Locked in'), findsOneWidget);
+    gate.complete(draftView(revision: 1, slots: [draftSlot(pending: false)]));
+    await tester.pumpAndSettle();
+    expect(
+      find.text('Locked in'),
+      findsOneWidget,
+      reason: 'the s-2 view stands',
+    );
+  });
+
+  testWidgets('Review shows both meals and sends the answers', (tester) async {
+    usePixel5(tester);
+    final fake = CoverFake(
+      open: (_) => draftView(
+        state: DraftStateDto.needsReview,
+        acceptAllowed: false,
+        slots: [
+          draftSlot(
+            inReview: true,
+            saved: const SavedMealDto(
+              components: [MealComponentDto(kind: 'recipe', recipeId: 'r-2')],
+              locked: true,
+            ),
+          ),
+        ],
+      ),
+      mutate: (_, _) => draftView(revision: 1),
+    );
+    await tester.pumpWidget(
+      harness(
+        cover: fake,
+        recipes: () => const [okSummary, conflictSummary],
+        initial: '/plan/cover',
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text(reviewIntroCopy), findsOneWidget);
+    expect(find.text(savedMealHeading), findsOneWidget);
+    expect(find.text('Butter toast'), findsOneWidget);
+    final done = find.byKey(const ValueKey('cover:review'));
+    expect(tester.widget<FilledButton>(done).onPressed, isNull);
+    expect(find.byKey(const ValueKey('cover:accept')), findsNothing);
+    await tester.tap(find.text('Use saved meal'));
+    await tester.pumpAndSettle();
+    await tester.tap(done);
+    await tester.pumpAndSettle();
+    expect(
+      fake.mutations.single.$2,
+      const DraftActionDto.review(
+        resolutions: [
+          ReviewResolutionDto(
+            date: '2026-08-29',
+            slot: MealSlotDto.dinner,
+            useSaved: true,
+          ),
+        ],
+      ),
+    );
+  });
+
+  testWidgets('a facts-only review is one tap', (tester) async {
+    usePixel5(tester);
+    final fake = CoverFake(
+      open: (_) =>
+          draftView(state: DraftStateDto.needsReview, acceptAllowed: false),
+      mutate: (_, _) => draftView(revision: 1),
+    );
+    await tester.pumpWidget(harness(cover: fake, initial: '/plan/cover'));
+    await tester.pumpAndSettle();
+    expect(find.text(reviewFactsOnlyCopy), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('cover:review')));
+    await tester.pumpAndSettle();
+    expect(
+      fake.mutations.single.$2,
+      const DraftActionDto.review(resolutions: []),
+    );
+  });
+
+  testWidgets('an accepted plan stays settled until Edit meals', (
+    tester,
+  ) async {
+    usePixel5(tester);
+    final fake = CoverFake();
+    await tester.pumpWidget(harness(cover: fake, initial: '/plan/cover'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('cover:accept')));
+    await tester.pumpAndSettle();
+    expect(find.text(acceptedCopy), findsOneWidget);
+    expect(find.byKey(const ValueKey('cover:accept')), findsNothing);
+    expect(fake.opens, hasLength(1));
+    await tester.tap(find.byKey(const ValueKey('cover:edit')));
+    await tester.pumpAndSettle();
+    expect(fake.opens, hasLength(2));
+  });
+
+  testWidgets('Undo and Discard changes are draft commands', (tester) async {
+    usePixel5(tester);
+    final fake = CoverFake(
+      open: (_) => draftView(undoAvailable: true),
+      mutate: (_, _) => draftView(revision: 1),
+    );
+    await tester.pumpWidget(harness(cover: fake, initial: '/plan/cover'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('cover:undo')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('cover:discard')));
+    await tester.pumpAndSettle();
+    expect(fake.mutations.map((m) => m.$2), [
+      const DraftActionDto.undo(),
+      const DraftActionDto.discard(),
+    ]);
+  });
+
+  testWidgets('the reviewed-restrictions row keeps the draft', (tester) async {
+    usePixel5(tester);
+    final fake = CoverFake(
+      open: (_) => draftView(
+        assumptions: const ['PANTRY_INCOMPLETE', 'RESTRICTIONS_NOT_CONFIGURED'],
+      ),
+      decide: (_) => const PlanDecisionOutcomeDto(
+        ledgerEntryId: 'le-9',
+        priorStatus: OutcomeStatusDto.covered,
+        resultingStatus: OutcomeStatusDto.covered,
+      ),
+    );
+    await tester.pumpWidget(harness(cover: fake, initial: '/plan/cover'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(reviewedRowNoneLabel));
+    await tester.pumpAndSettle();
+    expect(
+      fake.decisions.single.decision,
+      const PlanDecisionDto.restrictionsReviewed(),
+    );
+    expect(fake.opens, hasLength(2));
+    expect(fake.mutations, isEmpty);
+  });
+
+  testWidgets('a set-aside draft can be discarded', (tester) async {
+    usePixel5(tester);
+    final fake = CoverFake(
+      open: (_) => draftView(
+        expired: const [
+          ExpiredDraftDto(
+            draftId: 'd-old',
+            anchor: '2026-08-22',
+            lengthDays: 7,
+          ),
+        ],
+      ),
+      mutate: (_, _) =>
+          draftView(draftId: 'd-old', state: DraftStateDto.discarded),
+    );
+    await tester.pumpWidget(harness(cover: fake, initial: '/plan/cover'));
+    await tester.pumpAndSettle();
+    expect(find.text(expiredDraftCopy('2026-08-22')), findsOneWidget);
+    await tester.tap(find.widgetWithText(TextButton, 'Discard'));
+    await tester.pumpAndSettle();
+    final (envelope, action) = fake.mutations.single;
+    expect(envelope.draftId, 'd-old');
+    expect(action, const DraftActionDto.discard());
+    expect(fake.opens, hasLength(2));
+  });
+
+  testWidgets('Settings lists meal exclusions apart and removes one', (
+    tester,
+  ) async {
+    usePixel5(tester);
+    RemoveMealExclusionDto? removed;
+    const dish = MealExclusionDto(
+      policyId: 'p-1',
+      kind: MealExclusionKindDto.dish(
+        identity: 'recipe:r-9',
+        title: 'Old stew',
+        available: false,
+      ),
+    );
+    const phrase = MealExclusionDto(
+      policyId: 'p-2',
+      kind: MealExclusionKindDto.phrase(subject: 'liver'),
+    );
+    await tester.pumpWidget(
+      harness(
+        mealExclusions: () => const [dish, phrase],
+        removeRule: (request) async {
+          removed = request;
+          return const MealExclusionOutcomeDto(exclusions: [phrase]);
+        },
+        initial: '/settings',
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text(describeExclusionCount(2)), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('settings:exclusions')));
+    await tester.pumpAndSettle();
+    expect(title(exclusionsTitle), findsOneWidget);
+    expect(find.text('Old stew'), findsOneWidget);
+    expect(find.text(exclusionsUnavailableCopy), findsOneWidget);
+    expect(find.text(exclusionsPhraseScopeCopy), findsOneWidget);
+    expect(find.text('“liver”'), findsOneWidget);
+    await tester.tap(find.bySemanticsLabel('Remove Old stew'));
+    await tester.pumpAndSettle();
+    expect(removed?.policyId, 'p-1');
+    expect(removed?.acting, isNull);
+    expect(find.text('Old stew'), findsNothing);
+    expect(find.text(exclusionsRemovedCopy), findsOneWidget);
   });
 
   testWidgets('the cover screen renders a load failure and Try again retries', (
@@ -2100,8 +2527,10 @@ void main() {
     var reads = 0;
     await tester.pumpWidget(
       harness(
-        cover: (req) =>
-            ++reads == 1 ? throw const KimattaError.notOpen() : coverOutcome(),
+        cover: CoverFake(
+          open: (_) =>
+              ++reads == 1 ? throw const KimattaError.notOpen() : draftView(),
+        ),
         initial: '/plan/cover',
       ),
     );
@@ -2131,15 +2560,24 @@ void main() {
       tester.platformDispatcher.platformBrightnessTestValue = brightness;
       await tester.pumpWidget(
         harness(
-          cover: (req) => coverOutcome(
-            status: OutcomeStatusDto.needsAttention,
-            attention: [
-              attentionRequest(options: const ['recipe:r-1:1/1']),
-            ],
-            assumptions: const [
-              'PANTRY_INCOMPLETE',
-              'RESTRICTIONS_NOT_CONFIGURED',
-            ],
+          cover: CoverFake(
+            open: (_) => draftView(
+              status: OutcomeStatusDto.needsAttention,
+              undoAvailable: true,
+              slots: [
+                draftSlot(outcome: SlotOutcomeDto.exhausted),
+                draftSlot(date: '2026-08-30', committed: true),
+                draftSlot(
+                  date: '2026-08-31',
+                  state: CoverageStateDto.needsAttention,
+                  reasonCodes: const ['HARD_VETO'],
+                ),
+              ],
+              assumptions: const [
+                'PANTRY_INCOMPLETE',
+                'RESTRICTIONS_NOT_CONFIGURED',
+              ],
+            ),
           ),
           recipes: () => const [okSummary],
           initial: '/plan/cover',
@@ -2149,6 +2587,418 @@ void main() {
       await expectLater(tester, meetsGuideline(androidTapTargetGuideline));
       await expectLater(tester, meetsGuideline(labeledTapTargetGuideline));
       await expectLater(tester, meetsGuideline(textContrastGuideline));
+    }
+  });
+
+  // OPT-007 §9: every draft state wraps rather than overflows, narrow and landscape, at 200%.
+  testWidgets('a busy draft lays out narrow and landscape at text scale 2.0', (
+    tester,
+  ) async {
+    tester.platformDispatcher.textScaleFactorTestValue = 2.0;
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    final rich = draftView(
+      undoAvailable: true,
+      status: OutcomeStatusDto.needsAttention,
+      pastChangesDropped: 1,
+      expired: const [
+        ExpiredDraftDto(draftId: 'd-old', anchor: '2026-08-22', lengthDays: 7),
+      ],
+      slots: [
+        draftSlot(outcome: SlotOutcomeDto.exhausted),
+        draftSlot(date: '2026-08-30', committed: true),
+        draftSlot(
+          date: '2026-08-31',
+          state: CoverageStateDto.needsAttention,
+          reasonCodes: const ['DRAFT_RECIPE_UNAVAILABLE'],
+        ),
+        draftSlot(date: '2026-09-01', outcome: SlotOutcomeDto.blocked),
+      ],
+    );
+    final review = draftView(
+      state: DraftStateDto.needsReview,
+      acceptAllowed: false,
+      slots: [
+        draftSlot(
+          inReview: true,
+          saved: const SavedMealDto(
+            components: [MealComponentDto(kind: 'recipe', recipeId: 'r-1')],
+            locked: true,
+          ),
+        ),
+      ],
+    );
+    for (final size in const [Size(320, 640), Size(915, 412)]) {
+      for (final view in [rich, review, acceptedView()]) {
+        tester.view.physicalSize = size;
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+        await tester.pumpWidget(
+          harness(
+            cover: CoverFake(open: (_) => view),
+            recipes: () => const [okSummary],
+            initial: '/plan/cover',
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull, reason: '$size ${view.state}');
+        final marker = switch (view.state) {
+          DraftStateDto.needsReview => reviewIntroCopy,
+          DraftStateDto.accepted => acceptedCopy,
+          _ => pendingCopy,
+        };
+        expect(
+          find.text(marker),
+          findsOneWidget,
+          reason: '$size ${view.state}',
+        );
+        // A fresh scope per case: a re-pumped scope keeps its loaded draft.
+        await tester.pumpWidget(const SizedBox());
+      }
+    }
+  });
+
+  // --- OPT-007 §10: the local wording experiment ------------------------------------------
+
+  const activeSession = ExperimentSessionDto(
+    sessionId: 'x-1',
+    labelId: 'another_plan',
+    label: 'Another plan',
+    active: true,
+    overridden: false,
+  );
+
+  List<ExperimentEventKindDto> kinds(ExperimentFake f) =>
+      f.events.map((e) => e.kind).toList();
+
+  testWidgets(
+    'the week action wears the session label; the command is the same',
+    (tester) async {
+      usePixel5(tester);
+      final experiment = ExperimentFake(session: activeSession);
+      final fake = CoverFake(mutate: (_, _) => draftView(revision: 1));
+      await tester.pumpWidget(
+        harness(
+          cover: fake,
+          experiment: experiment,
+          tester: true,
+          initial: '/plan/cover',
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Another plan'), findsOneWidget);
+      expect(find.text('New mix'), findsNothing);
+      await tester.tap(find.byKey(const ValueKey('cover:week')));
+      await tester.pumpAndSettle();
+      expect(fake.mutations.single.$2, const DraftActionDto.alternatives());
+    },
+  );
+
+  testWidgets('exposure is recorded once however often the screen rebuilds', (
+    tester,
+  ) async {
+    usePixel5(tester);
+    final experiment = ExperimentFake(session: activeSession);
+    final fake = CoverFake(
+      mutate: (_, action) => draftView(
+        revision: 1,
+        slots: [draftSlot(committed: action is DraftActionDto_SetCommitment)],
+      ),
+    );
+    await tester.pumpWidget(
+      harness(
+        cover: fake,
+        experiment: experiment,
+        tester: true,
+        initial: '/plan/cover',
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const ValueKey('cover:lock:2026-08-29:dinner')),
+    );
+    await tester.pumpAndSettle();
+    expect(kinds(experiment), [ExperimentEventKindDto.exposure]);
+  });
+
+  testWidgets('a week request records its request and coarse counts only', (
+    tester,
+  ) async {
+    usePixel5(tester);
+    final experiment = ExperimentFake(session: activeSession);
+    final fake = CoverFake(
+      mutate: (_, _) => draftView(
+        revision: 1,
+        operation: const DraftOperationDto(
+          operation: 'alternatives',
+          slots: [
+            SlotOutcomeRecordDto(
+              date: '2026-08-29',
+              slot: MealSlotDto.dinner,
+              outcome: SlotOutcomeDto.changed,
+            ),
+            SlotOutcomeRecordDto(
+              date: '2026-08-30',
+              slot: MealSlotDto.dinner,
+              outcome: SlotOutcomeDto.exhausted,
+            ),
+          ],
+        ),
+      ),
+    );
+    await tester.pumpWidget(
+      harness(
+        cover: fake,
+        experiment: experiment,
+        tester: true,
+        initial: '/plan/cover',
+      ),
+    );
+    await tester.pumpAndSettle();
+    experiment.clock.ms = 4200;
+    await tester.tap(find.byKey(const ValueKey('cover:week')));
+    await tester.pumpAndSettle();
+    expect(kinds(experiment), [
+      ExperimentEventKindDto.exposure,
+      ExperimentEventKindDto.alternativeRequested,
+      ExperimentEventKindDto.alternativeResult,
+    ]);
+    final result = experiment.events.last;
+    expect((result.changed, result.exhausted), (1, 1));
+    expect(result.elapsedMs, BigInt.from(4200));
+    expect(result.sessionId, 'x-1');
+  });
+
+  testWidgets('backgrounding pauses active time and says so', (tester) async {
+    usePixel5(tester);
+    final experiment = ExperimentFake(session: activeSession);
+    await tester.pumpWidget(
+      harness(experiment: experiment, tester: true, initial: '/plan/cover'),
+    );
+    await tester.pumpAndSettle();
+    expect(experiment.clock.isRunning, isTrue);
+    experiment.clock.ms = 1500;
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+    await tester.pump();
+    expect(experiment.clock.isRunning, isFalse);
+    expect(experiment.events.last.kind, ExperimentEventKindDto.background);
+    expect(experiment.events.last.elapsedMs, BigInt.from(1500));
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pump();
+    expect(experiment.clock.isRunning, isTrue);
+    expect(experiment.events.last.kind, ExperimentEventKindDto.resume);
+  });
+
+  testWidgets('leaving ends the session; it is complete only after an Accept', (
+    tester,
+  ) async {
+    usePixel5(tester);
+    final left = ExperimentFake(session: activeSession);
+    await tester.pumpWidget(harness(experiment: left, tester: true));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Cover My Week'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+    expect(left.events.last.kind, ExperimentEventKindDto.end);
+    expect(left.events.last.completed, isFalse);
+
+    final accepted = ExperimentFake(session: activeSession);
+    await tester.pumpWidget(harness(experiment: accepted, tester: true));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Cover My Week'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('cover:accept')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+    expect(kinds(accepted), [
+      ExperimentEventKindDto.exposure,
+      ExperimentEventKindDto.acceptSuccess,
+      ExperimentEventKindDto.end,
+    ]);
+    expect(accepted.events.last.completed, isTrue);
+  });
+
+  /// A release installed over a tester build keeps the experiment file, so the gate is the
+  /// build, not the file: outside the tester build no session starts and nothing is recorded.
+  testWidgets('outside the tester build the experiment never starts', (
+    tester,
+  ) async {
+    usePixel5(tester);
+    final experiment = ExperimentFake(session: activeSession);
+    final fake = CoverFake(mutate: (_, _) => draftView(revision: 1));
+    await tester.pumpWidget(
+      harness(cover: fake, experiment: experiment, initial: '/plan/cover'),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('New mix'), findsOneWidget);
+    expect(find.text('Another plan'), findsNothing);
+    expect(experiment.sessions, 0);
+  });
+
+  testWidgets('outside the tester build Accept records no event', (
+    tester,
+  ) async {
+    usePixel5(tester);
+    final experiment = ExperimentFake(session: activeSession);
+    await tester.pumpWidget(
+      harness(experiment: experiment, initial: '/plan/cover'),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('cover:accept')));
+    await tester.pumpAndSettle();
+    expect(experiment.events, isEmpty);
+  });
+
+  testWidgets('an inactive session records nothing and shows New mix', (
+    tester,
+  ) async {
+    usePixel5(tester);
+    final experiment = ExperimentFake();
+    final fake = CoverFake(mutate: (_, _) => draftView(revision: 1));
+    await tester.pumpWidget(
+      harness(cover: fake, experiment: experiment, initial: '/plan/cover'),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('cover:week')));
+    await tester.pumpAndSettle();
+    expect(find.text('New mix'), findsOneWidget);
+    expect(experiment.events, isEmpty);
+  });
+
+  testWidgets('a failing telemetry write never disturbs planning', (
+    tester,
+  ) async {
+    usePixel5(tester);
+    final experiment = ExperimentFake(session: activeSession, failRecord: true);
+    final fake = CoverFake(mutate: (_, _) => draftView(revision: 1));
+    await tester.pumpWidget(
+      harness(
+        cover: fake,
+        experiment: experiment,
+        tester: true,
+        initial: '/plan/cover',
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('cover:week')));
+    await tester.pumpAndSettle();
+    expect(fake.mutations, hasLength(1));
+    expect(find.byType(SnackBar), findsNothing);
+  });
+
+  testWidgets('the experiment controls exist only in the tester build', (
+    tester,
+  ) async {
+    usePixel5(tester);
+    await tester.pumpWidget(harness(initial: '/settings'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('settings:experiment')), findsNothing);
+
+    final experiment = ExperimentFake();
+    final backup = _FakeBackupActions();
+    await tester.pumpWidget(
+      harness(
+        experiment: experiment,
+        backup: backup,
+        tester: true,
+        initial: '/settings',
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('settings:experiment')));
+    await tester.pumpAndSettle();
+    expect(find.text('Another plan'), findsOneWidget, reason: 'assigned arm');
+    await tester.tap(find.byKey(const ValueKey('experiment:enabled')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('experiment:export')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('experiment:reset')));
+    await tester.pumpAndSettle();
+    expect(experiment.controls, [
+      'enabled:true',
+      'export:/support/exports/wording-experiment.json',
+      'reset',
+    ]);
+    expect(backup.shared, ['/support/exports/wording-experiment.json']);
+  });
+
+  Future<void> exportFrom(
+    WidgetTester tester,
+    ExperimentFake experiment,
+    _FakeBackupActions backup,
+  ) async {
+    usePixel5(tester);
+    await tester.pumpWidget(
+      harness(
+        experiment: experiment,
+        backup: backup,
+        tester: true,
+        initial: '/settings',
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('settings:experiment')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('experiment:export')));
+    await tester.pumpAndSettle();
+  }
+
+  // A regression pin, passing before the share step existed too: a failed write must never
+  // reach the share sheet.
+  testWidgets('a failed experiment export shares nothing', (tester) async {
+    final backup = _FakeBackupActions();
+    await exportFrom(tester, ExperimentFake(failExport: true), backup);
+    expect(backup.shared, isEmpty);
+    expect(find.textContaining('Exported'), findsNothing);
+    expect(find.byType(SnackBar), findsOneWidget);
+  });
+
+  testWidgets('a failed share still reports the export as written', (
+    tester,
+  ) async {
+    final backup = _FakeBackupActions(
+      onShareExport: () async => throw Exception('no share target'),
+    );
+    await exportFrom(tester, ExperimentFake(), backup);
+    expect(backup.shared, ['/support/exports/wording-experiment.json']);
+    expect(find.text('Exported 0 events; sharing failed'), findsOneWidget);
+  });
+
+  testWidgets('both label variants fit narrow and landscape at 200%', (
+    tester,
+  ) async {
+    tester.platformDispatcher.textScaleFactorTestValue = 2.0;
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    for (final label in const ['New mix', 'Another plan']) {
+      for (final size in const [Size(320, 640), Size(915, 412)]) {
+        tester.view.physicalSize = size;
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+        await tester.pumpWidget(
+          harness(
+            experiment: ExperimentFake(
+              session: ExperimentSessionDto(
+                sessionId: 'x-1',
+                labelId: label,
+                label: label,
+                active: true,
+                overridden: false,
+              ),
+            ),
+            tester: true,
+            cover: CoverFake(open: (_) => draftView(undoAvailable: true)),
+            initial: '/plan/cover',
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(find.text(label), findsOneWidget);
+        expect(tester.takeException(), isNull, reason: '$label at $size');
+        // A fresh scope per case: a re-pumped scope keeps its started session.
+        await tester.pumpWidget(const SizedBox());
+      }
     }
   });
 
@@ -2234,13 +3084,13 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    expect(
-      find.text(
-        'Local database unavailable: '
-        "the local database is damaged and can't be opened",
-      ),
-      findsOneWidget,
+    final damaged = find.text(
+      'Local database unavailable: '
+      "the local database is damaged and can't be opened",
     );
+    // Below the fold since Settings gained Meal exclusions (OPT-007).
+    await tester.scrollUntilVisible(damaged, 200);
+    expect(damaged, findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -2743,15 +3593,17 @@ void main() {
   ) async {
     usePixel5(tester);
     final install = Completer<StarterInstallReportDto>();
-    CoverCycleRequestDto? requested;
+    DraftContextDto? requested;
     await tester.pumpWidget(
       harness(
         household: () => newHousehold,
         starterInstall: (_) => install.future,
-        cover: (request) {
-          requested = request;
-          return coverOutcome();
-        },
+        cover: CoverFake(
+          open: (context) {
+            requested = context;
+            return draftView();
+          },
+        ),
       ),
     );
     await tester.pump();
@@ -2808,7 +3660,6 @@ void main() {
           completed.add(id);
           return okHousehold;
         },
-        cover: (request) => coverOutcome(applied: request.apply),
         shopping: (_, _) => shoppingView(),
       ),
     );
@@ -2856,7 +3707,6 @@ void main() {
           calls++;
           return completion.future;
         },
-        cover: (request) => coverOutcome(applied: request.apply),
       ),
     );
     await tester.pumpAndSettle();
@@ -2882,7 +3732,6 @@ void main() {
         household: () => newHousehold,
         completeOnboarding: (_) async =>
             throw const KimattaError.storage(message: 'disk full'),
-        cover: (request) => coverOutcome(applied: request.apply),
       ),
     );
     await tester.pumpAndSettle();
@@ -2891,6 +3740,64 @@ void main() {
     expect(find.widgetWithText(FilledButton, 'Accept'), findsNothing);
     expect(find.text(shoppingReadyCopy), findsOneWidget);
   });
+
+  // OPT-007 first-run contract: onboarding completes only on a persisted accepted receipt.
+  testWidgets('a refused Accept does not end first run', (tester) async {
+    usePixel5(tester);
+    final completed = <String>[];
+    final fake = CoverFake(
+      accept: (_) => throw const KimattaError.draft(
+        kind: DraftErrorKind.refused,
+        message: 'some meals need attention before this plan can be accepted',
+      ),
+    );
+    await tester.pumpWidget(
+      harness(
+        household: () => newHousehold,
+        completeOnboarding: (id) async {
+          completed.add(id);
+          return okHousehold;
+        },
+        cover: fake,
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('cover:accept')));
+    await tester.pumpAndSettle();
+    expect(fake.accepts, hasLength(1));
+    expect(completed, isEmpty);
+    expect(find.text(firstRunCopy), findsOneWidget);
+  });
+
+  testWidgets(
+    'a failed completion is retried alone; the meals are not sent again',
+    (tester) async {
+      usePixel5(tester);
+      var attempts = 0;
+      final fake = CoverFake();
+      await tester.pumpWidget(
+        harness(
+          household: () => newHousehold,
+          completeOnboarding: (_) async {
+            if (++attempts == 1) {
+              throw const KimattaError.storage(message: 'disk full');
+            }
+            return okHousehold;
+          },
+          cover: fake,
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('cover:accept')));
+      await tester.pumpAndSettle();
+      expect(attempts, 1);
+      expect(find.text(finishSetupCopy), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('cover:finish-setup')));
+      await tester.pumpAndSettle();
+      expect(attempts, 2);
+      expect(fake.accepts, hasLength(1));
+    },
+  );
 
   testWidgets('a failed completion reports and still leaves Cover', (
     tester,
@@ -2978,7 +3885,7 @@ void main() {
     await tester.pumpWidget(
       harness(
         household: () => newHousehold,
-        cover: (_) => throw const KimattaError.notOpen(),
+        cover: CoverFake(open: (_) => throw const KimattaError.notOpen()),
       ),
     );
     await tester.pumpAndSettle();
@@ -3035,6 +3942,9 @@ void main() {
 
     await tester.tap(tab('Settings'));
     await tester.pumpAndSettle();
+    // Below the fold since Settings gained Meal exclusions (OPT-007).
+    await tester.ensureVisible(find.text('Try again'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Try again'));
     await tester.pump();
     await tester.pump();
@@ -3074,6 +3984,9 @@ void main() {
       await tester.tap(tab('Settings'));
       await tester.pumpAndSettle();
 
+      // Below the fold since Settings gained Meal exclusions (OPT-007).
+      await tester.ensureVisible(find.text('Try again'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Try again'));
       await tester.pumpAndSettle();
       expect(
@@ -3082,6 +3995,8 @@ void main() {
       );
       expect(installs, 0);
 
+      await tester.ensureVisible(find.text('Try again'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Try again'));
       await tester.pumpAndSettle();
       expect(installs, 1);
@@ -3122,7 +4037,6 @@ void main() {
             return okHousehold;
           },
           backup: backup,
-          cover: (request) => coverOutcome(applied: request.apply),
         ),
       );
       await tester.pumpAndSettle();
@@ -6154,7 +7068,8 @@ void main() {
     // what changes is whether it can be brought on screen. It starts below the viewport and
     // scrolling has to reach it. Scoped to the sheet's own scrollable: the pantry list behind
     // it is scrollable too.
-    final viewport = tester.view.physicalSize.height / tester.view.devicePixelRatio;
+    final viewport =
+        tester.view.physicalSize.height / tester.view.devicePixelRatio;
     final last = find.text('legacy item 19');
     expect(tester.getRect(last).top, greaterThan(viewport));
     await tester.scrollUntilVisible(
@@ -6211,28 +7126,29 @@ void main() {
   /// The other half of that pair: an error clears when its own field is corrected. The dropdown
   /// already did this, so without it the household fixes the name and watches 'Name is required'
   /// sit under a field that is now valid until the next Save.
-  testWidgets('correcting the name clears its error but leaves the category error', (
-    tester,
-  ) async {
-    await tester.pumpWidget(harness(initial: '/pantry'));
-    await tester.pumpAndSettle();
-    await tester.enterText(find.byType(TextField), 'sumac');
-    await tester.pumpAndSettle();
-    await tester.tap(find.textContaining('as a new ingredient'));
-    await tester.pumpAndSettle();
-    await tester.enterText(find.byType(TextField).first, '');
-    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
-    await tester.pumpAndSettle();
-    expect(find.text('Name is required'), findsOneWidget);
-    await tester.enterText(find.byType(TextField).first, 'sumac');
-    await tester.pumpAndSettle();
-    expect(find.text('Name is required'), findsNothing);
-    expect(
-      find.text('Category is required'),
-      findsOneWidget,
-      reason: 'an untouched field keeps its error',
-    );
-  });
+  testWidgets(
+    'correcting the name clears its error but leaves the category error',
+    (tester) async {
+      await tester.pumpWidget(harness(initial: '/pantry'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField), 'sumac');
+      await tester.pumpAndSettle();
+      await tester.tap(find.textContaining('as a new ingredient'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField).first, '');
+      await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+      await tester.pumpAndSettle();
+      expect(find.text('Name is required'), findsOneWidget);
+      await tester.enterText(find.byType(TextField).first, 'sumac');
+      await tester.pumpAndSettle();
+      expect(find.text('Name is required'), findsNothing);
+      expect(
+        find.text('Category is required'),
+        findsOneWidget,
+        reason: 'an untouched field keeps its error',
+      );
+    },
+  );
 
   /// Edge case, gate 5: the categorize sheet must show exactly what the banner counted — an
   /// unmarked custom ingredient missing a category is invisible on My Shelves at all, so it
@@ -6723,7 +7639,9 @@ void main() {
         initial: '/pantry',
         pantry: () {
           reads++;
-          return reads == 1 ? const <PantryEntryDto>[] : pantryEntriesAllMarked();
+          return reads == 1
+              ? const <PantryEntryDto>[]
+              : pantryEntriesAllMarked();
         },
       ),
     );
@@ -7545,11 +8463,18 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      expect(find.bySemanticsLabel(lockLabel(false)), findsOneWidget);
+      // Prefix: the tile merges its "saved as soon as you change it" line into the label.
+      expect(
+        find.bySemanticsLabel(RegExp('^${RegExp.escape(lockLabel(false))}')),
+        findsOneWidget,
+      );
       await tester.tap(find.byType(SwitchListTile));
       await tester.pumpAndSettle();
       expect(sent, [('h-1', 'pm-1', true)]);
-      expect(find.bySemanticsLabel(lockLabel(true)), findsOneWidget);
+      expect(
+        find.bySemanticsLabel(RegExp('^${RegExp.escape(lockLabel(true))}')),
+        findsOneWidget,
+      );
       expect(
         tester.widget<SwitchListTile>(find.byType(SwitchListTile)).value,
         isTrue,
@@ -7921,28 +8846,29 @@ void main() {
   /// OPT-006 gate 1's read side. A flag is a purchase instruction set by a household that
   /// *knows* it has the item, so filing the line under "Already have" would hide exactly what
   /// the flag was raised about. It renders under To buy instead, saying why.
-  testWidgets('a flagged pantry-marked line renders under To buy with its note', (
-    tester,
-  ) async {
-    useTallView(tester);
-    await tester.pumpWidget(
-      harness(
-        initial: '/shopping',
-        shopping: (_, _) =>
-            shoppingView(list: shoppingListWithFlaggedOnion()),
-      ),
-    );
-    await tester.pumpAndSettle();
-    // Present in the unexpanded list, which is what "under To buy" means here — before the
-    // reroute this line only appeared inside the collapsed Already-have tile.
-    expect(find.text('onion'), findsOneWidget);
-    // Not `textContaining(alreadyHaveHeading)`: the line menu's 'Already have it' item
-    // shares that prefix. The trailing ' (' matches only the section title, and fails against
-    // the pre-reroute tree on 'Already have (1)' — the old `(0)` form could never appear at
-    // all, because the section is built only when the list is non-empty.
-    expect(find.textContaining('$alreadyHaveHeading ('), findsNothing);
-    expect(find.textContaining(restockFlagCopy), findsOneWidget);
-  });
+  testWidgets(
+    'a flagged pantry-marked line renders under To buy with its note',
+    (tester) async {
+      useTallView(tester);
+      await tester.pumpWidget(
+        harness(
+          initial: '/shopping',
+          shopping: (_, _) =>
+              shoppingView(list: shoppingListWithFlaggedOnion()),
+        ),
+      );
+      await tester.pumpAndSettle();
+      // Present in the unexpanded list, which is what "under To buy" means here — before the
+      // reroute this line only appeared inside the collapsed Already-have tile.
+      expect(find.text('onion'), findsOneWidget);
+      // Not `textContaining(alreadyHaveHeading)`: the line menu's 'Already have it' item
+      // shares that prefix. The trailing ' (' matches only the section title, and fails against
+      // the pre-reroute tree on 'Already have (1)' — the old `(0)` form could never appear at
+      // all, because the section is built only when the list is non-empty.
+      expect(find.textContaining('$alreadyHaveHeading ('), findsNothing);
+      expect(find.textContaining(restockFlagCopy), findsOneWidget);
+    },
+  );
 
   /// The flag has to reach a screen reader too. The visible note rides the subtitle, which
   /// `_neededRow` wraps in `ExcludeSemantics`, so the accessible name is the only place it can
@@ -7955,8 +8881,7 @@ void main() {
     await tester.pumpWidget(
       harness(
         initial: '/shopping',
-        shopping: (_, _) =>
-            shoppingView(list: shoppingListWithFlaggedOnion()),
+        shopping: (_, _) => shoppingView(list: shoppingListWithFlaggedOnion()),
       ),
     );
     await tester.pumpAndSettle();
@@ -7971,28 +8896,29 @@ void main() {
   /// already-marked identity is a no-op whose snackbar promises the line drops off a list the
   /// flag keeps it on; `omittedCopy` says the line was skipped for a pantry mark while the
   /// household reads it under To buy.
-  testWidgets('a flagged marked line offers no "Already have it" and explains the flag', (
-    tester,
-  ) async {
-    useTallView(tester);
-    await tester.pumpWidget(
-      harness(
-        initial: '/shopping',
-        shopping: (_, _) =>
-            shoppingView(list: shoppingListWithFlaggedOnion()),
-      ),
-    );
-    await tester.pumpAndSettle();
-    // Row order under To buy: flour, onion.
-    await tester.tap(find.byTooltip(lineOptionsTooltip).at(1));
-    await tester.pumpAndSettle();
-    expect(find.text('Already have it'), findsNothing);
-    expect(find.text('Back to pantry'), findsNothing);
-    await tester.tap(find.text('Why is this here?'));
-    await tester.pumpAndSettle();
-    expect(find.text(restockExplainCopy), findsOneWidget);
-    expect(find.text(omittedCopy), findsNothing);
-  });
+  testWidgets(
+    'a flagged marked line offers no "Already have it" and explains the flag',
+    (tester) async {
+      useTallView(tester);
+      await tester.pumpWidget(
+        harness(
+          initial: '/shopping',
+          shopping: (_, _) =>
+              shoppingView(list: shoppingListWithFlaggedOnion()),
+        ),
+      );
+      await tester.pumpAndSettle();
+      // Row order under To buy: flour, onion.
+      await tester.tap(find.byTooltip(lineOptionsTooltip).at(1));
+      await tester.pumpAndSettle();
+      expect(find.text('Already have it'), findsNothing);
+      expect(find.text('Back to pantry'), findsNothing);
+      await tester.tap(find.text('Why is this here?'));
+      await tester.pumpAndSettle();
+      expect(find.text(restockExplainCopy), findsOneWidget);
+      expect(find.text(omittedCopy), findsNothing);
+    },
+  );
 
   /// The converse, and why the gate is on `status` rather than on `restock`: a flagged but
   /// *unmarked* line still offers the mark, because marking it is a legitimate correction.
@@ -9039,32 +9965,35 @@ void main() {
       );
     });
 
-    test('setUsedUp clears the mark and sets the flag on the same row', () async {
-      final notifier = _FakePantryNotifier(
-        () => [pantryEntryMarked(chickpeasRef, true), pantryEntries[1]],
-        null,
-        setUsedUp: (_, ref) async {
-          final entry = pantryEntries.firstWhere((e) => e.ingredient == ref);
-          return PantryEntryDto(
-            ingredient: entry.ingredient,
-            name: entry.name,
-            aliases: entry.aliases,
-            marked: false,
-            restockRequested: true,
-            storeCategory: entry.storeCategory,
-          );
-        },
-      );
-      final container = containerWith(notifier);
-      await container.read(pantryProvider.future);
-      final stored = await notifier.setUsedUp(okHousehold.id, chickpeasRef);
-      expect(stored.marked, isFalse);
-      expect(stored.restockRequested, isTrue);
-      final list = container.read(pantryProvider).requireValue;
-      final row = list.firstWhere((e) => e.ingredient == chickpeasRef);
-      expect(row.marked, isFalse);
-      expect(row.restockRequested, isTrue);
-    });
+    test(
+      'setUsedUp clears the mark and sets the flag on the same row',
+      () async {
+        final notifier = _FakePantryNotifier(
+          () => [pantryEntryMarked(chickpeasRef, true), pantryEntries[1]],
+          null,
+          setUsedUp: (_, ref) async {
+            final entry = pantryEntries.firstWhere((e) => e.ingredient == ref);
+            return PantryEntryDto(
+              ingredient: entry.ingredient,
+              name: entry.name,
+              aliases: entry.aliases,
+              marked: false,
+              restockRequested: true,
+              storeCategory: entry.storeCategory,
+            );
+          },
+        );
+        final container = containerWith(notifier);
+        await container.read(pantryProvider.future);
+        final stored = await notifier.setUsedUp(okHousehold.id, chickpeasRef);
+        expect(stored.marked, isFalse);
+        expect(stored.restockRequested, isTrue);
+        final list = container.read(pantryProvider).requireValue;
+        final row = list.firstWhere((e) => e.ingredient == chickpeasRef);
+        expect(row.marked, isFalse);
+        expect(row.restockRequested, isTrue);
+      },
+    );
 
     test(
       'a write for an identity the list has never seen falls back to a re-list',

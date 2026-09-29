@@ -39,6 +39,10 @@ pub struct FoodPolicies {
     /// Subjects a household has hard-vetoed; matched by whole token against titles and line
     /// names at Tier 0, never weighted.
     pub hard_vetoes: Vec<String>,
+    /// Dish identities (`recipe:<id>` / `starter:<slug>`) the household said never to suggest
+    /// (OPT-007 §8). Matched by identity at Tier 0 — never as a phrase, so an ingredient that
+    /// shares a word with the dish is untouched.
+    pub recipe_vetoes: Vec<String>,
     /// Minutes available per slot, when the household has said so.
     pub slot_windows: BTreeMap<MealSlot, u32>,
     /// The household explicitly reviewed its restriction list and confirmed it is complete
@@ -50,6 +54,7 @@ pub struct FoodPolicies {
 impl FoodPolicies {
     pub const DINING_OUT: &'static str = "food.dining_out";
     pub const HARD_VETO: &'static str = "food.hard_veto";
+    pub const RECIPE_VETO: &'static str = "food.recipe_veto";
     pub const RESTRICTIONS_REVIEWED: &'static str = "food.restrictions_reviewed";
     pub const SLOT_WINDOW: &'static str = "food.slot_window";
 
@@ -83,6 +88,14 @@ impl FoodPolicies {
                     Some(_) => {}
                     None => out.unknown_policy_types.push(policy.policy_type.clone()),
                 },
+                Self::RECIPE_VETO => match policy.parameters.get("dish") {
+                    Some(dish) if !is_dish_identity(dish) => {
+                        out.unknown_policy_types.push(policy.policy_type.clone());
+                    }
+                    Some(dish) if policy.enabled => out.recipe_vetoes.push(dish.clone()),
+                    Some(_) => {}
+                    None => out.unknown_policy_types.push(policy.policy_type.clone()),
+                },
                 Self::SLOT_WINDOW => {
                     let slot = policy
                         .parameters
@@ -106,6 +119,8 @@ impl FoodPolicies {
         }
         out.hard_vetoes.sort_unstable();
         out.hard_vetoes.dedup();
+        out.recipe_vetoes.sort_unstable();
+        out.recipe_vetoes.dedup();
         out.unknown_policy_types.sort_unstable();
         out.unknown_policy_types.dedup();
         out
@@ -122,6 +137,30 @@ pub struct RecipeCandidateInfo {
     pub line_names: Vec<String>,
     pub ingredient_refs: Vec<IngredientRef>,
     pub starter_slug: Option<String>,
+    /// Names of the lines that carry no *catalog* ingredient (custom or none), in line order:
+    /// the only lines the similarity rule table may read by token (OPT-007 §7), so a catalog
+    /// line such as "beef broth" is judged by its identity, never by the word "beef".
+    pub untagged_lines: Vec<String>,
+}
+
+impl RecipeCandidateInfo {
+    /// What `untagged_lines` must be when the other fields already say it: every line when no
+    /// catalog ref exists, none when every line has one. Only a mixed recipe needs it spelled
+    /// out, which keeps every pre-existing snapshot's canonical text — and pinned hash — as is.
+    fn untagged_lines_implied(&self) -> Option<Vec<String>> {
+        let catalog = self
+            .ingredient_refs
+            .iter()
+            .filter(|r| matches!(r, IngredientRef::Catalog(_)))
+            .count();
+        if catalog == 0 {
+            Some(self.line_names.clone())
+        } else if catalog == self.line_names.len() {
+            Some(Vec::new())
+        } else {
+            None
+        }
+    }
 }
 
 /// Every collection is held in canonical order by the loader (documented per field), so the
@@ -229,6 +268,13 @@ impl PlanningSnapshot {
             "policy.hard_vetoes",
             join(self.policies.hard_vetoes.iter().cloned()),
         );
+        // Emitted only when set, like `restrictions_reviewed` below: pinned hashes stay put.
+        if !self.policies.recipe_vetoes.is_empty() {
+            line(
+                "policy.recipe_vetoes",
+                join(self.policies.recipe_vetoes.iter().cloned()),
+            );
+        }
         line(
             "policy.slot_windows",
             join(
@@ -249,10 +295,15 @@ impl PlanningSnapshot {
             join(self.policies.unknown_policy_types.iter().cloned()),
         );
         for r in &self.recipes {
+            let untagged = if r.untagged_lines_implied().as_ref() == Some(&r.untagged_lines) {
+                String::new()
+            } else {
+                format!("|untagged={}", r.untagged_lines.join(";"))
+            };
             line(
                 &format!("recipe:{}", r.id.as_str()),
                 format!(
-                    "{}|{}|{}|{}|{}|{}",
+                    "{}|{}|{}|{}|{}|{}{untagged}",
                     r.title,
                     opt(r.servings),
                     opt(r.prep_minutes),
@@ -294,6 +345,21 @@ impl PlanningSnapshot {
     pub fn snapshot_hash(&self) -> String {
         format!("{:016x}", fnv1a_64(self.canonical_text().as_bytes()))
     }
+}
+
+/// `recipe:<id>` or `starter:<slug>` with a non-blank remainder: the only shapes a dish veto names.
+pub fn is_dish_identity(raw: &str) -> bool {
+    ["recipe:", "starter:"].iter().any(|prefix| {
+        raw.strip_prefix(prefix)
+            .is_some_and(|rest| !rest.trim().is_empty())
+    })
+}
+
+/// The same FNV-1a 64 identity over arbitrary canonical text: a request digest or a planning
+/// identity. Like [`PlanningSnapshot::snapshot_hash`], an identity for "same input", never an
+/// authorization.
+pub fn text_digest(text: &str) -> String {
+    format!("{:016x}", fnv1a_64(text.as_bytes()))
 }
 
 pub(crate) fn fnv1a_64(bytes: &[u8]) -> u64 {

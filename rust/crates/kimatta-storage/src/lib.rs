@@ -2,6 +2,7 @@
 #![forbid(unsafe_code)]
 
 pub mod controller;
+pub mod planning_drafts;
 
 use std::collections::{HashMap, HashSet};
 use std::io::Read;
@@ -9,6 +10,7 @@ use std::path::Path;
 
 pub use controller::*;
 pub use food_domain::planner;
+pub use planning_drafts::*;
 
 pub use food_domain::starter::{
     all_starter_content, shipped_starter_content, CookReview, StarterContent, StarterError,
@@ -202,6 +204,14 @@ pub enum StorageError {
     /// prose for the same reason as `NewerSchema`'s.
     #[error("This file is not a Kimatta export. Choose a file saved with Export data.")]
     NotAnExport,
+    #[error("no draft {draft} in household {household}")]
+    NoSuchDraft { draft: String, household: String },
+    /// Compare-and-swap on the draft revision failed: another command changed the draft first.
+    #[error("draft {draft} is no longer at revision {expected}")]
+    DraftRevisionMismatch { draft: String, expected: i64 },
+    /// A request id was reused with different content; receipts make retries safe, not edits.
+    #[error("request {request} was already used for a different command")]
+    ReceiptConflict { request: String },
 }
 
 // Two consts: `M` has drop glue, so an inline `&[M::up(..)]` argument is not promoted
@@ -634,6 +644,50 @@ const MIGRATION_ARRAY: &[M] = &[
     M::up(
         "DELETE FROM meal_component
     WHERE planned_meal_id NOT IN (SELECT id FROM planned_meal);",
+    ),
+    // OPT-007: Cover drafts and their request receipts. Additive only — no existing row is read
+    // or rewritten, so an older build refuses this schema as newer and loses nothing. The
+    // payload is opaque versioned text owned by `food_domain::planner::draft`; storage never
+    // interprets it. The partial unique index is the one-open-draft-per-window rule; closed rows
+    // keep only identity and receipts. `window_end` is stored so expiry is a string comparison
+    // on ISO dates rather than date arithmetic in SQL.
+    M::up(
+        "CREATE TABLE planning_draft (
+        id TEXT PRIMARY KEY NOT NULL,
+        household_id TEXT NOT NULL REFERENCES household(id) ON DELETE CASCADE,
+        anchor_date TEXT NOT NULL,
+        length_days INTEGER NOT NULL CHECK (length_days BETWEEN 1 AND 31),
+        scope TEXT NOT NULL,
+        window_end TEXT NOT NULL,
+        revision INTEGER NOT NULL CHECK (revision >= 0),
+        state TEXT NOT NULL
+            CHECK (state IN ('active', 'needs_review', 'accepted', 'discarded', 'expired')),
+        planning_identity TEXT NOT NULL,
+        review_identity TEXT NOT NULL,
+        format_version INTEGER NOT NULL,
+        algorithm_version INTEGER NOT NULL,
+        similarity_version INTEGER NOT NULL,
+        payload TEXT,
+        undo_payload TEXT,
+        created_on TEXT NOT NULL
+    ) STRICT;
+    CREATE UNIQUE INDEX planning_draft_one_open
+        ON planning_draft(household_id, anchor_date, length_days, scope)
+        WHERE state IN ('active', 'needs_review');
+    CREATE INDEX planning_draft_household ON planning_draft(household_id, state);
+    CREATE TABLE planning_draft_receipt (
+        household_id TEXT NOT NULL REFERENCES household(id) ON DELETE CASCADE,
+        request_id TEXT NOT NULL,
+        draft_id TEXT NOT NULL REFERENCES planning_draft(id) ON DELETE CASCADE,
+        operation TEXT NOT NULL,
+        request_digest TEXT NOT NULL,
+        revision INTEGER NOT NULL,
+        state TEXT NOT NULL,
+        outcome TEXT NOT NULL,
+        ledger_entry_id TEXT,
+        PRIMARY KEY (household_id, request_id)
+    ) STRICT;
+    CREATE INDEX planning_draft_receipt_draft ON planning_draft_receipt(draft_id);",
     ),
 ];
 pub const MIGRATIONS: Migrations<'static> = Migrations::from_slice(MIGRATION_ARRAY);
@@ -4096,7 +4150,7 @@ mod tests {
         let path = dir.path().join("does-not-exist-yet.db");
         let conn = open(&path).unwrap();
         // Hard-coded, not derived from MIGRATIONS: a new migration must consciously bump it.
-        assert_eq!(schema_version(&conn).unwrap(), 15);
+        assert_eq!(schema_version(&conn).unwrap(), 16);
         assert_eq!(count(&conn, "household"), 0);
     }
 
@@ -4259,7 +4313,7 @@ mod tests {
             .unwrap();
         }
         let conn = open(&path).unwrap();
-        assert_eq!(schema_version(&conn).unwrap(), 15);
+        assert_eq!(schema_version(&conn).unwrap(), 16);
         assert_eq!(count(&conn, "household"), 1);
         assert_eq!(count(&conn, "household_member"), 2);
         assert_eq!(count(&conn, "planning_cycle"), 0);
@@ -4475,7 +4529,7 @@ mod tests {
     #[test]
     fn empty_db_migrates_to_latest() {
         let conn = open(":memory:").unwrap();
-        assert_eq!(schema_version(&conn).unwrap(), 15);
+        assert_eq!(schema_version(&conn).unwrap(), 16);
     }
 
     // --- Step 4: schema v3 -----------------------------------------------------------------
@@ -4503,7 +4557,7 @@ mod tests {
             .unwrap();
         }
         let conn = open(&path).unwrap();
-        assert_eq!(schema_version(&conn).unwrap(), 15);
+        assert_eq!(schema_version(&conn).unwrap(), 16);
         assert_eq!(count(&conn, "household"), 1);
         assert_eq!(count(&conn, "planning_cycle"), 1);
         assert_eq!(count(&conn, "planning_meal_slot"), 2);
@@ -4528,7 +4582,7 @@ mod tests {
             insert_pre_v6_recipe(&raw, "h", "r");
         }
         let conn = open(&path).unwrap();
-        assert_eq!(schema_version(&conn).unwrap(), 15);
+        assert_eq!(schema_version(&conn).unwrap(), 16);
         assert_eq!(count(&conn, "household"), 1);
         assert_eq!(count(&conn, "household_member"), 1);
         assert_eq!(count(&conn, "recipe"), 1);
@@ -4554,7 +4608,7 @@ mod tests {
             insert_pre_v6_recipe(&raw, "h", "r");
         }
         let conn = open(&path).unwrap();
-        assert_eq!(schema_version(&conn).unwrap(), 15);
+        assert_eq!(schema_version(&conn).unwrap(), 16);
         assert_eq!(count(&conn, "household"), 1);
         assert_eq!(count(&conn, "recipe"), 1);
         assert_eq!(count(&conn, "household_restriction"), 0);
@@ -5904,7 +5958,7 @@ mod tests {
             insert_household(&mut conn, &household("h"), &[member("m", "h")]).unwrap();
         }
         let conn = open(&path).unwrap();
-        assert_eq!(schema_version(&conn).unwrap(), 15);
+        assert_eq!(schema_version(&conn).unwrap(), 16);
         assert_eq!(count(&conn, "household"), 1);
         assert_eq!(count(&conn, "household_member"), 1);
         let on: i32 = conn
@@ -6634,7 +6688,7 @@ mod tests {
             insert_pre_v6_recipe(&raw, "h", "r");
         }
         let conn = open(&path).unwrap();
-        assert_eq!(schema_version(&conn).unwrap(), 15);
+        assert_eq!(schema_version(&conn).unwrap(), 16);
         assert_eq!(count(&conn, "household"), 1);
         assert_eq!(count(&conn, "recipe"), 1);
         assert_eq!(load(&conn, "h", "r").unwrap().title(), "Recipe r");
@@ -6673,7 +6727,7 @@ mod tests {
             save_recipe(&mut raw, &recipe("h", "r", vec![])).unwrap();
         }
         let conn = open(&path).unwrap();
-        assert_eq!(schema_version(&conn).unwrap(), 15);
+        assert_eq!(schema_version(&conn).unwrap(), 16);
         assert_eq!(count(&conn, "household"), 1);
         assert_eq!(count(&conn, "recipe"), 1);
         assert_eq!(load(&conn, "h", "r").unwrap().title(), "Recipe r");
@@ -8161,7 +8215,7 @@ mod tests {
             save_recipe(&mut raw, &recipe("h", "r", vec![])).unwrap();
         }
         let conn = open(&path).unwrap();
-        assert_eq!(schema_version(&conn).unwrap(), 15);
+        assert_eq!(schema_version(&conn).unwrap(), 16);
         assert_eq!(count(&conn, "household"), 1);
         assert_eq!(count(&conn, "recipe"), 1);
         assert_eq!(load(&conn, "h", "r").unwrap().title(), "Recipe r");
@@ -8763,7 +8817,7 @@ mod tests {
             .unwrap();
         }
         let conn = open(&path).unwrap();
-        assert_eq!(schema_version(&conn).unwrap(), 15);
+        assert_eq!(schema_version(&conn).unwrap(), 16);
         assert_eq!(count(&conn, "household"), 1);
         assert_eq!(count(&conn, "pantry_item"), 1);
         assert_eq!(count(&conn, "shopping_line_state"), 0);
@@ -8795,7 +8849,7 @@ mod tests {
             .unwrap();
         }
         let conn = open(&path).unwrap();
-        assert_eq!(schema_version(&conn).unwrap(), 15);
+        assert_eq!(schema_version(&conn).unwrap(), 16);
         assert_eq!(count(&conn, "household"), 1);
         assert_eq!(count(&conn, "pantry_item"), 1);
         assert_eq!(count(&conn, "shopping_line_state"), 1);
@@ -8999,7 +9053,7 @@ mod tests {
         }
 
         let mut conn = open(&path).unwrap();
-        assert_eq!(schema_version(&conn).unwrap(), 15);
+        assert_eq!(schema_version(&conn).unwrap(), 16);
         let list = load_shopping_list(
             &mut conn,
             &hid("h"),

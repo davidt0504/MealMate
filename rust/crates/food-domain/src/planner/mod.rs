@@ -2,11 +2,14 @@
 //! `cover_cycle` is a pure function of a [`PlanningSnapshot`] and [`SearchParams`]; nothing
 //! under `planner/` touches IO, and the test `planner_source_has_no_io_imports` pins it.
 
+pub mod alternatives;
 pub mod attention;
 pub mod beam;
 pub mod candidates;
 pub mod coverage;
+pub mod draft;
 pub mod score;
+pub mod similarity;
 pub mod snapshot;
 pub mod tier0;
 
@@ -41,8 +44,9 @@ use crate::{format_civil_date, CivilDate, MealComponent, MealSlot};
 
 /// Bumped whenever candidate generation, Tier 0, scoring, search or coverage changes
 /// behaviour, so a ledger row says which planner produced it (invariant 20).
-pub const PLANNER_ALGORITHM_VERSION: u32 = 2;
+pub const PLANNER_ALGORITHM_VERSION: u32 = 3;
 pub const CONTROLLER_ID: &str = "food";
+pub use similarity::SIMILARITY_VERSION;
 
 /// Every code the planner emits is built by this crate without whitespace, so the
 /// constructor cannot fail; a member id inside a code is whitespace-mapped first.
@@ -323,106 +327,111 @@ impl HouseholdController for FoodController {
     /// through Tier 0 alone. A slot with nothing planned is `Unresolved`; a planned meal that
     /// Tier 0 rejects is `NeedsAttention`. No candidate generation, no search.
     fn assess(&self, snapshot: &PlanningSnapshot) -> Result<OutcomeAssessment, Infallible> {
-        let mut slots = Vec::new();
-        let mut rejected_codes = Vec::new();
-        for date in snapshot.dates() {
-            for slot in snapshot.scope.slots().iter().copied() {
-                let Some(existing) = snapshot.existing_at(date, slot) else {
-                    slots.push(coverage::slot_coverage(
-                        snapshot,
-                        date,
-                        slot,
-                        None,
-                        coverage::SlotFallbacks::default(),
-                    ));
-                    continue;
-                };
-                let generated = SlotCandidates {
-                    date,
-                    slot,
-                    resolved: candidates::is_resolved(existing),
-                    candidates: vec![Candidate {
-                        date,
-                        slot,
-                        components: existing.components().to_vec(),
-                        source: CandidateSource::ExistingPlan,
-                        locked: existing.locked(),
-                        views: candidates::recipe_views_of(snapshot, existing),
-                    }],
-                };
-                let (feasible, rejected) = tier0::filter(snapshot, &generated);
-                // The placeholder grading is deliberately reachable here: it reads the stored
-                // components, not the candidate's source, so a frozen/quick occurrence grades
-                // exactly as `cover_cycle` grades the same components. That agreement is what
-                // keeps a row's `resulting_status` and the next row's `prior_status` from
-                // contradicting each other. `only_fallbacks` stays false — `assess` runs no
-                // candidate generation and cannot know whether a real option existed, and it
-                // does not need to: that flag only ever escalates to `NeedsAttention`, which
-                // this path reaches through `feasible.is_empty()` below.
-                let mut cov = coverage::slot_coverage(
-                    snapshot,
-                    date,
-                    slot,
-                    feasible.first(),
-                    coverage::SlotFallbacks {
-                        only_fallbacks: false,
-                        // Gated on the very candidate `slot_coverage` will read the flag for:
-                        // it consults `leftovers_sourced` only inside its own `is_leftovers()`
-                        // branch, and the scan rebuilds a `RecipeView` per stored `Recipe`
-                        // component — the cost `score_plan` hoists out of the search's inner
-                        // loop for the same reason. An empty `feasible` never reaches the flag
-                        // at all, because `slot_coverage` returns on `chosen: None` first.
-                        leftovers_sourced: feasible
-                            .first()
-                            .is_some_and(|f| f.candidate.is_leftovers())
-                            && candidates::leftovers_sourced_from_stored(
-                                snapshot,
-                                date,
-                                snapshot.members.len().max(1),
-                            ),
-                    },
-                );
-                if feasible.is_empty() {
-                    cov.state = CoverageState::NeedsAttention;
-                    cov.components = existing.components().to_vec();
-                    cov.source = Some(CandidateSource::ExistingPlan);
-                    cov.reason_codes = rejected.iter().map(|r| r.code.clone()).collect();
-                    rejected_codes.extend(rejected.into_iter().map(|r| r.code));
-                }
-                slots.push(cov);
-            }
-        }
-        let assumptions = coverage::sufficiency(snapshot, &slots);
-        let status = coverage::cycle_status(&slots, &assumptions);
-        let unresolved_issues = assumptions
-            .iter()
-            .chain(slots.iter().flat_map(|s| s.reason_codes.iter()))
-            .map(|c| coverage::issue_text(c))
-            .filter(|t| !t.is_empty())
-            .fold(Vec::new(), |mut acc: Vec<String>, t| {
-                if !acc.iter().any(|s| s == t) {
-                    acc.push(t.to_owned());
-                }
-                acc
-            });
-        Ok(OutcomeAssessment {
-            controller_id: CONTROLLER_ID.to_owned(),
-            horizon: horizon(snapshot),
-            status,
-            unresolved_issues,
-            assumptions: dedup_codes(assumptions),
-            reason_codes: dedup_codes(
-                slots
-                    .iter()
-                    .flat_map(|s| s.reason_codes.iter().cloned())
-                    .chain(rejected_codes),
-            ),
-        })
+        Ok(assess_slots(snapshot).1)
     }
 
     fn propose(&self, snapshot: &PlanningSnapshot) -> Result<Vec<ActionProposal>, Infallible> {
         Ok(cover_cycle(snapshot, &SearchParams::default()).proposals)
     }
+}
+
+/// [`FoodController::assess`] with the per-slot coverage it is computed from, in canonical
+/// `(date, slot)` order — what a draft view shows beside each meal (OPT-007 §5).
+pub fn assess_slots(snapshot: &PlanningSnapshot) -> (Vec<SlotCoverage>, OutcomeAssessment) {
+    let mut slots = Vec::new();
+    let mut rejected_codes = Vec::new();
+    for date in snapshot.dates() {
+        for slot in snapshot.scope.slots().iter().copied() {
+            let Some(existing) = snapshot.existing_at(date, slot) else {
+                slots.push(coverage::slot_coverage(
+                    snapshot,
+                    date,
+                    slot,
+                    None,
+                    coverage::SlotFallbacks::default(),
+                ));
+                continue;
+            };
+            let generated = SlotCandidates {
+                date,
+                slot,
+                resolved: candidates::is_resolved(existing),
+                candidates: vec![Candidate {
+                    date,
+                    slot,
+                    components: existing.components().to_vec(),
+                    source: CandidateSource::ExistingPlan,
+                    locked: existing.locked(),
+                    views: candidates::recipe_views_of(snapshot, existing),
+                }],
+            };
+            let (feasible, rejected) = tier0::filter(snapshot, &generated);
+            // The placeholder grading is deliberately reachable here: it reads the stored
+            // components, not the candidate's source, so a frozen/quick occurrence grades
+            // exactly as `cover_cycle` grades the same components. That agreement is what
+            // keeps a row's `resulting_status` and the next row's `prior_status` from
+            // contradicting each other. `only_fallbacks` stays false — `assess` runs no
+            // candidate generation and cannot know whether a real option existed, and it
+            // does not need to: that flag only ever escalates to `NeedsAttention`, which
+            // this path reaches through `feasible.is_empty()` below.
+            let mut cov = coverage::slot_coverage(
+                snapshot,
+                date,
+                slot,
+                feasible.first(),
+                coverage::SlotFallbacks {
+                    only_fallbacks: false,
+                    // Gated on the very candidate `slot_coverage` will read the flag for:
+                    // it consults `leftovers_sourced` only inside its own `is_leftovers()`
+                    // branch, and the scan rebuilds a `RecipeView` per stored `Recipe`
+                    // component — the cost `score_plan` hoists out of the search's inner
+                    // loop for the same reason. An empty `feasible` never reaches the flag
+                    // at all, because `slot_coverage` returns on `chosen: None` first.
+                    leftovers_sourced: feasible.first().is_some_and(|f| f.candidate.is_leftovers())
+                        && candidates::leftovers_sourced_from_stored(
+                            snapshot,
+                            date,
+                            snapshot.members.len().max(1),
+                        ),
+                },
+            );
+            if feasible.is_empty() {
+                cov.state = CoverageState::NeedsAttention;
+                cov.components = existing.components().to_vec();
+                cov.source = Some(CandidateSource::ExistingPlan);
+                cov.reason_codes = rejected.iter().map(|r| r.code.clone()).collect();
+                rejected_codes.extend(rejected.into_iter().map(|r| r.code));
+            }
+            slots.push(cov);
+        }
+    }
+    let assumptions = coverage::sufficiency(snapshot, &slots);
+    let status = coverage::cycle_status(&slots, &assumptions);
+    let unresolved_issues = assumptions
+        .iter()
+        .chain(slots.iter().flat_map(|s| s.reason_codes.iter()))
+        .map(|c| coverage::issue_text(c))
+        .filter(|t| !t.is_empty())
+        .fold(Vec::new(), |mut acc: Vec<String>, t| {
+            if !acc.iter().any(|s| s == t) {
+                acc.push(t.to_owned());
+            }
+            acc
+        });
+    let assessment = OutcomeAssessment {
+        controller_id: CONTROLLER_ID.to_owned(),
+        horizon: horizon(snapshot),
+        status,
+        unresolved_issues,
+        assumptions: dedup_codes(assumptions),
+        reason_codes: dedup_codes(
+            slots
+                .iter()
+                .flat_map(|s| s.reason_codes.iter().cloned())
+                .chain(rejected_codes),
+        ),
+    };
+    (slots, assessment)
 }
 
 /// Convenience for callers that want the status the trait's `assess` reports.

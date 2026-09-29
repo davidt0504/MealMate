@@ -4,6 +4,10 @@
 //! when the plan is not `NeedsAttention` — applies the plan, all without reading a clock.
 #![forbid(unsafe_code)]
 
+mod alternatives;
+pub mod exclusions;
+pub mod planning_drafts;
+
 use food_domain::planner::snapshot::components_text;
 use food_domain::planner::{
     cover_cycle as plan, FoodController, FoodPolicies as PolicyTypes, PlanningResult, SearchParams,
@@ -57,6 +61,45 @@ pub enum ApplicationError {
         first: String,
         last: String,
     },
+    // --- Cover drafts (OPT-007). Developer surface; the bridge maps each to user prose. ---
+    #[error(transparent)]
+    Draft(#[from] food_domain::planner::draft::DraftError),
+    #[error("no draft {0} in this household")]
+    DraftNotFound(String),
+    #[error("draft is {0}; start a new one to make changes")]
+    DraftClosed(String),
+    /// The command was built against another revision: the view it came from is out of date.
+    #[error("draft moved from revision {expected} to {found}")]
+    StaleDraft { expected: i64, found: i64 },
+    /// The planning cycle was redefined after the draft started.
+    #[error("the draft's window no longer matches the planning cycle")]
+    DraftWindowChanged,
+    /// Saved meals, recipes or rules changed under the draft; only Review or Discard may run.
+    #[error("the draft needs review against changes made elsewhere")]
+    DraftNeedsReview,
+    #[error("{date} {slot} is not a slot of this draft")]
+    SlotNotInDraft { date: String, slot: String },
+    #[error("{date} {slot} is in the past")]
+    SlotInPast { date: String, slot: String },
+    /// A locked-in slot changes only through an explicit replacement or unlock.
+    #[error("{date} {slot} is locked in")]
+    SlotLockedIn { date: String, slot: String },
+    #[error("choice {0} is not a current dish of this household")]
+    InvalidChoice(String),
+    #[error("nothing to undo")]
+    NothingToUndo,
+    #[error("review must resolve {date} {slot}")]
+    ReviewIncomplete { date: String, slot: String },
+    #[error("the draft does not need review")]
+    ReviewNotNeeded,
+    /// Accept assesses the exact proposal and takes only a covered or tentatively covered one.
+    #[error("the proposal cannot be accepted as shown: {0}")]
+    AcceptRefused(String),
+    #[error("no enabled exclusion {0} in this household")]
+    ExclusionNotFound(String),
+    /// A rollback build: drafts are read-only apart from Discard.
+    #[error("draft edits are switched off in this build")]
+    DraftEditsDisabled,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -569,7 +612,7 @@ mod tests {
         let rows = rows(&conn, "h");
         assert_eq!(rows.len(), 1);
         let e = &rows[0].1;
-        assert_eq!(e.algorithm_version, 2);
+        assert_eq!(e.algorithm_version, 3);
         assert_eq!(e.snapshot_hash, out.result.snapshot_hash);
         assert_eq!(e.snapshot_hash.len(), 16);
         assert_eq!(e.prior_status, OutcomeStatus::Unresolved);
@@ -583,7 +626,7 @@ mod tests {
         assert_eq!(e.controller_id, "food");
         assert!(e.reason_codes.iter().any(|c| c.as_str() == "SLOT_COVERED"));
         assert_eq!(e.payload, out.result.canonical_text());
-        assert!(e.payload.contains("algorithm_version=2"));
+        assert!(e.payload.contains("algorithm_version=3"));
     }
 
     #[test]

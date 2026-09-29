@@ -209,6 +209,10 @@ class _AppState extends ConsumerState<App> {
             },
           );
     } catch (error) {
+      // A typed failure may be retried — by Cover's Finish setup or by leaving — without
+      // sending the accepted meals again. A timeout keeps its settled future, so a stuck write
+      // cannot make leaving Cover wait twice.
+      if (error is! _StartupTimeout) _firstRunCompletion = null;
       _reportFailure(error, subject: 'Setup');
     }
   }

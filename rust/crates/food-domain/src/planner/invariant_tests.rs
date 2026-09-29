@@ -131,7 +131,9 @@ fn fixture_hashes_are_pinned() {
         ("multiple_strong_dislikes", "7c59d93cbdeaf93f"),
         ("busy_week", "44d54063a57a4b4c"),
         ("many_locked_meals", "1a82a735f5460c43"),
-        ("sparse_pantry", "f0e3e4a29f7a6e92"),
+        // OPT-007: its recipes mix catalog and free-text lines, so the canonical text now
+        // names the untagged lines the similarity rule table may read (`untagged=`).
+        ("sparse_pantry", "3fa54eaa539bc146"),
         ("restrictions_set_and_skipped", "000fbc9237476e15"),
         ("leftovers_fallback_heavy", "2784f680c6ebdce7"),
         ("repetitive_meal_library", "3f194d0f6835eb99"),

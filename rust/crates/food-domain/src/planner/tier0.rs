@@ -117,7 +117,11 @@ pub fn filter(
                 }
             }
         }
-        if veto_hit(candidate, &snapshot.policies.hard_vetoes) {
+        let dish_vetoed = !snapshot.policies.recipe_vetoes.is_empty()
+            && crate::planner::draft::identities(snapshot, &candidate.components)
+                .iter()
+                .any(|id| snapshot.policies.recipe_vetoes.contains(id));
+        if dish_vetoed || veto_hit(candidate, &snapshot.policies.hard_vetoes) {
             match held(HARD_VETO.to_owned()) {
                 Some(a) => assumptions.push(a),
                 None => {

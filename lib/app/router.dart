@@ -7,6 +7,8 @@ import 'package:meal_mate/features/household/household_screen.dart';
 import 'package:meal_mate/features/pantry/pantry_screen.dart';
 import 'package:meal_mate/features/planning/cover_screen.dart';
 import 'package:meal_mate/features/planning/cycle_editor_screen.dart';
+import 'package:meal_mate/features/planning/experiment_screen.dart';
+import 'package:meal_mate/features/planning/meal_exclusions_screen.dart';
 import 'package:meal_mate/features/planning/planner_screen.dart';
 import 'package:meal_mate/features/recipes/recipe_detail_screen.dart';
 import 'package:meal_mate/features/recipes/recipe_form_screen.dart';
@@ -132,6 +134,15 @@ GoRouter buildRouter({
                 GoRoute(
                   path: 'restrictions',
                   builder: (_, _) => const RestrictionsScreen(),
+                ),
+                GoRoute(
+                  path: 'exclusions',
+                  builder: (_, _) => const MealExclusionsScreen(),
+                ),
+                // Reachable only from the tester build's Settings entry.
+                GoRoute(
+                  path: 'experiment',
+                  builder: (_, _) => const ExperimentScreen(),
                 ),
               ],
             ),

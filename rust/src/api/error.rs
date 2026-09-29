@@ -27,6 +27,34 @@ pub enum KimattaError {
     Shopping { message: String },
     #[error("this recipe is unavailable while its source rights are reviewed")]
     RecipeQuarantined,
+    /// A Cover draft command refused (OPT-007). `kind` picks the recovery; `message` is user
+    /// prose the screen may render as is.
+    #[error("{message}")]
+    Draft {
+        kind: DraftErrorKind,
+        message: String,
+    },
+}
+
+/// What the Cover screen does about a refused draft command.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DraftErrorKind {
+    /// The view is out of date (another tap or screen moved the draft): reload it.
+    Stale,
+    /// Meals, recipes or rules changed elsewhere: show Review.
+    NeedsReview,
+    /// The draft was accepted, discarded or expired: start a new one.
+    Closed,
+    /// The slot is locked in; changing it needs an explicit replacement or unlock.
+    Locked,
+    /// Accept assessed the exact proposal and cannot take it as shown.
+    Refused,
+    /// A request id was reused with different content.
+    Conflict,
+    /// The database was restored or reset under this screen: reopen it.
+    SessionChanged,
+    /// The command addressed something that is not part of this draft, or is in the past.
+    Invalid,
 }
 
 /// The application layer's storage failures stay `Storage`, exactly as they would arriving
@@ -62,7 +90,70 @@ impl From<kimatta_application::ApplicationError> for KimattaError {
                     message: "that decision is for a day outside the week being planned".to_owned(),
                 }
             }
+            other => draft_error(other),
         }
+    }
+}
+
+fn draft_error(e: kimatta_application::ApplicationError) -> KimattaError {
+    use kimatta_application::ApplicationError as A;
+    let (kind, message) = match e {
+        A::StaleDraft { .. } => (
+            DraftErrorKind::Stale,
+            "this plan changed since the screen loaded; here is the latest",
+        ),
+        A::DraftNeedsReview | A::DraftWindowChanged => (
+            DraftErrorKind::NeedsReview,
+            "meals or recipes changed elsewhere; review them before going on",
+        ),
+        A::DraftClosed(_) | A::DraftNotFound(_) => (
+            DraftErrorKind::Closed,
+            "this draft is finished; open Cover My Week again to start a new one",
+        ),
+        A::SlotLockedIn { .. } => (
+            DraftErrorKind::Locked,
+            "that meal is locked in; unlock it or choose a replacement first",
+        ),
+        A::AcceptRefused(_) => (
+            DraftErrorKind::Refused,
+            "some meals need attention before this plan can be accepted",
+        ),
+        A::SlotInPast { .. } => (DraftErrorKind::Invalid, "that day has already passed"),
+        A::SlotNotInDraft { .. } => (
+            DraftErrorKind::Invalid,
+            "that meal is not part of the week being planned",
+        ),
+        A::InvalidChoice(_) => (
+            DraftErrorKind::Invalid,
+            "that dish is no longer in your recipes",
+        ),
+        A::NothingToUndo => (DraftErrorKind::Invalid, "there is nothing to undo"),
+        A::DraftEditsDisabled => (
+            DraftErrorKind::Invalid,
+            "changing plans here is paused in this version; your saved plan is unchanged",
+        ),
+        A::ReviewIncomplete { .. } => (
+            DraftErrorKind::Invalid,
+            "choose which meal to keep for every changed day",
+        ),
+        A::ReviewNotNeeded => (DraftErrorKind::Stale, "nothing needs review any more"),
+        A::ExclusionNotFound(_) => (
+            DraftErrorKind::Stale,
+            "that rule was already removed; here is the current list",
+        ),
+        A::Draft(_) => (
+            DraftErrorKind::Closed,
+            "this draft cannot be read by this version of the app; discard it to go on",
+        ),
+        other => {
+            return KimattaError::Storage {
+                message: other.to_string(),
+            }
+        }
+    };
+    KimattaError::Draft {
+        kind,
+        message: message.to_owned(),
     }
 }
 
@@ -120,6 +211,14 @@ impl From<kimatta_storage::StorageError> for KimattaError {
                 message: e.to_string(),
             },
             kimatta_storage::StorageError::RecipeQuarantined(_) => KimattaError::RecipeQuarantined,
+            kimatta_storage::StorageError::ReceiptConflict { .. } => KimattaError::Draft {
+                kind: DraftErrorKind::Conflict,
+                message: "that request was already used for something else; try again".to_owned(),
+            },
+            kimatta_storage::StorageError::DraftRevisionMismatch { .. } => KimattaError::Draft {
+                kind: DraftErrorKind::Stale,
+                message: "this plan changed since the screen loaded; here is the latest".to_owned(),
+            },
             other => KimattaError::Storage {
                 message: other.to_string(),
             },

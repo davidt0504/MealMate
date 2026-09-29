@@ -9,7 +9,35 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 import 'package:freezed_annotation/freezed_annotation.dart' hide protected;
 part 'error.freezed.dart';
 
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `fmt`, `fmt`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`
+// These functions are ignored because they are not marked as `pub`: `draft_error`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `clone`, `eq`, `fmt`, `fmt`, `fmt`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`
+
+/// What the Cover screen does about a refused draft command.
+enum DraftErrorKind {
+  /// The view is out of date (another tap or screen moved the draft): reload it.
+  stale,
+
+  /// Meals, recipes or rules changed elsewhere: show Review.
+  needsReview,
+
+  /// The draft was accepted, discarded or expired: start a new one.
+  closed,
+
+  /// The slot is locked in; changing it needs an explicit replacement or unlock.
+  locked,
+
+  /// Accept assessed the exact proposal and cannot take it as shown.
+  refused,
+
+  /// A request id was reused with different content.
+  conflict,
+
+  /// The database was restored or reset under this screen: reopen it.
+  sessionChanged,
+
+  /// The command addressed something that is not part of this draft, or is in the past.
+  invalid,
+}
 
 @freezed
 sealed class KimattaError with _$KimattaError implements FrbException {
@@ -38,4 +66,11 @@ sealed class KimattaError with _$KimattaError implements FrbException {
       KimattaError_Shopping;
   const factory KimattaError.recipeQuarantined() =
       KimattaError_RecipeQuarantined;
+
+  /// A Cover draft command refused (OPT-007). `kind` picks the recovery; `message` is user
+  /// prose the screen may render as is.
+  const factory KimattaError.draft({
+    required DraftErrorKind kind,
+    required String message,
+  }) = KimattaError_Draft;
 }

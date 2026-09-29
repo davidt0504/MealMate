@@ -194,7 +194,7 @@ pub(crate) fn status_from_domain(s: OutcomeStatus) -> OutcomeStatusDto {
     }
 }
 
-fn state_from_domain(s: kimatta_storage::planner::CoverageState) -> CoverageStateDto {
+pub(crate) fn state_from_domain(s: kimatta_storage::planner::CoverageState) -> CoverageStateDto {
     use kimatta_storage::planner::CoverageState as S;
     match s {
         S::Unresolved => CoverageStateDto::Unresolved,
@@ -637,7 +637,7 @@ mod tests {
         assert_eq!(out.changed_slots, 0);
         assert!(!out.ledger_entry_id.is_empty());
         let r = &out.result;
-        assert_eq!(r.algorithm_version, 2);
+        assert_eq!(r.algorithm_version, 3);
         assert_eq!(r.snapshot_hash.len(), 16);
         assert_eq!(r.horizon_from, "2026-08-29");
         assert_eq!(r.horizon_to, "2026-08-30");

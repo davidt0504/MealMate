@@ -1,7 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:meal_mate/features/planning/cover_copy.dart';
-import 'package:meal_mate/src/rust/api/planning.dart';
 
 /// Every exported string, explicitly — the safety regex must see the whole surface.
 final coverCopySamples = <String>[
@@ -10,27 +9,53 @@ final coverCopySamples = <String>[
   coveredCopy,
   tentativeCopy,
   unresolvedCopy,
-  needsYouCopy(1),
-  needsYouCopy(2),
-  questionsHeading,
-  quietHeading,
+  needsAttentionCopy,
   assumptionsHeading,
-  infeasibleQuestionCopy,
-  wordingQuestionCopy,
-  fallbackQuestionCopy,
-  swapLocksCopy,
-  swapSheetTitle,
-  swapLibraryUnavailableCopy,
-  questionLockedCopy,
-  vetoConfirmTitle('Peanut noodles'),
-  vetoConfirmBody('Peanut noodles'),
+  pendingCopy,
+  lockedStayCopy,
+  allLockedCopy,
+  noSuggestionsToChangeCopy,
+  exhaustedCopy('2026-09-29'),
+  blockedAnotherCopy,
+  for (final codes in const [
+    ['DRAFT_RECIPE_UNAVAILABLE'],
+    ['PLAN_INFEASIBLE'],
+    ['HARD_VETO'],
+    ['HARD_CONSTRAINT_UNRESOLVED'],
+  ])
+    slotProblemCopy(codes)!,
+  chooseLocksCopy,
+  chooseSheetTitle,
+  replaceSheetTitle,
+  replaceWarningCopy,
+  chooseLibraryUnavailableCopy,
+  neverSuggestTitle,
+  neverSuggestBody(['Peanut noodles', 'Rice']),
+  neverSuggestPickCopy,
+  reviewIntroCopy,
+  reviewFactsOnlyCopy,
+  savedMealHeading,
+  yourChoiceHeading,
+  nothingSavedCopy,
+  pastDroppedCopy(1),
+  pastDroppedCopy(2),
+  expiredDraftCopy('2026-09-21'),
   acceptSemanticsCopy,
   acceptedCopy,
   shoppingReadyCopy,
+  finishSetupCopy,
   reviewedRowCopy,
   reviewedRowSetLabel,
   reviewedRowNoneLabel,
-  swapToLabel('Rice bowl'),
+  exclusionsTitle,
+  exclusionsEmptyCopy,
+  exclusionsDishHeading,
+  exclusionsPhraseHeading,
+  exclusionsPhraseScopeCopy,
+  exclusionsUnavailableCopy,
+  describeExclusionCount(1),
+  describeExclusionCount(3),
+  exclusionsRemovedCopy,
   for (final code in const [
     'LOCK_HELD_OVER',
     'NO_PREP_TIME_ESTIMATES',
@@ -58,7 +83,7 @@ void main() {
     // construction that would is deriving the samples from one exported map the widgets also
     // read. That residual is tracked in `KNOWN_ISSUES-low.md`.
     expect(coverCopySamples, isNotEmpty);
-    expect(coverCopySamples.length, 32);
+    expect(coverCopySamples.length, 55);
     for (final sample in coverCopySamples) {
       expect(assurance.hasMatch(sample), isFalse, reason: sample);
     }
@@ -81,66 +106,40 @@ void main() {
     expect(assumptionCopy('RESTRICTIONS_NOT_CONFIGURED'), isNotNull);
   });
 
-  test('optionRecipeId maps only a single full recipe token', () {
-    expect(optionRecipeId('recipe:r-1:1/1'), 'r-1');
-    expect(optionRecipeId('recipe:r-tofu:3/2'), 'r-tofu');
-    // An id containing a colon parses greedily and deterministically.
-    expect(optionRecipeId('recipe:odd:id:1/1'), 'odd:id');
-    // Note-bearing kinds, joins, and hostile ids all fall to the picker.
-    expect(optionRecipeId('leftovers:from tuesday'), isNull);
-    expect(optionRecipeId('frozen_quick:'), isNull);
-    expect(optionRecipeId('recipe:r-1:1/1,recipe:r-2:1/1'), isNull);
-    expect(optionRecipeId('recipe:a,recipe:b:1/1'), isNull);
-    expect(optionRecipeId('recipe:r-1'), isNull);
-    expect(optionRecipeId(''), isNull);
+  // OPT-007 §8: the rule is on the dish's identity, reversible, and outlives the draft. The
+  // dialog says all three before consent — and, unlike the old word rule, claims no reach into
+  // ingredient lists it does not have.
+  test('the never-suggest dialog states reach, permanence of the rule, and reversal', () {
+    final body = neverSuggestBody(['Chili']);
+    expect(body, startsWith('Chili won’t be suggested from now on'));
+    expect(body, contains('even if you discard this plan'));
+    expect(body, contains('Saved and locked-in meals aren’t changed'));
+    expect(body, contains('Settings › Meal exclusions'));
+    expect(body, isNot(contains('ingredient')));
+    expect(body, isNot(contains('no way to undo')));
   });
 
-  test('questionSlot parses the engine id shape and nothing else', () {
-    expect(questionSlot('food:infeasible:2026-08-29:dinner'), (
-      date: '2026-08-29',
-      slot: MealSlotDto.dinner,
-    ));
-    expect(questionSlot('food:preferences:2026-08-29'), isNull);
-    expect(questionSlot('food:x:2026-08-29:supper'), isNull);
-    expect(questionSlot(''), isNull);
-  });
-
-  // The veto is permanent: no command reads, edits or deletes a `food.hard_veto` row, so the
-  // one dialog whose job is informed consent must not point at a reversal surface.
-  test('the veto dialog states permanence and promises no reversal', () {
+  test('a multi-dish rule names every dish it covers', () {
     expect(
-      vetoConfirmBody('Rice bowl'),
-      contains('Rice bowl will never be suggested again.'),
+      neverSuggestBody(['Rice', 'Beans']),
+      startsWith('Rice, Beans won’t be suggested'),
     );
-    expect(vetoConfirmBody('Rice bowl'), isNot(contains('household settings')));
   });
 
-  // The engine matches a veto subject as a whole-token phrase against each candidate's title
-  // *and* every ingredient line name (`veto_hit`, `food-domain/src/planner/tier0.rs`), so the
-  // rule reaches further than the dish that was tapped. The write is irreversible and the UI
-  // is its only minting surface, so the breadth is stated before consent is taken.
-  test('the veto dialog states the breadth the consent actually buys', () {
-    final body = vetoConfirmBody('Chili');
-    expect(body, contains('ingredient list'));
-    expect(body, contains('those exact words'));
+  test('slot problems map known codes and never render a raw one', () {
+    expect(slotProblemCopy(const ['SOME_FUTURE_CODE']), isNull);
+    expect(slotProblemCopy(const []), isNull);
+    // Parameterised Tier-0 codes reach their family's copy.
+    expect(
+      slotProblemCopy(const ['RESTRICTION_CONFLICT:rules_v1']),
+      slotProblemCopy(const ['HARD_VETO']),
+    );
+    // The most specific problem wins.
+    expect(
+      slotProblemCopy(const ['HARD_VETO', 'DRAFT_RECIPE_UNAVAILABLE']),
+      contains('no longer in your library'),
+    );
   });
-
-  // "those exact words" is a back-reference: it only reads as the subject if it follows the
-  // subject and precedes the permanence claim. A reorder would leave it dangling.
-  test(
-    'the breadth sentence sits between the subject and the no-undo claim',
-    () {
-      final body = vetoConfirmBody('Peanut noodles');
-      expect(body, startsWith('Peanut noodles will never be suggested again.'));
-      // Both bounds asserted: `indexOf` returns -1 for an absent phrase, which would satisfy
-      // `lessThan` on its own and make this pass against copy that never states the breadth.
-      expect(body.indexOf('those exact words'), greaterThan(0));
-      expect(
-        body.indexOf('those exact words'),
-        lessThan(body.indexOf('no way to undo')),
-      );
-    },
-  );
 
   // Expected-to-pass pin, the third whole-surface regex. `contains_phrase`
   // (`food-domain/src/restriction.rs:355`) is `windows(n).any(|w| w == phrase)` over lowercased
@@ -170,16 +169,16 @@ void main() {
     }
   });
 
-  // Expected-to-pass: the subject is interpolated, never escaped or truncated, so a title
-  // carrying punctuation reads back verbatim in both strings.
-  test('veto copy embeds any subject verbatim', () {
-    const subject = "Rice & 'bowl' (50%)";
-    expect(vetoConfirmTitle(subject), 'Never suggest $subject?');
-    expect(vetoConfirmBody(subject), startsWith('$subject will never'));
+  // Expected-to-pass: dish names are interpolated, never escaped or truncated.
+  test('never-suggest copy embeds any dish name verbatim', () {
+    const dish = "Rice & 'bowl' (50%)";
+    expect(neverSuggestBody([dish]), startsWith('$dish won’t'));
   });
 
-  test('needsYouCopy counts in user language', () {
-    expect(needsYouCopy(1), '1 thing needs you');
-    expect(needsYouCopy(3), '3 things need you');
+  test('counts read in user language', () {
+    expect(describeExclusionCount(1), '1 meal is never suggested.');
+    expect(describeExclusionCount(3), '3 meals are never suggested.');
+    expect(pastDroppedCopy(1), startsWith('A change'));
+    expect(pastDroppedCopy(2), startsWith('2 changes'));
   });
 }

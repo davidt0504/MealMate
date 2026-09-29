@@ -3,7 +3,8 @@
 //! (repeats, overlap, leftovers) are what the search optimises, not per-slot scores.
 
 use crate::format_civil_date;
-use crate::planner::score::{score_plan, PlanScore, Score};
+use crate::planner::score::{commitments_of, score_plan_with, PlanScore, Score};
+use crate::planner::similarity::Commitment;
 use crate::planner::snapshot::{components_text, PlanningSnapshot, SearchParams};
 use crate::planner::tier0::Feasible;
 
@@ -49,6 +50,21 @@ pub fn search(
     params: &SearchParams,
     slots: &[Vec<Feasible>],
 ) -> SearchOutcome {
+    search_with(snapshot, params, slots, &commitments_of(snapshot))
+}
+
+/// [`search`] against explicit commitments: a draft's locked-in meals rather than the stored
+/// locks. Both the per-slot ranking before the `K` cut and every whole-plan score see all of
+/// them.
+pub fn search_with(
+    snapshot: &PlanningSnapshot,
+    params: &SearchParams,
+    slots: &[Vec<Feasible>],
+    commitments: &[Commitment],
+) -> SearchOutcome {
+    let score_plan = |snapshot, params, chosen: &[Feasible], total| {
+        score_plan_with(snapshot, params, chosen, total, commitments)
+    };
     let beam_width = params.beam_width.max(1);
     let per_slot = params.candidates_per_slot.max(1);
     let total = slots.len();

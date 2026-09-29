@@ -25,9 +25,14 @@ const plannerEmptyCopy =
     'Week later.';
 
 /// The accessible name of the lock switch. It states what a lock binds — automation, not the
-/// user (invariant 18) — before the platform's own on/off, which no label can suppress.
-String lockLabel(bool locked) =>
-    locked ? 'Locked — automation will not change this meal' : 'Unlocked';
+/// user (invariant 18) — before the platform's own on/off, which no label can suppress. The
+/// words match Cover's Lock in / Locked in (OPT-007 §9).
+String lockLabel(bool locked) => locked
+    ? 'Locked in — automation will not change this meal'
+    : 'Not locked in';
+
+/// Beside the plan's lock switch: unlike Cover's draft, a change here is saved at once.
+const lockSavedNowCopy = 'Saved as soon as you change it.';
 
 /// `null` is the bridge's "as written". The two half presets get their glyph; anything else
 /// is rendered as the fraction it is rather than rounded.

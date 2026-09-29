@@ -5,6 +5,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::planner::candidates::{CandidateSource, RecipeView};
+use crate::planner::similarity::{self, Commitment, SIMILAR_TO_COMMITMENT};
 use crate::planner::snapshot::{PlanningSnapshot, SearchParams};
 use crate::planner::tier0::{prep_minutes, Feasible};
 use crate::restriction::{contains_phrase, tokens};
@@ -70,6 +71,9 @@ struct Ctx<'a> {
     /// than `states_scored × slots × views × |history|`.
     history_keys: BTreeSet<String>,
     history_views_by_date: BTreeMap<CivilDate, Vec<RecipeView>>,
+    /// Every locked-in meal of the window, earlier *and later* than the slot being scored, so a
+    /// Friday commitment already shapes Monday's singleton ranking before the `K` cut (§7).
+    commitments: &'a [Commitment],
 }
 
 impl Ctx<'_> {
@@ -230,16 +234,17 @@ fn score_slot(ctx: &mut Ctx<'_>, chosen: &[Feasible], index: usize) {
             ctx.term(5, f, RECENTLY_EATEN, -1);
         }
         // Reuse across *different* dishes only: a repeat sharing its own ingredients is the
-        // `REPEAT_IN_CYCLE` case, not ingredient reuse.
+        // `REPEAT_IN_CYCLE` case, not ingredient reuse — and two dishes of one family share
+        // ingredients because they are nearly the same meal, which is not reuse to reward (§7).
+        let others: Vec<&RecipeView> = chosen[..index]
+            .iter()
+            .flat_map(|e| e.candidate.views.iter())
+            .filter(|v| v.key != view.key && !similarity::near_duplicates(view, v))
+            .collect();
         let overlap = view
             .refs
             .iter()
-            .filter(|r| {
-                chosen[..index]
-                    .iter()
-                    .flat_map(|e| e.candidate.views.iter())
-                    .any(|v| v.key != view.key && v.refs.contains(r))
-            })
+            .filter(|r| others.iter().any(|v| v.refs.contains(r)))
             .count()
             .min(3) as i64;
         if overlap > 0 {
@@ -255,6 +260,19 @@ fn score_slot(ctx: &mut Ctx<'_>, chosen: &[Feasible], index: usize) {
             ctx.term(5, f, PANTRY_FIT, pantry);
         }
     }
+    let commitments = ctx.commitments;
+    // A committed slot cannot change, so a pair it belongs to is never charged: the term would
+    // shift every plan equally and put evidence in the ledger that no choice produced.
+    let fixed = commitments
+        .iter()
+        .any(|m| (m.date, m.slot) == (c.date, c.slot));
+    if !fixed {
+        for commitment in commitments {
+            if similarity::resembles(c.date, c.slot, &c.views, commitment) {
+                ctx.term(5, f, SIMILAR_TO_COMMITMENT, similarity::WEIGHT);
+            }
+        }
+    }
     if c.is_leftovers() && leftover_source(ctx, chosen, index) {
         ctx.term(5, f, LEFTOVER_UTILITY, 1);
         ctx.assume(LEFTOVER_ASSUMED);
@@ -265,12 +283,48 @@ fn score_slot(ctx: &mut Ctx<'_>, chosen: &[Feasible], index: usize) {
 }
 
 /// Scores a (possibly partial) plan in canonical slot order. `total_slots` is the cycle's
-/// enabled slot count, the denominator of the §9.10 step-6 sacrifice rule.
+/// enabled slot count, the denominator of the §9.10 step-6 sacrifice rule. The commitments are
+/// the snapshot's own locked meals ([`commitments_of`]); a draft passes its own to
+/// [`score_plan_with`].
 pub fn score_plan(
     snapshot: &PlanningSnapshot,
     params: &SearchParams,
     chosen: &[Feasible],
     total_slots: usize,
+) -> PlanScore {
+    score_plan_with(
+        snapshot,
+        params,
+        chosen,
+        total_slots,
+        &commitments_of(snapshot),
+    )
+}
+
+/// The stored locked meals of the window's enabled slots that name at least one dish.
+pub fn commitments_of(snapshot: &PlanningSnapshot) -> Vec<Commitment> {
+    let dates = snapshot.dates();
+    snapshot
+        .existing
+        .iter()
+        .filter(|m| m.locked() && dates.contains(&m.date()) && snapshot.scope.contains(m.slot()))
+        .map(|m| {
+            Commitment::of(
+                m.date(),
+                m.slot(),
+                &crate::planner::candidates::recipe_views_of(snapshot, m),
+            )
+        })
+        .filter(|c| !c.keys.is_empty())
+        .collect()
+}
+
+pub fn score_plan_with(
+    snapshot: &PlanningSnapshot,
+    params: &SearchParams,
+    chosen: &[Feasible],
+    total_slots: usize,
+    commitments: &[Commitment],
 ) -> PlanScore {
     let mut history_views_by_date: BTreeMap<CivilDate, Vec<RecipeView>> = BTreeMap::new();
     let mut history_keys = BTreeSet::new();
@@ -295,6 +349,7 @@ pub fn score_plan(
         members: BTreeMap::new(),
         history_keys,
         history_views_by_date,
+        commitments,
     };
     for index in 0..chosen.len() {
         score_slot(&mut ctx, chosen, index);

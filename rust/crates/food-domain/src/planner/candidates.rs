@@ -67,6 +67,8 @@ pub struct RecipeView {
     pub prep_minutes: Option<u32>,
     pub line_names: Vec<String>,
     pub refs: Vec<IngredientRef>,
+    /// Line names with no catalog ingredient: the similarity token fallback's only input.
+    pub untagged: Vec<String>,
 }
 
 impl RecipeView {
@@ -137,7 +139,15 @@ pub fn is_resolved(existing: &PlannedMeal) -> bool {
 pub(crate) const STARTER_NOTE_PREFIX: &str = "starter:";
 
 pub(crate) fn recipe_views_of(snapshot: &PlanningSnapshot, meal: &PlannedMeal) -> Vec<RecipeView> {
-    meal.components()
+    views_of(snapshot, meal.components())
+}
+
+/// [`recipe_views_of`] for components not yet stored as an occurrence: a draft's displayed meal.
+pub(crate) fn views_of(
+    snapshot: &PlanningSnapshot,
+    components: &[MealComponent],
+) -> Vec<RecipeView> {
+    components
         .iter()
         .filter_map(|c| match c {
             MealComponent::Recipe { recipe_id, scale } => {
@@ -150,6 +160,7 @@ pub(crate) fn recipe_views_of(snapshot: &PlanningSnapshot, meal: &PlannedMeal) -
                         prep_minutes: r.prep_minutes,
                         line_names: r.line_names.clone(),
                         refs: r.ingredient_refs.clone(),
+                        untagged: r.untagged_lines.clone(),
                     },
                     // An occurrence naming a recipe the snapshot does not carry (archived): known
                     // by id only, so nothing about it can be verified and nothing is guessed —
@@ -165,6 +176,7 @@ pub(crate) fn recipe_views_of(snapshot: &PlanningSnapshot, meal: &PlannedMeal) -
                         prep_minutes: None,
                         line_names: Vec::new(),
                         refs: Vec::new(),
+                        untagged: Vec::new(),
                     },
                 })
             }
@@ -195,6 +207,12 @@ fn starter_view(s: &StarterRecipe) -> RecipeView {
             .filter_map(IngredientLine::ingredient)
             .cloned()
             .collect(),
+        untagged: s
+            .lines
+            .iter()
+            .filter(|l| !matches!(l.ingredient(), Some(IngredientRef::Catalog(_))))
+            .map(|l| l.name().to_owned())
+            .collect(),
     }
 }
 
@@ -223,6 +241,7 @@ fn starter_stub_view(snapshot: &PlanningSnapshot, slug: &str) -> RecipeView {
             prep_minutes: r.prep_minutes,
             line_names: r.line_names.clone(),
             refs: r.ingredient_refs.clone(),
+            untagged: r.untagged_lines.clone(),
         };
     }
     match snapshot.starter.iter().find(|s| s.slug == slug) {
@@ -235,6 +254,7 @@ fn starter_stub_view(snapshot: &PlanningSnapshot, slug: &str) -> RecipeView {
             prep_minutes: None,
             line_names: Vec::new(),
             refs: Vec::new(),
+            untagged: Vec::new(),
         },
     }
 }
@@ -303,6 +323,7 @@ fn leftovers_possible(snapshot: &PlanningSnapshot, date: CivilDate, members: usi
                 prep_minutes: None,
                 line_names: Vec::new(),
                 refs: Vec::new(),
+                untagged: Vec::new(),
             }
             .feeds_leftovers(members)
         }) || snapshot
@@ -353,6 +374,7 @@ pub fn generate(snapshot: &PlanningSnapshot) -> Vec<SlotCandidates> {
                         prep_minutes: r.prep_minutes,
                         line_names: r.line_names.clone(),
                         refs: r.ingredient_refs.clone(),
+                        untagged: r.untagged_lines.clone(),
                     }],
                 });
             }

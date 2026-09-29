@@ -321,8 +321,9 @@ class _PlannerScreenState extends ConsumerState<PlannerScreen> {
               SwitchListTile(
                 title: Semantics(
                   label: lockLabel(meal.locked),
-                  child: const ExcludeSemantics(child: Text('Locked')),
+                  child: const ExcludeSemantics(child: Text('Locked in')),
                 ),
+                subtitle: const Text(lockSavedNowCopy),
                 value: meal.locked,
                 // A locked meal stays editable by the user: the lock binds automation only
                 // (invariant 18), so nothing below is gated on it.

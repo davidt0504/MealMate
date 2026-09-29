@@ -63,7 +63,10 @@ pub enum PlanningError {
 
 /// Meal slots in chronological order within a day. Declaration order is the canonical
 /// order every read and DTO uses, so a round-trip never depends on insertion order.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize,
+)]
+#[serde(rename_all = "snake_case")]
 pub enum MealSlot {
     Breakfast,
     Lunch,

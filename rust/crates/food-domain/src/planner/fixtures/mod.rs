@@ -93,6 +93,12 @@ pub fn candidate_info_of(r: &Recipe) -> RecipeCandidateInfo {
             .cloned()
             .collect(),
         starter_slug: r.provenance().starter_slug().map(str::to_owned),
+        untagged_lines: r
+            .lines()
+            .iter()
+            .filter(|l| !matches!(l.ingredient(), Some(IngredientRef::Catalog(_))))
+            .map(|l| l.name().to_owned())
+            .collect(),
     }
 }
 

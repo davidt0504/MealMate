@@ -595,6 +595,8 @@ dependencies = [
  "flutter_rust_bridge",
  "kimatta-application",
  "kimatta-storage",
+ "serde",
+ "serde_json",
  "tempfile",
  "thiserror",
  "uuid",
