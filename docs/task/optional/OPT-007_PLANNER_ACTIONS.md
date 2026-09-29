@@ -1,6 +1,6 @@
 # OPT-007 — Cover My Week actions: say what they do, ask for another, reshuffle the week
 
-> Scoping card (D-042). The design is not resolved here; a dedicated `grill-me` session resolves the decision gates below and folds its answers into this card before `plan-task`.
+> Scoping card (D-042). Decision gates resolved 2026-09-28; owner answers are folded in below the gate list.
 
 | Field | Value |
 |---|---|
@@ -26,7 +26,11 @@ Probably also a button for a completely reshuffle week."
 
 Before planning, read `docs/ROADMAP.md` and apply the mandatory planning gate in
 `docs/task/README.md` for `OPT-007`. **Planning may not start until every decision gate below
-records an owner answer** from a `grill-me` session.
+records an owner answer** from a `grill-me` session. **Resolved 2026-09-28** — all six gates
+record the owner's answers from the 2026-09-28 planning session (external Codex session, reviewed
+by `redteam-plan`); the approved plan is
+`~/.codex/personal-workflows/pilot/plans/meal-mate-opt-007-meal-alternatives.md` (baseline
+`c56bbb4`), and its §1 is the authoritative list of settled behavior.
 
 ## What already exists — read before designing
 
@@ -44,6 +48,17 @@ records an owner answer** from a `grill-me` session.
 4. **Never suggest placement and reversibility.** Putting an irreversible veto next to a frequent action invites mistakes. Options: confirmation kept but veto list with remove added under Preferences; or move veto into the "another" flow as a secondary choice; or make veto reversible by design. Lean: reversible via a visible veto list before it is placed alongside.
 5. **Where fallback kinds live.** Leftovers / dining out / frozen / open are picker entries today. Do they stay in the manual picker only, or can "Show me another" propose them? (Interacts with OPT-008.)
 6. **Ledger and evidence.** Which reason codes the new actions record; whether a reshuffle is one event or N.
+
+### Owner answers (2026-09-28)
+
+1. **Vocabulary:** per-slot **Another**; manual picker **Choose**; **Lock in** / **Locked in** confirms a meal for its date (not a favorite); **Never suggest this meal**. The week action's label is configurable: default **New mix**, alternate **Another plan**, compared in a local two-variant tester experiment after comprehension testing. AC-3's device check still applies.
+2. **Another:** single slot, every other occurrence held. The whole occurrence (every component) is excluded for that slot, deterministically; no seed.
+3. **Week action:** changes unlocked future/today suggestions; locked, explicitly open and manually chosen fallback slots never move. Displaced recipes stay excluded until Accept, Discard or explicit **Reconsider**. It is not recorded as a decline, and no dislike is inferred. Exhaustion keeps the previous proposal and says `No more alternatives for <day>` with Choose / Reconsider; no retry quota, no silent recycling.
+4. **Never suggest:** reversible. It creates a confirmed recipe-identity rule and stays in the card's secondary menu. Settings > Meal exclusions lists identity rules and legacy phrase rules with Remove. Legacy phrase rules keep their exact title+ingredient meaning.
+5. **Fallback kinds:** only in the manual picker. Another never proposes a fallback; a fallback-only slot offers Choose.
+6. **Ledger:** one event per user action (a week request is one event with per-slot details). There are distinct codes for initial proposal, another, week alternatives, lock/unlock, choose, undo, reconsider, discard, review, accept and permanent-policy changes.
+
+**Scope added by the plan:** Cover edits become a persisted draft that **Accept** writes exactly as reviewed, instead of re-planning. Accept stays one tap and does not require locks, which refines the "no change to accept semantics" constraint below. The plan also adds a Tier-5 similarity-to-commitment term (v1 rule table) and local-only wording-experiment instrumentation.
 
 ## Load-bearing constraints
 
