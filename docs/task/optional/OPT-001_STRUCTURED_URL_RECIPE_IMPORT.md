@@ -46,11 +46,21 @@ Let users prefill a new private recipe from deterministic structured metadata at
 
 ## Non-goals
 
-- General scraping, browser automation, OCR, LLM fallback, bypassing access controls, automatic public sharing, or MVP completion dependency.
+- General scraping (the bounded recipe-plugin adapter in decision 1 is the only DOM reading allowed), browser automation, OCR, LLM fallback, bypassing access controls, automatic public sharing, or MVP completion dependency.
 
 ## Decision gates
 
 - If useful coverage requires general scraping or generative extraction, stop and return the option to post-MVP research.
+
+### Owner decisions (2026-10-02)
+
+Resolved from the four open decisions in `docs/research/recipe-import-implementation-plan.md` §10, with the evidence in `docs/research/recipe-import-readiness-report.md`:
+
+1. **Page reading:** JSON-LD plus a recipe-card adapter for WP Recipe Maker and Tasty Recipes markup, used only to find linked sub-recipes on ingredient lines. This is an explicit, bounded amendment to the "no site-specific scraping" non-goal and stop condition. Pages without those plugins fall back to JSON-LD only. Generic DOM heuristics remain out of scope.
+2. **Sub-recipe storage:** recipe-owned component metadata (migration 17: a `recipe_component` table plus `recipe_ingredient_line.component_position`). No shared component graph and no source synchronization.
+3. **Duplicate saved URL:** open the existing recipe by default, with an explicit "Import another copy". An archived match offers Restore.
+4. **Ingredient lines:** every imported line enters unresolved (original text kept; no ingredient match; unknown quantity; no unit). Parsing and catalog matching are a possible follow-up card.
+5. **Optional-alternative links** (decided during plan review, 2026-10-02): a line that offers a linked homemade alternative keeps its link, saved as an `alternative` component (one line, ≥1 link), and shown on the recipe page. Store-bought hints found only in page notes are not imported.
 
 ## Acceptance criteria
 
@@ -70,7 +80,7 @@ Let users prefill a new private recipe from deterministic structured metadata at
 
 ## Stop/failure conditions
 
-- Stop if this delays MVP, needs site-specific scraping, bypasses restrictions, loses provenance, or introduces recurring LLM cost. Two cycles then defer.
+- Stop if this delays MVP, needs site-specific scraping beyond the decision-1 plugin adapter, bypasses restrictions, loses provenance, or introduces recurring LLM cost. Two cycles then defer.
 
 ## Handoff
 

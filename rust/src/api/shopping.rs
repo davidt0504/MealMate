@@ -477,6 +477,7 @@ mod tests {
             unit,
             preparation: None,
             optional: false,
+            component: None,
         }
     }
 
@@ -505,6 +506,7 @@ mod tests {
                 verified_on: None,
                 starter_slug: None,
             },
+            components: vec![],
             archived_at: None,
             assessment: None,
         };

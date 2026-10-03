@@ -8,6 +8,7 @@ food-domain = { path = "../food-domain" }
 household-core = { path = "../household-core" }
 rusqlite = { version = "0.40", features = ["bundled"] }
 rusqlite_migration = "2"
+serde_json = "1"
 thiserror = "2"
 
 [dev-dependencies]

@@ -48,7 +48,7 @@ void main() {
 
   test('open_database migrates a real database to the latest schema', () async {
     final report = await openDatabase(dbPath: await tempDb());
-    expect(report.schemaVersion, 16);
+    expect(report.schemaVersion, 17);
   });
 
   test('storage failure surfaces as KimattaError_Storage', () async {
@@ -92,11 +92,11 @@ void main() {
         '${Platform.pathSeparator}kimatta-export.db';
     final report = await exportDatabase(destPath: dest);
     expect(report.path, dest);
-    expect(report.schemaVersion, 16);
+    expect(report.schemaVersion, 17);
     // Opening the export as the live database proves it is the database's own
     // format, not a write-only artifact.
     final opened = await openDatabase(dbPath: dest);
-    expect(opened.schemaVersion, 16);
+    expect(opened.schemaVersion, 17);
     expect((await bootstrapHousehold()).id, h.id);
   });
 
@@ -319,6 +319,7 @@ void main() {
       instructions: 'Mix. Fry.',
       lines: lines,
       provenance: const RecipeProvenanceDto(kind: 'authored'),
+      components: const [],
     );
   }
 
@@ -803,6 +804,7 @@ void main() {
         instructions: 'Mix. Bake.',
         lines: const [],
         provenance: const RecipeProvenanceDto(kind: 'authored'),
+        components: const [],
       ),
     );
 
@@ -1149,6 +1151,7 @@ void main() {
           instructions: '',
           lines: const [],
           provenance: const RecipeProvenanceDto(kind: 'authored'),
+          components: const [],
         ),
       ),
       throwsA(isA<KimattaError_Recipe>()),

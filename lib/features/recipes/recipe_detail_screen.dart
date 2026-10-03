@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import 'package:meal_mate/app/share_channel.dart';
 import 'package:meal_mate/features/household/household_screen.dart';
 import 'package:meal_mate/features/pantry/pantry_copy.dart';
 import 'package:meal_mate/features/pantry/pantry_provider.dart';
@@ -189,6 +190,34 @@ class _RecipeDetailScreenState extends ConsumerState<RecipeDetailScreen> {
     const SizedBox(height: 16),
   ];
 
+  /// "From `site`": where an imported recipe came from, opening the page in the browser.
+  Widget _source(RecipeProvenanceDto p, String url) => Align(
+    alignment: Alignment.centerLeft,
+    child: TextButton.icon(
+      icon: const Icon(Icons.open_in_new),
+      label: Text('From ${p.sourceName ?? Uri.tryParse(url)?.host ?? url}'),
+      onPressed: () => ref.read(shareChannelProvider).openUrl(url),
+    ),
+  );
+
+  Widget _componentLinks(RecipeComponentDto c) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text(
+        c.status == 'unresolved'
+            ? '${c.title}: not added automatically'
+            : '${c.title}: homemade alternative',
+        style: Theme.of(context).textTheme.bodySmall,
+      ),
+      for (final link in c.links)
+        TextButton.icon(
+          icon: const Icon(Icons.open_in_new),
+          label: Text('Open ${Uri.tryParse(link)?.host ?? link}'),
+          onPressed: () => ref.read(shareChannelProvider).openUrl(link),
+        ),
+    ],
+  );
+
   Widget _body(RecipeDto r) => ListView(
     padding: const EdgeInsets.all(16),
     children: [
@@ -213,13 +242,24 @@ class _RecipeDetailScreenState extends ConsumerState<RecipeDetailScreen> {
       if (r.servings case final n?) Text('Serves $n'),
       // Rendered only when there is an estimate: no "0 min", no "unknown" (PRD §10).
       if (r.prepMinutes case final n?) Text('Prep $n min'),
+      if (r.provenance.sourceUrl case final url?) _source(r.provenance, url),
       const SizedBox(height: 8),
       Text('Ingredients', style: Theme.of(context).textTheme.titleMedium),
       if (r.lines.isEmpty) const Text('No ingredients listed.'),
       for (final line in r.lines) _lineTile(r.householdId, line),
+      // An unresolved or alternative sub-recipe keeps its links (OPT-001 §7), so the user
+      // can still reach the page the line names.
+      for (final c in r.components)
+        if (c.status != 'expanded' && c.links.isNotEmpty) _componentLinks(c),
       const SizedBox(height: 8),
       Text('Instructions', style: Theme.of(context).textTheme.titleMedium),
       Text(r.instructions.isEmpty ? 'No instructions yet.' : r.instructions),
+      for (final c in r.components)
+        if (c.status == 'expanded' && c.instructions.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          Text(c.title, style: Theme.of(context).textTheme.titleSmall),
+          Text(c.instructions),
+        ],
       const SizedBox(height: 24),
       if (r.archivedAt == null)
         OutlinedButton(

@@ -715,7 +715,9 @@ mod tests {
         SeparateReason, ShoppingInput, ShoppingLine, ShoppingList, Unit, UnitFamily, UnitKind,
         SHOPPING_ALGORITHM_VERSION,
     };
-    use crate::{parse_civil_date, ProvenanceKind, RecipeProvenance};
+    use crate::{
+        parse_civil_date, ComponentStatus, ProvenanceKind, RecipeComponent, RecipeProvenance,
+    };
     use household_core::HouseholdId;
 
     fn r(numer: u32, denom: u32) -> Rational {
@@ -1407,6 +1409,101 @@ mod tests {
         assert!(optional.key.contains(":opt:"), "{}", optional.key);
         assert_eq!(required.separate_reason, None);
         assert_eq!(optional.separate_reason, None);
+    }
+
+    /// Expected-to-pass (OPT-001 design §9): shopping reads lines, never components, so an
+    /// imported recipe's expanded child lines, its unresolved placeholder and its alternative
+    /// line each stay one separate `Needed` line per planned use, and a 2× plan leaves their
+    /// unknown quantities unscaled.
+    #[test]
+    fn imported_component_lines_stay_separate_needed_once_per_use() {
+        let text = |t: &str| {
+            IngredientLine::new(t, t, None, Quantity::Unknown, Unit::None, None, false).unwrap()
+        };
+        let component = |position, status, links: &[&str]| {
+            RecipeComponent::new(
+                position,
+                "Lemon yogurt sauce",
+                None,
+                None,
+                "1 batch Lemon yogurt sauce",
+                status,
+                links.iter().map(|l| (*l).to_owned()).collect(),
+                "",
+            )
+            .unwrap()
+        };
+        let imported = recipe(
+            "r",
+            vec![
+                text("1 cup yogurt"),
+                text("1 garlic clove"),
+                text("1/2 batch Green sauce"),
+                text("1 cup pesto (or homemade)"),
+                text("1 garlic clove"),
+            ],
+        )
+        .with_components(
+            vec![
+                component(0, ComponentStatus::Expanded, &[]),
+                component(
+                    1,
+                    ComponentStatus::Unresolved,
+                    &["https://example.com/green"],
+                ),
+                component(
+                    2,
+                    ComponentStatus::Alternative,
+                    &["https://example.com/pesto"],
+                ),
+            ],
+            &[Some(0), Some(0), Some(1), Some(2), None],
+        )
+        .unwrap();
+        let list = derive_shopping_list(&input(
+            vec![
+                meal(
+                    "pm-1",
+                    "2026-08-29",
+                    MealSlot::Dinner,
+                    vec![component_of("r", 2)],
+                ),
+                meal(
+                    "pm-2",
+                    "2026-08-30",
+                    MealSlot::Dinner,
+                    vec![component_of("r", 2)],
+                ),
+            ],
+            vec![imported],
+            vec![],
+            vec![],
+        ));
+        let lines = all_lines(&list);
+        assert_eq!(lines.len(), 10, "5 lines x 2 uses, none merged: {lines:#?}");
+        for l in &lines {
+            assert_eq!(l.status, LineStatus::Needed);
+            assert_eq!(l.separate_reason, Some(SeparateReason::Unresolved));
+            assert_eq!(l.quantity, Quantity::Unknown);
+            assert_eq!(l.contributions.len(), 1);
+        }
+        let garlic = lines.iter().filter(|l| l.name == "1 garlic clove").count();
+        assert_eq!(
+            garlic, 4,
+            "the child's garlic and the parent's garlic never merge"
+        );
+        let placeholder = lines
+            .iter()
+            .filter(|l| l.name == "1/2 batch Green sauce")
+            .count();
+        assert_eq!(
+            placeholder, 2,
+            "an unresolved component stays one line per use"
+        );
+    }
+
+    fn component_of(recipe: &str, times: u32) -> MealComponent {
+        component(recipe, Some(r(times, 1)))
     }
 
     #[test]

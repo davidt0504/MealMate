@@ -76,6 +76,11 @@ class _RecipeListScreenState extends ConsumerState<RecipeListScreen> {
         title: const Text('Recipes'),
         actions: [
           IconButton(
+            icon: const Icon(Icons.link),
+            tooltip: 'Paste link',
+            onPressed: () => context.go('/recipes/import'),
+          ),
+          IconButton(
             icon: const Icon(Icons.inventory_2_outlined),
             tooltip: 'Archived recipes',
             onPressed: () => context.go('/recipes/archived'),

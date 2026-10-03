@@ -49,6 +49,10 @@ String describeFailure(
   // A refused draft command (OPT-007): Rust sends user prose, and the command was refused
   // rather than the subject being unavailable.
   KimattaError_Draft(:final message) => '$subject: $message',
+  // Added with the variant itself (OPT-001), as every arm above was. The import screen
+  // words each kind itself; this is the fallback for any other surface, and like the Rust
+  // text it never echoes the link.
+  KimattaError_Import() => "$subject: the recipe link couldn't be imported",
   _ => '$subject unavailable: $error',
 };
 

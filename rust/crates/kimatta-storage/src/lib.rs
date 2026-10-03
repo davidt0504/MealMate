@@ -18,13 +18,13 @@ pub use food_domain::starter::{
 };
 pub use food_domain::{
     assess, base_factor, derive_shopping_list, format_civil_date, line_key_prefix,
-    parse_civil_date, quantity_token, restock_line_key, CivilDate, Conflict, Contribution,
-    CustomIngredient, CustomIngredientId, HouseholdRestrictions, IdentityInfo, Ingredient,
-    IngredientId, IngredientLine, IngredientRef, LineStatus, MealComponent, MealScope, MealSlot,
-    MemberPreference, MemberPreferences, PlannedMeal, PlannedMealError, PlannedMealId,
+    parse_civil_date, quantity_token, restock_line_key, CivilDate, ComponentStatus, Conflict,
+    Contribution, CustomIngredient, CustomIngredientId, HouseholdRestrictions, IdentityInfo,
+    Ingredient, IngredientId, IngredientLine, IngredientRef, LineStatus, MealComponent, MealScope,
+    MealSlot, MemberPreference, MemberPreferences, PlannedMeal, PlannedMealError, PlannedMealId,
     PlanningCycle, PlanningError, PreferenceError, ProvenanceKind, Quantity, QuantityRange,
-    Rational, Recipe, RecipeError, RecipeId, RecipeProvenance, RecipeRights, Restriction,
-    RestrictionAssessment, RestrictionError, RestrictionKind, RightsBasis, Sentiment,
+    Rational, Recipe, RecipeComponent, RecipeError, RecipeId, RecipeProvenance, RecipeRights,
+    Restriction, RestrictionAssessment, RestrictionError, RestrictionKind, RightsBasis, Sentiment,
     SeparateReason, ShoppingError, ShoppingGroup, ShoppingInput, ShoppingLine, ShoppingList,
     ShoppingManualItemId, Unit, UnitFamily, UnitKind, WriteSource, DEFAULT_CYCLE_DAYS,
     KNOWN_STORE_CATEGORIES, MAX_CYCLE_DAYS, MIN_CYCLE_DAYS, RULE_VERSION,
@@ -78,6 +78,8 @@ pub enum StorageError {
     CorruptProvenance(String),
     #[error("recipe {recipe} has an unreadable rights record: {detail}")]
     CorruptRights { recipe: String, detail: String },
+    #[error("recipe {recipe} has an unreadable sub-recipe component record: {detail}")]
+    CorruptRecipeComponent { recipe: String, detail: String },
     #[error("starter recipe {0:?} carries no starter slug")]
     MissingStarterSlug(String),
     #[error("recipe {0} is quarantined while its source rights are reviewed")]
@@ -688,6 +690,28 @@ const MIGRATION_ARRAY: &[M] = &[
         PRIMARY KEY (household_id, request_id)
     ) STRICT;
     CREATE INDEX planning_draft_receipt_draft ON planning_draft_receipt(draft_id);",
+    ),
+    // OPT-001: recipe-owned sub-recipe components, additive only. A component lives and dies
+    // with its recipe row (household deletes cascade to `recipe`), and old lines read
+    // `component_position` NULL = the main recipe. The provenance index serves the import's
+    // duplicate-URL lookup.
+    M::up(
+        "CREATE TABLE recipe_component (
+            recipe_id TEXT NOT NULL REFERENCES recipe(id) ON DELETE CASCADE,
+            position INTEGER NOT NULL,
+            title TEXT NOT NULL,
+            source_url TEXT,
+            scale_numer INTEGER,
+            scale_denom INTEGER,
+            replaced_text TEXT NOT NULL,
+            status TEXT NOT NULL,
+            links TEXT NOT NULL DEFAULT '[]',
+            instructions TEXT NOT NULL DEFAULT '',
+            PRIMARY KEY (recipe_id, position),
+            CHECK ((scale_numer IS NULL) = (scale_denom IS NULL))
+        ) STRICT;
+        ALTER TABLE recipe_ingredient_line ADD COLUMN component_position INTEGER;
+        CREATE INDEX recipe_provenance_source_url ON recipe_provenance(source_url);",
     ),
 ];
 pub const MIGRATIONS: Migrations<'static> = Migrations::from_slice(MIGRATION_ARRAY);
@@ -2366,6 +2390,35 @@ fn write_recipe(tx: &Transaction<'_>, recipe: &Recipe) -> Result<(), StorageErro
         "DELETE FROM recipe_ingredient_line WHERE recipe_id = ?1",
         params![id],
     )?;
+    tx.execute(
+        "DELETE FROM recipe_component WHERE recipe_id = ?1",
+        params![id],
+    )?;
+    for c in recipe.components() {
+        let links =
+            serde_json::to_string(c.links()).map_err(|e| StorageError::CorruptRecipeComponent {
+                recipe: id.to_owned(),
+                detail: e.to_string(),
+            })?;
+        tx.execute(
+            "INSERT INTO recipe_component
+             (recipe_id, position, title, source_url, scale_numer, scale_denom,
+              replaced_text, status, links, instructions)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+            params![
+                id,
+                c.position(),
+                c.title(),
+                c.source_url(),
+                c.scale().map(Rational::numer),
+                c.scale().map(Rational::denom),
+                c.replaced_text(),
+                c.status().as_str(),
+                links,
+                c.instructions(),
+            ],
+        )?;
+    }
     for (position, line) in recipe.lines().iter().enumerate() {
         let (ingredient_id, custom_ingredient_id) = match line.ingredient() {
             None => (None, None),
@@ -2387,8 +2440,8 @@ fn write_recipe(tx: &Transaction<'_>, recipe: &Recipe) -> Result<(), StorageErro
             "INSERT INTO recipe_ingredient_line
              (recipe_id, position, original_text, name, ingredient_id, custom_ingredient_id,
               quantity_kind, min_numer, min_denom, max_numer, max_denom,
-              unit_kind, unit_text, preparation, optional)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
+              unit_kind, unit_text, preparation, optional, component_position)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
             params![
                 id,
                 position as u32,
@@ -2405,6 +2458,7 @@ fn write_recipe(tx: &Transaction<'_>, recipe: &Recipe) -> Result<(), StorageErro
                 unit_text,
                 line.preparation(),
                 line.optional(),
+                line.component(),
             ],
         )?;
     }
@@ -2696,28 +2750,37 @@ pub fn load_recipe(
     let mut stmt = conn.prepare(
         "SELECT original_text, name, ingredient_id, custom_ingredient_id, quantity_kind,
                 min_numer, min_denom, max_numer, max_denom, unit_kind, unit_text,
-                preparation, optional
+                preparation, optional, component_position
          FROM recipe_ingredient_line WHERE recipe_id = ?1 ORDER BY position",
     )?;
+    let mut line_components = Vec::new();
     let lines = stmt
         .query_map(params![id.as_str()], |r| {
-            Ok(LineRow {
-                original_text: r.get(0)?,
-                name: r.get(1)?,
-                ingredient_id: r.get(2)?,
-                custom_ingredient_id: r.get(3)?,
-                quantity_kind: r.get(4)?,
-                min: (r.get(5)?, r.get(6)?),
-                max: (r.get(7)?, r.get(8)?),
-                unit_kind: r.get(9)?,
-                unit_text: r.get(10)?,
-                preparation: r.get(11)?,
-                optional: r.get(12)?,
-            })
+            Ok((
+                r.get::<_, Option<u32>>(13)?,
+                LineRow {
+                    original_text: r.get(0)?,
+                    name: r.get(1)?,
+                    ingredient_id: r.get(2)?,
+                    custom_ingredient_id: r.get(3)?,
+                    quantity_kind: r.get(4)?,
+                    min: (r.get(5)?, r.get(6)?),
+                    max: (r.get(7)?, r.get(8)?),
+                    unit_kind: r.get(9)?,
+                    unit_text: r.get(10)?,
+                    preparation: r.get(11)?,
+                    optional: r.get(12)?,
+                },
+            ))
         })?
         .enumerate()
-        .map(|(position, row)| line_from_row(id.as_str(), position, row?))
+        .map(|(position, row)| {
+            let (component, row) = row?;
+            line_components.push(component);
+            line_from_row(id.as_str(), position, row)
+        })
         .collect::<Result<Vec<_>, StorageError>>()?;
+    let components = load_components(conn, id.as_str())?;
     Ok(Some(RecipeRecord {
         recipe: Recipe::new(
             id.clone(),
@@ -2728,9 +2791,83 @@ pub fn load_recipe(
             instructions,
             lines,
             provenance,
-        )?,
+        )?
+        .with_components(components, &line_components)?,
         archived_at,
     }))
+}
+
+/// A recipe's components in position order, each back through `RecipeComponent::new`.
+fn load_components(
+    conn: &Connection,
+    recipe_id: &str,
+) -> Result<Vec<RecipeComponent>, StorageError> {
+    let mut stmt = conn.prepare(
+        "SELECT position, title, source_url, scale_numer, scale_denom, replaced_text, status,
+                links, instructions
+         FROM recipe_component WHERE recipe_id = ?1 ORDER BY position",
+    )?;
+    let rows = stmt
+        .query_map(params![recipe_id], |r| {
+            Ok((
+                r.get::<_, u32>(0)?,
+                r.get::<_, String>(1)?,
+                r.get::<_, Option<String>>(2)?,
+                (r.get::<_, Option<u32>>(3)?, r.get::<_, Option<u32>>(4)?),
+                r.get::<_, String>(5)?,
+                r.get::<_, String>(6)?,
+                r.get::<_, String>(7)?,
+                r.get::<_, String>(8)?,
+            ))
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
+    rows.into_iter()
+        .map(
+            |(position, title, source_url, scale, replaced, status, links, instructions)| {
+                let links: Vec<String> = serde_json::from_str(&links).map_err(|e| {
+                    StorageError::CorruptRecipeComponent {
+                        recipe: recipe_id.to_owned(),
+                        detail: e.to_string(),
+                    }
+                })?;
+                Ok(RecipeComponent::new(
+                    position,
+                    title,
+                    source_url,
+                    bound(scale.0, scale.1)?,
+                    replaced,
+                    ComponentStatus::parse(&status)?,
+                    links,
+                    instructions,
+                )?)
+            },
+        )
+        .collect()
+}
+
+/// The household's recipe already imported from `source_url` (stored normalized), as
+/// `(id, archived)`. An active match wins over an archived one; quarantined recipes are
+/// never offered, since they cannot be opened or restored.
+pub fn find_recipe_by_source_url(
+    conn: &Connection,
+    household: &HouseholdId,
+    source_url: &str,
+) -> Result<Option<(RecipeId, bool)>, StorageError> {
+    let found = conn
+        .query_row(
+            "SELECT r.id, r.archived_at IS NOT NULL FROM recipe r
+             JOIN recipe_provenance p ON p.recipe_id = r.id
+             WHERE r.household_id = ?1 AND p.source_url = ?2
+               AND NOT EXISTS (SELECT 1 FROM recipe_quarantine q WHERE q.recipe_id = r.id)
+             ORDER BY r.archived_at IS NOT NULL, r.id
+             LIMIT 1",
+            params![household.as_str(), source_url],
+            |r| Ok((r.get::<_, String>(0)?, r.get::<_, bool>(1)?)),
+        )
+        .optional()?;
+    found
+        .map(|(id, archived)| Ok((RecipeId::new(id)?, archived)))
+        .transpose()
 }
 
 /// `(id, title)` of every recipe in `household` on the requested side of the archive marker,
@@ -4150,7 +4287,7 @@ mod tests {
         let path = dir.path().join("does-not-exist-yet.db");
         let conn = open(&path).unwrap();
         // Hard-coded, not derived from MIGRATIONS: a new migration must consciously bump it.
-        assert_eq!(schema_version(&conn).unwrap(), 16);
+        assert_eq!(schema_version(&conn).unwrap(), 17);
         assert_eq!(count(&conn, "household"), 0);
     }
 
@@ -4313,7 +4450,7 @@ mod tests {
             .unwrap();
         }
         let conn = open(&path).unwrap();
-        assert_eq!(schema_version(&conn).unwrap(), 16);
+        assert_eq!(schema_version(&conn).unwrap(), 17);
         assert_eq!(count(&conn, "household"), 1);
         assert_eq!(count(&conn, "household_member"), 2);
         assert_eq!(count(&conn, "planning_cycle"), 0);
@@ -4529,7 +4666,7 @@ mod tests {
     #[test]
     fn empty_db_migrates_to_latest() {
         let conn = open(":memory:").unwrap();
-        assert_eq!(schema_version(&conn).unwrap(), 16);
+        assert_eq!(schema_version(&conn).unwrap(), 17);
     }
 
     // --- Step 4: schema v3 -----------------------------------------------------------------
@@ -4557,7 +4694,7 @@ mod tests {
             .unwrap();
         }
         let conn = open(&path).unwrap();
-        assert_eq!(schema_version(&conn).unwrap(), 16);
+        assert_eq!(schema_version(&conn).unwrap(), 17);
         assert_eq!(count(&conn, "household"), 1);
         assert_eq!(count(&conn, "planning_cycle"), 1);
         assert_eq!(count(&conn, "planning_meal_slot"), 2);
@@ -4582,7 +4719,7 @@ mod tests {
             insert_pre_v6_recipe(&raw, "h", "r");
         }
         let conn = open(&path).unwrap();
-        assert_eq!(schema_version(&conn).unwrap(), 16);
+        assert_eq!(schema_version(&conn).unwrap(), 17);
         assert_eq!(count(&conn, "household"), 1);
         assert_eq!(count(&conn, "household_member"), 1);
         assert_eq!(count(&conn, "recipe"), 1);
@@ -4608,7 +4745,7 @@ mod tests {
             insert_pre_v6_recipe(&raw, "h", "r");
         }
         let conn = open(&path).unwrap();
-        assert_eq!(schema_version(&conn).unwrap(), 16);
+        assert_eq!(schema_version(&conn).unwrap(), 17);
         assert_eq!(count(&conn, "household"), 1);
         assert_eq!(count(&conn, "recipe"), 1);
         assert_eq!(count(&conn, "household_restriction"), 0);
@@ -4939,6 +5076,30 @@ mod tests {
     /// Writes a minimal recipe with the columns a **pre-v6** `recipe` table has. `save_recipe`
     /// is a latest-schema writer — it writes `prep_minutes` — so a migration test that stands
     /// a database up at v3/v4 cannot use it to place the row it is about to migrate.
+    /// `save_recipe` for a database a test has parked below migration 17, which has no
+    /// `recipe_component` table or `component_position` column for `write_recipe` to touch.
+    /// The two are added for the save and dropped again, so the later forward migration still
+    /// meets the exact pre-17 schema it would meet on a real device.
+    fn save_recipe_any_version(conn: &mut Connection, recipe: &Recipe) {
+        if schema_version(conn).unwrap() >= 17 {
+            save_recipe(conn, recipe).unwrap();
+            return;
+        }
+        conn.execute_batch(
+            "CREATE TABLE recipe_component (recipe_id TEXT, position INTEGER, title TEXT,
+                 source_url TEXT, scale_numer INTEGER, scale_denom INTEGER,
+                 replaced_text TEXT, status TEXT, links TEXT, instructions TEXT);
+             ALTER TABLE recipe_ingredient_line ADD COLUMN component_position INTEGER;",
+        )
+        .unwrap();
+        save_recipe(conn, recipe).unwrap();
+        conn.execute_batch(
+            "DROP TABLE recipe_component;
+             ALTER TABLE recipe_ingredient_line DROP COLUMN component_position;",
+        )
+        .unwrap();
+    }
+
     fn insert_pre_v6_recipe(conn: &Connection, household: &str, id: &str) {
         conn.execute(
             "INSERT INTO recipe (id, household_id, title, servings, instructions)
@@ -5066,6 +5227,237 @@ mod tests {
             &HouseholdId::new(household).unwrap(),
             &RecipeId::new(id).unwrap(),
         )
+    }
+
+    // --- OPT-001: recipe components (migration 17) -----------------------------------------
+
+    fn sub_recipe(position: u32, status: ComponentStatus, links: &[&str]) -> RecipeComponent {
+        RecipeComponent::new(
+            position,
+            format!("Part {position}"),
+            Some(format!("https://example.com/part-{position}")),
+            (status == ComponentStatus::Expanded).then(|| rat(1, 1)),
+            format!("1 batch Part {position}"),
+            status,
+            links.iter().map(|l| (*l).to_owned()).collect(),
+            "Whisk.",
+        )
+        .unwrap()
+    }
+
+    fn imported_recipe(household: &str, id: &str) -> Recipe {
+        let unresolved = |t: &str| line(t, t, Quantity::Unknown, Unit::None);
+        recipe(
+            household,
+            id,
+            vec![
+                unresolved("1 cup yogurt"),
+                unresolved("1 lemon"),
+                unresolved("1/2 batch Green sauce"),
+                unresolved("1 cup pesto (or homemade)"),
+                unresolved("2 eggs"),
+            ],
+        )
+        .with_components(
+            vec![
+                sub_recipe(0, ComponentStatus::Expanded, &[]),
+                sub_recipe(
+                    1,
+                    ComponentStatus::Unresolved,
+                    &["https://example.com/green"],
+                ),
+                sub_recipe(
+                    2,
+                    ComponentStatus::Alternative,
+                    &["https://example.com/pesto"],
+                ),
+            ],
+            &[Some(0), Some(0), Some(1), Some(2), None],
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn a_recipe_with_every_component_kind_round_trips() {
+        let mut conn = open(":memory:").unwrap();
+        seed_for_recipes(&mut conn, "h");
+        let r = imported_recipe("h", "r");
+        save_recipe(&mut conn, &r).unwrap();
+        assert_eq!(load(&conn, "h", "r"), Some(r));
+        assert_eq!(count(&conn, "recipe_component"), 3);
+    }
+
+    #[test]
+    fn an_old_line_without_a_component_loads_as_main() {
+        let mut conn = open(":memory:").unwrap();
+        seed_for_recipes(&mut conn, "h");
+        save_recipe(&mut conn, &recipe("h", "r", three_lines())).unwrap();
+        let nulls: u32 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM recipe_ingredient_line WHERE component_position IS NULL",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(nulls, 3);
+        let loaded = load(&conn, "h", "r").unwrap();
+        assert!(loaded.components().is_empty());
+        assert!(loaded.lines().iter().all(|l| l.component().is_none()));
+    }
+
+    #[test]
+    fn a_v16_database_migrates_to_17_keeping_recipes() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("kimatta.db");
+        let r = recipe("h", "r", three_lines());
+        {
+            let mut raw = Connection::open(&path).unwrap();
+            MIGRATIONS.to_version(&mut raw, 16).unwrap();
+            raw.pragma_update(None, "foreign_keys", "ON").unwrap();
+            seed_for_recipes(&mut raw, "h");
+            save_recipe_any_version(&mut raw, &r);
+        }
+        let conn = open(&path).unwrap();
+        assert_eq!(schema_version(&conn).unwrap(), 17);
+        assert_eq!(load(&conn, "h", "r"), Some(r));
+        assert_eq!(count(&conn, "recipe_component"), 0);
+    }
+
+    #[test]
+    fn archiving_keeps_components() {
+        let mut conn = open(":memory:").unwrap();
+        seed_for_recipes(&mut conn, "h");
+        let r = imported_recipe("h", "r");
+        save_recipe(&mut conn, &r).unwrap();
+        archive_recipe(
+            &mut conn,
+            &HouseholdId::new("h").unwrap(),
+            &RecipeId::new("r").unwrap(),
+            parse_civil_date("2026-10-02").unwrap(),
+        )
+        .unwrap();
+        assert_eq!(load(&conn, "h", "r"), Some(r));
+    }
+
+    #[test]
+    fn resaving_with_fewer_components_removes_the_stale_rows() {
+        let mut conn = open(":memory:").unwrap();
+        seed_for_recipes(&mut conn, "h");
+        save_recipe(&mut conn, &imported_recipe("h", "r")).unwrap();
+        let plain = recipe(
+            "h",
+            "r",
+            vec![line("2 eggs", "eggs", Quantity::Unknown, Unit::None)],
+        );
+        save_recipe(&mut conn, &plain).unwrap();
+        assert_eq!(count(&conn, "recipe_component"), 0);
+        assert_eq!(load(&conn, "h", "r"), Some(plain));
+    }
+
+    #[test]
+    fn a_failed_save_rolls_back_components_with_the_recipe() {
+        let mut conn = open(":memory:").unwrap();
+        seed_for_recipes(&mut conn, "h");
+        // Lines are written after components, so failing the line insert proves the
+        // component rows share the save's transaction.
+        conn.execute_batch(
+            "CREATE TEMP TRIGGER fail_lines BEFORE INSERT ON recipe_ingredient_line
+             BEGIN SELECT RAISE(ABORT, 'forced'); END;",
+        )
+        .unwrap();
+        let err = save_recipe(&mut conn, &imported_recipe("h", "r")).unwrap_err();
+        assert!(err.to_string().contains("forced"), "{err}");
+        assert_eq!(count(&conn, "recipe"), 0);
+        assert_eq!(count(&conn, "recipe_component"), 0);
+        assert_eq!(count(&conn, "recipe_provenance"), 0);
+    }
+
+    #[test]
+    fn a_corrupt_component_row_is_reported_not_loaded() {
+        let mut conn = open(":memory:").unwrap();
+        seed_for_recipes(&mut conn, "h");
+        save_recipe(&mut conn, &imported_recipe("h", "r")).unwrap();
+        conn.execute(
+            "UPDATE recipe_component SET status = 'merged' WHERE position = 0",
+            [],
+        )
+        .unwrap();
+        let err = load_recipe(
+            &conn,
+            &HouseholdId::new("h").unwrap(),
+            &RecipeId::new("r").unwrap(),
+        )
+        .unwrap_err();
+        assert!(
+            err.to_string().contains("unknown component status"),
+            "{err}"
+        );
+        conn.execute(
+            "UPDATE recipe_component SET status = 'expanded', links = 'not json' WHERE position = 0",
+            [],
+        )
+        .unwrap();
+        let err = load_recipe(
+            &conn,
+            &HouseholdId::new("h").unwrap(),
+            &RecipeId::new("r").unwrap(),
+        )
+        .unwrap_err();
+        assert!(
+            err.to_string().contains("unreadable sub-recipe component"),
+            "{err}"
+        );
+    }
+
+    #[test]
+    fn duplicate_lookup_prefers_active_and_skips_quarantined() {
+        let mut conn = open(":memory:").unwrap();
+        seed_for_recipes(&mut conn, "h");
+        let url = "https://example.com/shawarma";
+        let sourced = |id: &str| {
+            Recipe::new(
+                RecipeId::new(id).unwrap(),
+                HouseholdId::new("h").unwrap(),
+                "Shawarma",
+                None,
+                None,
+                "",
+                vec![],
+                RecipeProvenance::new(ProvenanceKind::Imported, Some(url.into()), None, None)
+                    .unwrap(),
+            )
+            .unwrap()
+        };
+        let h = HouseholdId::new("h").unwrap();
+        assert_eq!(find_recipe_by_source_url(&conn, &h, url).unwrap(), None);
+        save_recipe(&mut conn, &sourced("a-archived")).unwrap();
+        archive_recipe(
+            &mut conn,
+            &h,
+            &RecipeId::new("a-archived").unwrap(),
+            parse_civil_date("2026-10-02").unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            find_recipe_by_source_url(&conn, &h, url).unwrap(),
+            Some((RecipeId::new("a-archived").unwrap(), true))
+        );
+        save_recipe(&mut conn, &sourced("z-active")).unwrap();
+        assert_eq!(
+            find_recipe_by_source_url(&conn, &h, url).unwrap(),
+            Some((RecipeId::new("z-active").unwrap(), false))
+        );
+        conn.execute(
+            "INSERT INTO recipe_quarantine (recipe_id, reason) VALUES ('z-active', 'rights_review_pending')",
+            [],
+        )
+        .unwrap();
+        assert_eq!(
+            find_recipe_by_source_url(&conn, &h, url).unwrap(),
+            Some((RecipeId::new("a-archived").unwrap(), true))
+        );
+        let other = HouseholdId::new("other").unwrap();
+        assert_eq!(find_recipe_by_source_url(&conn, &other, url).unwrap(), None);
     }
 
     #[test]
@@ -5958,7 +6350,7 @@ mod tests {
             insert_household(&mut conn, &household("h"), &[member("m", "h")]).unwrap();
         }
         let conn = open(&path).unwrap();
-        assert_eq!(schema_version(&conn).unwrap(), 16);
+        assert_eq!(schema_version(&conn).unwrap(), 17);
         assert_eq!(count(&conn, "household"), 1);
         assert_eq!(count(&conn, "household_member"), 1);
         let on: i32 = conn
@@ -6688,7 +7080,7 @@ mod tests {
             insert_pre_v6_recipe(&raw, "h", "r");
         }
         let conn = open(&path).unwrap();
-        assert_eq!(schema_version(&conn).unwrap(), 16);
+        assert_eq!(schema_version(&conn).unwrap(), 17);
         assert_eq!(count(&conn, "household"), 1);
         assert_eq!(count(&conn, "recipe"), 1);
         assert_eq!(load(&conn, "h", "r").unwrap().title(), "Recipe r");
@@ -6724,10 +7116,10 @@ mod tests {
             assert_eq!(schema_version(&raw).unwrap(), 6);
             raw.pragma_update(None, "foreign_keys", "ON").unwrap();
             seed(&mut raw, "h");
-            save_recipe(&mut raw, &recipe("h", "r", vec![])).unwrap();
+            save_recipe_any_version(&mut raw, &recipe("h", "r", vec![]));
         }
         let conn = open(&path).unwrap();
-        assert_eq!(schema_version(&conn).unwrap(), 16);
+        assert_eq!(schema_version(&conn).unwrap(), 17);
         assert_eq!(count(&conn, "household"), 1);
         assert_eq!(count(&conn, "recipe"), 1);
         assert_eq!(load(&conn, "h", "r").unwrap().title(), "Recipe r");
@@ -6980,7 +7372,7 @@ mod tests {
             ),
         )
         .unwrap();
-        save_recipe(conn, &recipe(household, &format!("r-{household}"), vec![])).unwrap();
+        save_recipe_any_version(conn, &recipe(household, &format!("r-{household}"), vec![]));
     }
 
     /// A typical dinner for `h`: a scaled recipe, an as-written recipe and leftovers.
@@ -8212,10 +8604,10 @@ mod tests {
             assert_eq!(schema_version(&raw).unwrap(), 7);
             raw.pragma_update(None, "foreign_keys", "ON").unwrap();
             seed(&mut raw, "h");
-            save_recipe(&mut raw, &recipe("h", "r", vec![])).unwrap();
+            save_recipe_any_version(&mut raw, &recipe("h", "r", vec![]));
         }
         let conn = open(&path).unwrap();
-        assert_eq!(schema_version(&conn).unwrap(), 16);
+        assert_eq!(schema_version(&conn).unwrap(), 17);
         assert_eq!(count(&conn, "household"), 1);
         assert_eq!(count(&conn, "recipe"), 1);
         assert_eq!(load(&conn, "h", "r").unwrap().title(), "Recipe r");
@@ -8817,7 +9209,7 @@ mod tests {
             .unwrap();
         }
         let conn = open(&path).unwrap();
-        assert_eq!(schema_version(&conn).unwrap(), 16);
+        assert_eq!(schema_version(&conn).unwrap(), 17);
         assert_eq!(count(&conn, "household"), 1);
         assert_eq!(count(&conn, "pantry_item"), 1);
         assert_eq!(count(&conn, "shopping_line_state"), 0);
@@ -8849,7 +9241,7 @@ mod tests {
             .unwrap();
         }
         let conn = open(&path).unwrap();
-        assert_eq!(schema_version(&conn).unwrap(), 16);
+        assert_eq!(schema_version(&conn).unwrap(), 17);
         assert_eq!(count(&conn, "household"), 1);
         assert_eq!(count(&conn, "pantry_item"), 1);
         assert_eq!(count(&conn, "shopping_line_state"), 1);
@@ -8866,11 +9258,10 @@ mod tests {
             MIGRATIONS.to_version(&mut raw, 10).unwrap();
             seed_for_meals(&mut raw, "h");
             upsert_ingredient(&mut raw, &ingredient("olive", "olive oil", &[])).unwrap();
-            save_recipe(
+            save_recipe_any_version(
                 &mut raw,
                 &starter_recipe("h", "quarantined", "chicken-creole", "olive"),
-            )
-            .unwrap();
+            );
             let historical = occurrence(
                 "h",
                 "historical",
@@ -8930,11 +9321,10 @@ mod tests {
             MIGRATIONS.to_version(&mut raw, 11).unwrap();
             seed_for_meals(&mut raw, "h");
             upsert_ingredient(&mut raw, &ingredient("olive", "olive oil", &[])).unwrap();
-            save_recipe(
+            save_recipe_any_version(
                 &mut raw,
                 &starter_recipe("h", "quarantined", "lentil-soup", "olive"),
-            )
-            .unwrap();
+            );
             user_save(
                 &mut raw,
                 &occurrence(
@@ -9038,7 +9428,7 @@ mod tests {
                 starter_provenance("davids-chili", Some(rights(RightsBasis::Original, None))),
             )
             .unwrap();
-            save_recipe(&mut raw, &chili).unwrap();
+            save_recipe_any_version(&mut raw, &chili);
             user_save(
                 &mut raw,
                 &occurrence(
@@ -9053,7 +9443,7 @@ mod tests {
         }
 
         let mut conn = open(&path).unwrap();
-        assert_eq!(schema_version(&conn).unwrap(), 16);
+        assert_eq!(schema_version(&conn).unwrap(), 17);
         let list = load_shopping_list(
             &mut conn,
             &hid("h"),

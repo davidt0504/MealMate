@@ -2,11 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import 'package:meal_mate/app/share_channel.dart';
 import 'package:meal_mate/features/household/household_provider.dart';
 import 'package:meal_mate/features/household/household_screen.dart';
 import 'package:meal_mate/features/recipes/recipe_fields.dart';
 import 'package:meal_mate/features/recipes/recipes_provider.dart';
 import 'package:meal_mate/src/rust/api/recipe.dart';
+import 'package:meal_mate/src/rust/api/recipe_import.dart';
 
 /// Create (`recipeId == null`) or edit. Ephemeral form state lives here (PRD §13); the saved
 /// recipe is Rust's. Nothing is trimmed or normalised on the way out — the user's text goes
@@ -18,10 +20,14 @@ import 'package:meal_mate/src/rust/api/recipe.dart';
 /// untouched — a field the form does not render is a field it has no business erasing — right
 /// up until the user rewrites the row's name, at which point it is dropped rather than left to
 /// speak for a food the line no longer names. See `_LineDraft.emittedIngredient`.
+///
+/// With a [draft] (OPT-001) it is the import review: seeded from the unsaved draft, saved as
+/// a new recipe, its sub-recipe components grouped under their own headings.
 class RecipeFormScreen extends ConsumerStatefulWidget {
-  const RecipeFormScreen({super.key, this.recipeId});
+  const RecipeFormScreen({super.key, this.recipeId, this.draft});
 
   final String? recipeId;
+  final ImportDraftDto? draft;
 
   @override
   ConsumerState<RecipeFormScreen> createState() => _RecipeFormScreenState();
@@ -30,7 +36,7 @@ class RecipeFormScreen extends ConsumerStatefulWidget {
 /// One ingredient row's controllers. Owned by the screen state so a rebuild never resets a
 /// half-typed row.
 class _LineDraft {
-  _LineDraft([IngredientLineDto? from])
+  _LineDraft([IngredientLineDto? from, bool inline = false])
     : name = TextEditingController(text: from?.name ?? ''),
       amount = TextEditingController(text: _amountText(from?.quantity)),
       preparation = TextEditingController(text: from?.preparation ?? ''),
@@ -47,6 +53,8 @@ class _LineDraft {
       },
       optional = from?.optional ?? false,
       ingredient = from?.ingredient,
+      component = from?.component,
+      inlineHint = inline,
       seededName = from?.name,
       seededOriginal = from?.originalText {
     _seededFields = from == null ? null : _fields;
@@ -66,6 +74,17 @@ class _LineDraft {
   /// a row the user added, which is the truth for a new line. Read through
   /// [emittedIngredient], never directly.
   final IngredientRefDto? ingredient;
+
+  /// The imported sub-recipe this row belongs to (OPT-001), `null` for the main recipe. Like
+  /// [ingredient], FRB emits it as an optional parameter, so an emit that forgot it would
+  /// silently strip every component boundary on save. No control changes it.
+  final int? component;
+
+  /// The imported line names a sub-recipe whose ingredients are listed inline below it.
+  final bool inlineHint;
+
+  /// Where the review's notice scrolls to.
+  final GlobalKey rowKey = GlobalKey();
 
   /// The `name` this row arrived with, so [emittedIngredient] can tell an untouched row from a
   /// renamed one. `null` on a row the user added.
@@ -167,6 +186,10 @@ class _RecipeFormScreenState extends ConsumerState<RecipeFormScreen> {
   bool _seeded = false;
   RecipeDto? _existing;
 
+  /// The recipe's sub-recipe components as edited here ("Edit section" replaces entries).
+  /// Saved are only those a saved line still belongs to.
+  List<RecipeComponentDto> _components = [];
+
   bool get _editing => widget.recipeId != null;
 
   @override
@@ -181,19 +204,28 @@ class _RecipeFormScreenState extends ConsumerState<RecipeFormScreen> {
     super.dispose();
   }
 
+  /// Seeds from the loaded recipe, else from the import draft. Only a loaded recipe becomes
+  /// `_existing`: a draft is a create, so the household guard in `_save` uses the live id.
   void _seedOnce(RecipeDto? existing) {
     if (_seeded) return;
     _seeded = true;
     _existing = existing;
-    if (existing == null) {
+    final seed = existing ?? widget.draft?.recipe;
+    if (seed == null) {
       _lines.add(_LineDraft());
       return;
     }
-    _title.text = existing.title;
-    _servings.text = existing.servings?.toString() ?? '';
-    _prepMinutes.text = existing.prepMinutes?.toString() ?? '';
-    _instructions.text = existing.instructions;
-    _lines.addAll(existing.lines.map(_LineDraft.new));
+    _title.text = seed.title;
+    _servings.text = seed.servings?.toString() ?? '';
+    _prepMinutes.text = seed.prepMinutes?.toString() ?? '';
+    _instructions.text = seed.instructions;
+    final inline = widget.draft?.inlineLines ?? const <int>[];
+    _lines.addAll([
+      for (final (i, line) in seed.lines.indexed)
+        _LineDraft(line, inline.contains(i)),
+    ]);
+    if (_lines.isEmpty && existing == null) _lines.add(_LineDraft());
+    _components = [...seed.components];
   }
 
   /// Builds the DTO, or `null` after setting the inline errors. Typed strings go verbatim;
@@ -276,10 +308,14 @@ class _RecipeFormScreenState extends ConsumerState<RecipeFormScreen> {
           },
           preparation: l.preparation.text.isEmpty ? null : l.preparation.text,
           optional: l.optional,
+          component: l.component,
         ),
       );
     }
     if (!ok) return null;
+    // Only components a saved line still belongs to: a component whose rows were all
+    // removed or blanked goes with them, rather than failing the save in Rust.
+    final owned = {for (final l in lines) l.component};
     return RecipeDto(
       id: widget.recipeId ?? '',
       householdId: householdId,
@@ -289,7 +325,13 @@ class _RecipeFormScreenState extends ConsumerState<RecipeFormScreen> {
       instructions: _instructions.text,
       lines: lines,
       provenance:
-          _existing?.provenance ?? const RecipeProvenanceDto(kind: 'authored'),
+          _existing?.provenance ??
+          widget.draft?.recipe.provenance ??
+          const RecipeProvenanceDto(kind: 'authored'),
+      components: [
+        for (final c in _components)
+          if (owned.contains(c.position)) c,
+      ],
     );
   }
 
@@ -369,6 +411,12 @@ class _RecipeFormScreenState extends ConsumerState<RecipeFormScreen> {
         return;
       }
       final stored = await ref.read(recipeLibraryProvider.notifier).save(dto);
+      if (widget.draft != null) {
+        // Imported: the new recipe is what the user wants to see. Leaving the review route
+        // clears the import (its `onExit`), so there is no draft left to re-offer.
+        if (mounted) context.go('/recipes/${stored.id}');
+        return;
+      }
       if (mounted) {
         context.go(_editing ? '/recipes/${stored.id}' : '/recipes');
       }
@@ -386,7 +434,31 @@ class _RecipeFormScreenState extends ConsumerState<RecipeFormScreen> {
   /// The row's fields can still hold focus — tapping the ✕ does not unfocus a `TextField` on
   /// Android — and `EditableText` touches its controller while tearing down, so the dispose
   /// waits for the frame that unmounts it rather than running inside `setState`.
-  void _removeLine(int i) {
+  Future<void> _removeLine(int i) async {
+    final component = _componentOf(_lines[i]);
+    final last =
+        component != null &&
+        component.status == 'expanded' &&
+        _lines.where((l) => l.component == component.position).length == 1;
+    if (last) {
+      final remove = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          content: Text('Remove the ${component.title} section and its steps?'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Keep'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Remove'),
+            ),
+          ],
+        ),
+      );
+      if (remove != true || !mounted) return;
+    }
     final gone = _lines.removeAt(i);
     setState(() {});
     WidgetsBinding.instance.addPostFrameCallback((_) => gone.dispose());
@@ -400,7 +472,15 @@ class _RecipeFormScreenState extends ConsumerState<RecipeFormScreen> {
         ? ref.watch(recipeDetailProvider(widget.recipeId!))
         : const AsyncData<RecipeDto?>(null);
     return Scaffold(
-      appBar: AppBar(title: Text(_editing ? 'Edit recipe' : 'New recipe')),
+      appBar: AppBar(
+        title: Text(
+          _editing
+              ? 'Edit recipe'
+              : widget.draft != null
+              ? 'Review recipe'
+              : 'New recipe',
+        ),
+      ),
       // Form only under AsyncData for both, as the restrictions editor does: an edit form
       // seeded from nothing would save an empty recipe over a real one.
       body: switch ((existing, kinds)) {
@@ -434,6 +514,7 @@ class _RecipeFormScreenState extends ConsumerState<RecipeFormScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          if (widget.draft?.notice case final notice?) _notice(notice),
           TextField(
             key: _titleKey,
             controller: _title,
@@ -471,9 +552,16 @@ class _RecipeFormScreenState extends ConsumerState<RecipeFormScreen> {
             maxLines: null,
             decoration: const InputDecoration(labelText: 'Instructions'),
           ),
+          for (final c in _components)
+            if (c.status == 'expanded' &&
+                _lines.any((l) => l.component == c.position))
+              _section(c),
           const SizedBox(height: 16),
           Text('Ingredients', style: Theme.of(context).textTheme.titleMedium),
-          for (final (i, l) in _lines.indexed) _row(i, l, kinds),
+          for (final (i, l) in _lines.indexed) ...[
+            if (_startsGroup(i)) _groupHeading(l),
+            _row(i, l, kinds),
+          ],
           OutlinedButton(
             onPressed: _saving
                 ? null
@@ -492,12 +580,156 @@ class _RecipeFormScreenState extends ConsumerState<RecipeFormScreen> {
     );
   }
 
+  RecipeComponentDto? _componentOf(_LineDraft l) {
+    final position = l.component;
+    if (position == null) return null;
+    for (final c in _components) {
+      if (c.position == position) return c;
+    }
+    return null;
+  }
+
+  /// A heading wherever the run of rows changes component, so a sub-recipe's lines sit
+  /// together under its title and the main recipe's lines after it read as main again.
+  bool _startsGroup(int i) => i == 0
+      ? _lines[0].component != null
+      : _lines[i].component != _lines[i - 1].component;
+
+  Widget _groupHeading(_LineDraft l) {
+    final c = _componentOf(l);
+    final text = Theme.of(context).textTheme;
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: c == null
+          ? Text('Main recipe', style: text.titleSmall)
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(c.title, style: text.titleSmall),
+                Text(switch (c.status) {
+                  'unresolved' =>
+                    "Couldn't be added automatically — kept as written",
+                  'alternative' => 'Has a linked homemade alternative',
+                  _ => 'Sub-recipe',
+                }, style: text.bodySmall),
+                for (final link in c.links)
+                  TextButton.icon(
+                    icon: const Icon(Icons.open_in_new),
+                    label: Text(
+                      'Open link: ${Uri.tryParse(link)?.host ?? link}',
+                    ),
+                    onPressed: () =>
+                        ref.read(shareChannelProvider).openUrl(link),
+                  ),
+              ],
+            ),
+    );
+  }
+
+  /// The one consolidated notice (design §7). Tapping it scrolls to the first row the
+  /// import could not complete.
+  Widget _notice(String notice) => Card(
+    color: Theme.of(context).colorScheme.secondaryContainer,
+    child: InkWell(
+      onTap: () {
+        final first = _lines.where(
+          (l) => _componentOf(l)?.status == 'unresolved',
+        );
+        final target = first.isEmpty ? null : first.first.rowKey.currentContext;
+        if (target != null) Scrollable.ensureVisible(target);
+      },
+      child: Padding(padding: const EdgeInsets.all(12), child: Text(notice)),
+    ),
+  );
+
+  /// An expanded sub-recipe's steps: read-only here, edited through "Edit section".
+  Widget _section(RecipeComponentDto c) => Padding(
+    padding: const EdgeInsets.only(top: 12),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(c.title, style: Theme.of(context).textTheme.titleSmall),
+        if (c.instructions.isNotEmpty) Text(c.instructions),
+        TextButton(
+          onPressed: _saving ? null : () => _editSection(c),
+          child: Text('Edit section: ${c.title}'),
+        ),
+      ],
+    ),
+  );
+
+  Future<void> _editSection(RecipeComponentDto c) async {
+    final title = TextEditingController(text: c.title);
+    final steps = TextEditingController(text: c.instructions);
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Edit section'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: title,
+              decoration: const InputDecoration(labelText: 'Section title'),
+            ),
+            TextField(
+              controller: steps,
+              maxLines: null,
+              decoration: const InputDecoration(labelText: 'Steps'),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          // Rust rejects a blank title, so the dialog never offers one.
+          ListenableBuilder(
+            listenable: title,
+            builder: (context, _) => TextButton(
+              onPressed: title.text.trim().isEmpty
+                  ? null
+                  : () => Navigator.pop(context, true),
+              child: const Text('Save section'),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (saved == true && mounted) {
+      setState(() {
+        _components = [
+          for (final x in _components)
+            x.position == c.position
+                ? RecipeComponentDto(
+                    position: x.position,
+                    title: title.text,
+                    sourceUrl: x.sourceUrl,
+                    scaleNumer: x.scaleNumer,
+                    scaleDenom: x.scaleDenom,
+                    replacedText: x.replacedText,
+                    status: x.status,
+                    links: x.links,
+                    instructions: steps.text,
+                  )
+                : x,
+        ];
+      });
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      title.dispose();
+      steps.dispose();
+    });
+  }
+
   Widget _row(int i, _LineDraft l, List<String> kinds) => Card(
     key: ValueKey(l),
     margin: const EdgeInsets.symmetric(vertical: 8),
     child: Padding(
       padding: const EdgeInsets.all(12),
       child: Column(
+        key: l.rowKey,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
@@ -510,6 +742,11 @@ class _RecipeFormScreenState extends ConsumerState<RecipeFormScreen> {
               ),
             ],
           ),
+          if (l.inlineHint)
+            const Text(
+              'This line names a sauce whose ingredients are listed below; '
+              'you can delete it.',
+            ),
           // Rebuilt on each keystroke in the fields it reads; the unit dropdown already
           // rebuilds the form.
           ListenableBuilder(

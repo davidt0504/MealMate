@@ -1,9 +1,10 @@
 use kimatta_storage::rusqlite::TransactionBehavior;
 use kimatta_storage::{
-    format_civil_date, Connection, CustomIngredient, CustomIngredientId, HouseholdId,
-    HouseholdRestrictions, IngredientId, IngredientLine, IngredientRef, ProvenanceKind, Quantity,
-    QuantityRange, Rational, Recipe, RecipeId, RecipeListing, RecipeProvenance, RecipeRecord,
-    RestrictionAssessment, StorageError, Unit, UnitKind,
+    format_civil_date, ComponentStatus, Connection, CustomIngredient, CustomIngredientId,
+    HouseholdId, HouseholdRestrictions, IngredientId, IngredientLine, IngredientRef,
+    ProvenanceKind, Quantity, QuantityRange, Rational, Recipe, RecipeComponent, RecipeId,
+    RecipeListing, RecipeProvenance, RecipeRecord, RestrictionAssessment, StorageError, Unit,
+    UnitKind,
 };
 use uuid::Uuid;
 
@@ -53,6 +54,23 @@ pub struct IngredientLineDto {
     pub unit: UnitDto,
     pub preparation: Option<String>,
     pub optional: bool,
+    /// Position of the `RecipeComponentDto` this line belongs to; `None` is the main recipe.
+    pub component: Option<u32>,
+}
+
+/// An imported sub-recipe kept inside its parent (OPT-001). `status` is `expanded`,
+/// `unresolved` or `alternative`; `scale_*` are both present or both absent.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RecipeComponentDto {
+    pub position: u32,
+    pub title: String,
+    pub source_url: Option<String>,
+    pub scale_numer: Option<u32>,
+    pub scale_denom: Option<u32>,
+    pub replaced_text: String,
+    pub status: String,
+    pub links: Vec<String>,
+    pub instructions: String,
 }
 
 /// `kind` is a `ProvenanceKind` string: `authored`, `imported` or `starter`.
@@ -109,6 +127,8 @@ pub struct RecipeDto {
     pub instructions: String,
     pub lines: Vec<IngredientLineDto>,
     pub provenance: RecipeProvenanceDto,
+    /// Round-trips both ways; every `lines[i].component` must name one of these.
+    pub components: Vec<RecipeComponentDto>,
     /// Output only: `save_recipe` ignores it and never changes archive state; use
     /// `archive_recipe`/`restore_recipe`. ISO civil date, `None` while in the library.
     pub archived_at: Option<String>,
@@ -375,6 +395,43 @@ fn line_from_domain(l: &IngredientLine) -> IngredientLineDto {
         unit: unit_from_domain(l.unit()),
         preparation: l.preparation().map(str::to_owned),
         optional: l.optional(),
+        component: l.component(),
+    }
+}
+
+fn component_to_domain(c: RecipeComponentDto) -> Result<RecipeComponent, KimattaError> {
+    let scale = match (c.scale_numer, c.scale_denom) {
+        (None, None) => None,
+        (Some(n), Some(d)) => Some(Rational::new(n, d)?),
+        _ => {
+            return Err(KimattaError::Recipe {
+                message: "a component scale needs both numerator and denominator".into(),
+            })
+        }
+    };
+    Ok(RecipeComponent::new(
+        c.position,
+        c.title,
+        c.source_url,
+        scale,
+        c.replaced_text,
+        ComponentStatus::parse(&c.status)?,
+        c.links,
+        c.instructions,
+    )?)
+}
+
+pub(crate) fn component_from_domain(c: &RecipeComponent) -> RecipeComponentDto {
+    RecipeComponentDto {
+        position: c.position(),
+        title: c.title().to_owned(),
+        source_url: c.source_url().map(str::to_owned),
+        scale_numer: c.scale().map(Rational::numer),
+        scale_denom: c.scale().map(Rational::denom),
+        replaced_text: c.replaced_text().to_owned(),
+        status: c.status().as_str().to_owned(),
+        links: c.links().to_vec(),
+        instructions: c.instructions().to_owned(),
     }
 }
 
@@ -384,10 +441,16 @@ fn line_from_domain(l: &IngredientLine) -> IngredientLineDto {
 fn recipe_to_domain(dto: RecipeDto) -> Result<Recipe, KimattaError> {
     let id = RecipeId::new(id_or_minted(dto.id))?;
     let household_id = HouseholdId::new(dto.household_id)?;
+    let line_components: Vec<Option<u32>> = dto.lines.iter().map(|l| l.component).collect();
     let lines = dto
         .lines
         .into_iter()
         .map(line_to_domain)
+        .collect::<Result<Vec<_>, _>>()?;
+    let components = dto
+        .components
+        .into_iter()
+        .map(component_to_domain)
         .collect::<Result<Vec<_>, _>>()?;
     // `RecipeProvenance::new`, never `with_rights`: the five rights scalars are output-only,
     // so whatever a request carries in them is dropped here rather than trusted.
@@ -406,7 +469,8 @@ fn recipe_to_domain(dto: RecipeDto) -> Result<Recipe, KimattaError> {
         dto.instructions,
         lines,
         provenance,
-    )?)
+    )?
+    .with_components(components, &line_components)?)
 }
 
 fn assessment_from_domain(a: RestrictionAssessment) -> RestrictionAssessmentDto {
@@ -437,7 +501,10 @@ fn assess_names<'a>(
     assessment_from_domain(kimatta_storage::assess(names, restrictions))
 }
 
-fn recipe_from_domain(record: &RecipeRecord, restrictions: &HouseholdRestrictions) -> RecipeDto {
+pub(crate) fn recipe_from_domain(
+    record: &RecipeRecord,
+    restrictions: &HouseholdRestrictions,
+) -> RecipeDto {
     let r = &record.recipe;
     RecipeDto {
         id: r.id().as_str().to_owned(),
@@ -470,6 +537,7 @@ fn recipe_from_domain(record: &RecipeRecord, restrictions: &HouseholdRestriction
                 .map(|g| format_civil_date(g.verified_on())),
             starter_slug: r.provenance().starter_slug().map(str::to_owned),
         },
+        components: r.components().iter().map(component_from_domain).collect(),
         archived_at: record.archived_at.map(format_civil_date),
         assessment: Some(assess_names(
             r.lines().iter().map(IngredientLine::name),
@@ -665,7 +733,7 @@ fn list_custom_ingredients_in(
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use kimatta_storage::{Household, HouseholdMember, Ingredient, MemberId};
 
@@ -713,6 +781,7 @@ mod tests {
             unit,
             preparation: None,
             optional: false,
+            component: None,
         }
     }
 
@@ -726,9 +795,88 @@ mod tests {
             instructions: "Cook.".to_owned(),
             lines,
             provenance: authored(),
+            components: vec![],
             archived_at: None,
             assessment: None,
         }
+    }
+
+    /// A recipe whose sauce was expanded and whose pesto stayed a linked alternative.
+    pub(crate) fn recipe_with_components(household: &str, id: &str) -> RecipeDto {
+        let owned = |text: &str, component: Option<u32>| IngredientLineDto {
+            component,
+            ..line(text, QuantityDto::Unknown, UnitDto::None)
+        };
+        RecipeDto {
+            lines: vec![
+                owned("1 cup yogurt", Some(0)),
+                owned("1 cup pesto (or homemade)", Some(1)),
+                owned("2 eggs", None),
+            ],
+            components: vec![
+                RecipeComponentDto {
+                    position: 0,
+                    title: "Lemon yogurt sauce".to_owned(),
+                    source_url: Some("https://example.com/sauce".to_owned()),
+                    scale_numer: Some(1),
+                    scale_denom: Some(1),
+                    replaced_text: "1 batch Lemon yogurt sauce".to_owned(),
+                    status: "expanded".to_owned(),
+                    links: vec![],
+                    instructions: "Whisk.".to_owned(),
+                },
+                RecipeComponentDto {
+                    position: 1,
+                    title: "pesto".to_owned(),
+                    source_url: None,
+                    scale_numer: None,
+                    scale_denom: None,
+                    replaced_text: "1 cup pesto (or homemade)".to_owned(),
+                    status: "alternative".to_owned(),
+                    links: vec!["https://example.com/pesto".to_owned()],
+                    instructions: String::new(),
+                },
+            ],
+            ..recipe(household, id, vec![])
+        }
+    }
+
+    #[test]
+    fn components_round_trip_through_the_bridge() {
+        let mut conn = open_seeded(&["h"]);
+        let sent = recipe_with_components("h", "r");
+        let stored = save_recipe_in(&mut conn, sent.clone()).unwrap();
+        assert_eq!(stored.components, sent.components);
+        assert_eq!(
+            stored.lines.iter().map(|l| l.component).collect::<Vec<_>>(),
+            [Some(0), Some(1), None]
+        );
+        let loaded = load_recipe_in(&conn, "h", "r").unwrap().unwrap();
+        assert_eq!(loaded.components, sent.components);
+    }
+
+    #[test]
+    fn a_bad_component_is_rejected_before_anything_is_stored() {
+        let mut conn = open_seeded(&["h"]);
+        let mut unknown = recipe_with_components("h", "r");
+        unknown.components[0].status = "merged".to_owned();
+        let err = save_recipe_in(&mut conn, unknown).unwrap_err();
+        assert!(
+            err.to_string().contains("unknown component status"),
+            "{err}"
+        );
+        let mut half_scale = recipe_with_components("h", "r");
+        half_scale.components[0].scale_denom = None;
+        let err = save_recipe_in(&mut conn, half_scale).unwrap_err();
+        assert!(
+            err.to_string().contains("both numerator and denominator"),
+            "{err}"
+        );
+        let mut orphan = recipe_with_components("h", "r");
+        orphan.lines[2].component = Some(7);
+        let err = save_recipe_in(&mut conn, orphan).unwrap_err();
+        assert!(err.to_string().contains("does not exist"), "{err}");
+        assert!(load_recipe_in(&conn, "h", "r").unwrap().is_none());
     }
 
     /// A restriction row this version cannot parse — the downgrade case: a later version adds
@@ -1039,6 +1187,7 @@ mod tests {
                     },
                     preparation: Some("sifted".to_owned()),
                     optional: false,
+                    component: None,
                 },
                 IngredientLineDto {
                     original_text: "2-3 handfuls nana's mix (optional)".to_owned(),
@@ -1055,6 +1204,7 @@ mod tests {
                     },
                     preparation: None,
                     optional: true,
+                    component: None,
                 },
                 line("a splash of something", QuantityDto::Unknown, UnitDto::None),
             ],

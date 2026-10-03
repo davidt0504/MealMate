@@ -1,0 +1,20 @@
+[package]
+name = "recipe-import"
+version = "0.1.0"
+edition = "2021"
+
+[features]
+# Loopback, arbitrary ports and short timeouts for the bridge's local-server tests; enabled
+# only from `[dev-dependencies]`, never in a shipped build.
+test-support = []
+
+[dependencies]
+# Exact pin: the address-pinning resolver uses ureq's `unversioned` resolver API, which may
+# change in any release.
+ureq = "=3.4.2"
+url = "2"
+psl = "2"
+scraper = "0.24"
+serde_json = "1"
+regex = "1"
+thiserror = "2"

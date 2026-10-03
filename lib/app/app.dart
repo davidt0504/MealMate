@@ -6,11 +6,13 @@ import 'package:go_router/go_router.dart';
 
 import 'package:meal_mate/app/appearance_provider.dart';
 import 'package:meal_mate/app/router.dart';
+import 'package:meal_mate/app/share_channel.dart';
 import 'package:meal_mate/app/theme.dart';
 import 'package:meal_mate/features/household/household_provider.dart';
 import 'package:meal_mate/features/household/household_screen.dart'
     show describeFailure;
 import 'package:meal_mate/features/pantry/pantry_provider.dart';
+import 'package:meal_mate/features/recipes/import_controller.dart';
 import 'package:meal_mate/features/recipes/recipes_provider.dart';
 import 'package:meal_mate/features/recipes/starter_provider.dart';
 import 'package:meal_mate/features/settings/backup_provider.dart';
@@ -52,6 +54,53 @@ class _AppState extends ConsumerState<App> {
     // Only the ordinary launch can flash the empty Plan grid before the first-run decision.
     // Explicit/restored routes keep their own loading and error surfaces reachable.
     _startupSettled = widget.initialLocation != homeLocation;
+    // Shares into Kimatta (OPT-001): warm ones as they arrive, a cold-start one once.
+    final share = ref.read(shareChannelProvider);
+    share.listen(_onShared);
+    unawaited(
+      share.takeSharedText().then((text) {
+        if (text != null && mounted) _onShared(text);
+      }),
+    );
+  }
+
+  /// A shared link starts an import; a share during a review asks before replacing it, and a
+  /// share during a fetch simply restarts it. Raised from here, above the Navigator, so the
+  /// dialog uses the router's navigator context and the snackbar `_messengerKey`.
+  Future<void> _onShared(String text) async {
+    final url = firstUrl(text);
+    if (url == null) {
+      _messengerKey.currentState?.showSnackBar(
+        const SnackBar(
+          content: Text('No recipe link found in what was shared'),
+        ),
+      );
+      return;
+    }
+    if (ref.read(importControllerProvider) is ImportReviewing) {
+      final dialogContext = _router.routerDelegate.navigatorKey.currentContext;
+      if (dialogContext == null) return;
+      final replace = await showDialog<bool>(
+        context: dialogContext,
+        builder: (context) => AlertDialog(
+          content: const Text("Replace the recipe you're reviewing?"),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Keep reviewing'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Replace'),
+            ),
+          ],
+        ),
+      );
+      if (replace != true || !mounted) return;
+    }
+    // Started before navigating, so leaving the review sees an import in flight and keeps it.
+    unawaited(ref.read(importControllerProvider.notifier).start(url));
+    _router.go('/recipes/import');
   }
 
   @override

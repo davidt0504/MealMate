@@ -10,7 +10,7 @@ import 'package:freezed_annotation/freezed_annotation.dart' hide protected;
 part 'error.freezed.dart';
 
 // These functions are ignored because they are not marked as `pub`: `draft_error`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `clone`, `eq`, `fmt`, `fmt`, `fmt`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`, `from`
 
 /// What the Cover screen does about a refused draft command.
 enum DraftErrorKind {
@@ -37,6 +37,27 @@ enum DraftErrorKind {
 
   /// The command addressed something that is not part of this draft, or is in the past.
   invalid,
+}
+
+/// Why an import produced no draft (design §8's failure table).
+enum ImportErrorKind {
+  /// Offline, DNS failure, connection refused or a 5xx: Retry.
+  offline,
+
+  /// The page budget ran out: Retry.
+  timeout,
+
+  /// 401/403/429/451 or a challenge page: no Retry, never another identity.
+  refused,
+
+  /// Not a public http(s) address.
+  blocked,
+
+  /// Not HTML, too large, malformed, too many redirects or a 4xx.
+  unreadable,
+
+  /// A readable page with no Recipe data.
+  noRecipe,
 }
 
 @freezed
@@ -73,4 +94,12 @@ sealed class KimattaError with _$KimattaError implements FrbException {
     required DraftErrorKind kind,
     required String message,
   }) = KimattaError_Draft;
+
+  /// A recipe link could not be imported (OPT-001). `kind` picks the message and whether
+  /// Retry is offered; `url` is set only for `NoRecipe`, so "add it by hand" keeps the
+  /// source. Its text never contains the URL or page content.
+  const factory KimattaError.import_({
+    required ImportErrorKind kind,
+    String? url,
+  }) = KimattaError_Import;
 }

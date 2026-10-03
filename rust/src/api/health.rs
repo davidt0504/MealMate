@@ -373,18 +373,49 @@ mod tests {
         let rig = rig();
         seed(&rig, "Casa");
         let report = export_database(rig.export_path.clone()).unwrap();
-        assert_eq!(report.schema_version, 16);
+        assert_eq!(report.schema_version, 17);
 
         let h = bootstrap_household().unwrap();
         rename_household(h.id, Some("Mutated".to_owned())).unwrap();
         assert_eq!(household_name().as_deref(), Some("Mutated"));
 
         let restored = restore_database(rig.export_path.clone(), rig.db_path.clone()).unwrap();
-        assert_eq!(restored.schema_version, 16);
+        assert_eq!(restored.schema_version, 17);
         assert_eq!(restored.db_path, rig.db_path);
         assert_eq!(household_name().as_deref(), Some("Casa"));
         // The overwritten database is kept aside, not destroyed (invariant 8).
         assert!(Path::new(&format!("{}.pre-restore", rig.db_path)).exists());
+    }
+
+    /// Expected-to-pass after migration 17: an export is a raw copy, so imported sub-recipe
+    /// components survive export → restore with their line ownership.
+    #[test]
+    fn a_restore_keeps_recipe_components() {
+        let _guard = TEST_DB_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let rig = rig();
+        let household = seed(&rig, "Casa");
+        let sent = crate::api::recipe::tests::recipe_with_components(&household, "r-import");
+        crate::api::recipe::save_recipe(sent.clone()).unwrap();
+        export_database(rig.export_path.clone()).unwrap();
+        crate::api::recipe::archive_recipe(
+            household.clone(),
+            "r-import".to_owned(),
+            "2026-10-02".to_owned(),
+        )
+        .unwrap();
+        restore_database(rig.export_path.clone(), rig.db_path.clone()).unwrap();
+        let back = crate::api::recipe::load_recipe(household, "r-import".to_owned())
+            .unwrap()
+            .unwrap();
+        assert_eq!(back.components, sent.components);
+        assert_eq!(
+            back.archived_at, None,
+            "the restored copy predates the archive"
+        );
+        assert_eq!(
+            back.lines.iter().map(|l| l.component).collect::<Vec<_>>(),
+            [Some(0), Some(1), None]
+        );
     }
 
     #[test]
@@ -471,7 +502,7 @@ mod tests {
         seed(&rig, "Casa");
 
         let restored = restore_database(rig.export_path.clone(), rig.db_path.clone()).unwrap();
-        assert_eq!(restored.schema_version, 16);
+        assert_eq!(restored.schema_version, 17);
         assert_eq!(household_name().as_deref(), Some("Old"));
     }
 
@@ -623,7 +654,7 @@ mod tests {
         std::fs::write(&journal, [b'j'; 512]).unwrap();
 
         let report = reset_database(rig.db_path.clone(), "20260902-120000".to_owned()).unwrap();
-        assert_eq!(report.schema_version, 16);
+        assert_eq!(report.schema_version, 17);
         bootstrap_household().unwrap();
 
         let aside = format!("{}.corrupt-20260902-120000", rig.db_path);

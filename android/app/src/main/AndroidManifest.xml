@@ -3,6 +3,8 @@
          dataExtractionRules governs API 31+ cloud backup AND device-to-device transfer.
          Cloud is optional by construction (PRD v3 §6.5); the sanctioned way to move data
          off the device is the in-app export on the Settings screen. -->
+    <!-- OPT-001: recipe import fetches public recipe pages on the device. -->
+    <uses-permission android:name="android.permission.INTERNET"/>
     <application
         android:label="Kimatta (dev)"
         android:name="${applicationName}"
@@ -12,7 +14,7 @@
         <activity
             android:name=".MainActivity"
             android:exported="true"
-            android:launchMode="singleTop"
+            android:launchMode="singleTask"
             android:taskAffinity=""
             android:theme="@style/LaunchTheme"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
@@ -29,6 +31,15 @@
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
+            <!-- OPT-001: a recipe link shared from another app opens the import. singleTask
+                 (not singleTop) because a share sheet otherwise starts a second MainActivity,
+                 and a second Flutter engine, in the sender's task (measured 2026-10-02 with
+                 Chrome's share sheet); now the share reaches the one instance's onNewIntent. -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <data android:mimeType="text/plain"/>
             </intent-filter>
         </activity>
         <!-- Don't delete the meta-data below.

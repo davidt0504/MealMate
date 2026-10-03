@@ -34,6 +34,46 @@ pub enum KimattaError {
         kind: DraftErrorKind,
         message: String,
     },
+    /// A recipe link could not be imported (OPT-001). `kind` picks the message and whether
+    /// Retry is offered; `url` is set only for `NoRecipe`, so "add it by hand" keeps the
+    /// source. Its text never contains the URL or page content.
+    #[error("recipe import failed: {kind:?}")]
+    Import {
+        kind: ImportErrorKind,
+        url: Option<String>,
+    },
+}
+
+/// Why an import produced no draft (design §8's failure table).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ImportErrorKind {
+    /// Offline, DNS failure, connection refused or a 5xx: Retry.
+    Offline,
+    /// The page budget ran out: Retry.
+    Timeout,
+    /// 401/403/429/451 or a challenge page: no Retry, never another identity.
+    Refused,
+    /// Not a public http(s) address.
+    Blocked,
+    /// Not HTML, too large, malformed, too many redirects or a 4xx.
+    Unreadable,
+    /// A readable page with no Recipe data.
+    NoRecipe,
+}
+
+impl From<recipe_import::ImportError> for KimattaError {
+    fn from(e: recipe_import::ImportError) -> Self {
+        use recipe_import::ImportError as E;
+        let (kind, url) = match e {
+            E::Offline => (ImportErrorKind::Offline, None),
+            E::Timeout => (ImportErrorKind::Timeout, None),
+            E::Refused => (ImportErrorKind::Refused, None),
+            E::Blocked => (ImportErrorKind::Blocked, None),
+            E::Unreadable => (ImportErrorKind::Unreadable, None),
+            E::NoRecipe { url } => (ImportErrorKind::NoRecipe, Some(url)),
+        };
+        KimattaError::Import { kind, url }
+    }
 }
 
 /// What the Cover screen does about a refused draft command.

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import 'package:meal_mate/app/placeholder_screen.dart';
@@ -10,6 +11,8 @@ import 'package:meal_mate/features/planning/cycle_editor_screen.dart';
 import 'package:meal_mate/features/planning/experiment_screen.dart';
 import 'package:meal_mate/features/planning/meal_exclusions_screen.dart';
 import 'package:meal_mate/features/planning/planner_screen.dart';
+import 'package:meal_mate/features/recipes/import_controller.dart';
+import 'package:meal_mate/features/recipes/import_screen.dart';
 import 'package:meal_mate/features/recipes/recipe_detail_screen.dart';
 import 'package:meal_mate/features/recipes/recipe_form_screen.dart';
 import 'package:meal_mate/features/recipes/recipe_list_screen.dart';
@@ -51,12 +54,37 @@ GoRouter buildRouter({
             GoRoute(
               path: '/recipes',
               builder: (_, _) => const RecipeListScreen(),
-              // Literal segments before `:id`, so `new` and `archived` are never read as
-              // recipe ids.
+              // Literal segments before `:id`, so `new`, `archived` and `import` are never
+              // read as recipe ids.
               routes: [
                 GoRoute(
                   path: 'new',
                   builder: (_, _) => const RecipeFormScreen(),
+                ),
+                GoRoute(
+                  path: 'import',
+                  builder: (_, _) => const ImportScreen(),
+                  routes: [
+                    GoRoute(
+                      path: 'review',
+                      builder: (_, _) => const ImportReviewScreen(),
+                      // Leaving the review abandons the unsaved draft (design §2) — unless a
+                      // new share already started the next import, which must survive.
+                      onExit: (context, _) async {
+                        final imports = ProviderScope.containerOf(
+                          context,
+                          listen: false,
+                        );
+                        if (imports.read(importControllerProvider)
+                            is ImportReviewing) {
+                          imports
+                              .read(importControllerProvider.notifier)
+                              .reset();
+                        }
+                        return true;
+                      },
+                    ),
+                  ],
                 ),
                 GoRoute(
                   path: 'archived',

@@ -12,8 +12,8 @@ import 'package:freezed_annotation/freezed_annotation.dart' hide protected;
 import 'restrictions.dart';
 part 'recipe.freezed.dart';
 
-// These functions are ignored because they are not marked as `pub`: `add_custom_ingredient_in`, `archive_recipe_in`, `assess_names`, `assessment_from_domain`, `custom_from_domain`, `id_or_minted`, `line_from_domain`, `line_to_domain`, `list_archived_recipes_in`, `list_custom_ingredients_in`, `list_recipes_in`, `load_recipe_in`, `missing_category_in`, `quantity_from_domain`, `quantity_to_domain`, `rational`, `recipe_from_domain`, `recipe_to_domain`, `ref_from_domain`, `ref_to_domain`, `restore_recipe_in`, `save_recipe_in`, `set_category_in`, `stored_recipe`, `summaries`, `unit_from_domain`, `unit_to_domain`
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
+// These functions are ignored because they are not marked as `pub`: `add_custom_ingredient_in`, `archive_recipe_in`, `assess_names`, `assessment_from_domain`, `component_from_domain`, `component_to_domain`, `custom_from_domain`, `id_or_minted`, `line_from_domain`, `line_to_domain`, `list_archived_recipes_in`, `list_custom_ingredients_in`, `list_recipes_in`, `load_recipe_in`, `missing_category_in`, `quantity_from_domain`, `quantity_to_domain`, `rational`, `recipe_from_domain`, `recipe_to_domain`, `ref_from_domain`, `ref_to_domain`, `restore_recipe_in`, `save_recipe_in`, `set_category_in`, `stored_recipe`, `summaries`, `unit_from_domain`, `unit_to_domain`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `assert_fields_are_eq`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `clone`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `eq`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 
 /// Saves the whole recipe; an empty `id` mints a v4 UUID (as `bootstrap_household` does).
 /// Returns what was stored.
@@ -203,6 +203,9 @@ class IngredientLineDto {
   final String? preparation;
   final bool optional;
 
+  /// Position of the `RecipeComponentDto` this line belongs to; `None` is the main recipe.
+  final int? component;
+
   const IngredientLineDto({
     required this.originalText,
     required this.name,
@@ -211,6 +214,7 @@ class IngredientLineDto {
     required this.unit,
     this.preparation,
     required this.optional,
+    this.component,
   });
 
   @override
@@ -221,7 +225,8 @@ class IngredientLineDto {
       quantity.hashCode ^
       unit.hashCode ^
       preparation.hashCode ^
-      optional.hashCode;
+      optional.hashCode ^
+      component.hashCode;
 
   @override
   bool operator ==(Object other) =>
@@ -234,7 +239,8 @@ class IngredientLineDto {
           quantity == other.quantity &&
           unit == other.unit &&
           preparation == other.preparation &&
-          optional == other.optional;
+          optional == other.optional &&
+          component == other.component;
 }
 
 @freezed
@@ -262,6 +268,59 @@ sealed class QuantityDto with _$QuantityDto {
   }) = QuantityDto_Range;
 }
 
+/// An imported sub-recipe kept inside its parent (OPT-001). `status` is `expanded`,
+/// `unresolved` or `alternative`; `scale_*` are both present or both absent.
+class RecipeComponentDto {
+  final int position;
+  final String title;
+  final String? sourceUrl;
+  final int? scaleNumer;
+  final int? scaleDenom;
+  final String replacedText;
+  final String status;
+  final List<String> links;
+  final String instructions;
+
+  const RecipeComponentDto({
+    required this.position,
+    required this.title,
+    this.sourceUrl,
+    this.scaleNumer,
+    this.scaleDenom,
+    required this.replacedText,
+    required this.status,
+    required this.links,
+    required this.instructions,
+  });
+
+  @override
+  int get hashCode =>
+      position.hashCode ^
+      title.hashCode ^
+      sourceUrl.hashCode ^
+      scaleNumer.hashCode ^
+      scaleDenom.hashCode ^
+      replacedText.hashCode ^
+      status.hashCode ^
+      links.hashCode ^
+      instructions.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is RecipeComponentDto &&
+          runtimeType == other.runtimeType &&
+          position == other.position &&
+          title == other.title &&
+          sourceUrl == other.sourceUrl &&
+          scaleNumer == other.scaleNumer &&
+          scaleDenom == other.scaleDenom &&
+          replacedText == other.replacedText &&
+          status == other.status &&
+          links == other.links &&
+          instructions == other.instructions;
+}
+
 class RecipeDto {
   final String id;
   final String householdId;
@@ -275,6 +334,9 @@ class RecipeDto {
   final String instructions;
   final List<IngredientLineDto> lines;
   final RecipeProvenanceDto provenance;
+
+  /// Round-trips both ways; every `lines[i].component` must name one of these.
+  final List<RecipeComponentDto> components;
 
   /// Output only: `save_recipe` ignores it and never changes archive state; use
   /// `archive_recipe`/`restore_recipe`. ISO civil date, `None` while in the library.
@@ -293,6 +355,7 @@ class RecipeDto {
     required this.instructions,
     required this.lines,
     required this.provenance,
+    required this.components,
     this.archivedAt,
     this.assessment,
   });
@@ -307,6 +370,7 @@ class RecipeDto {
       instructions.hashCode ^
       lines.hashCode ^
       provenance.hashCode ^
+      components.hashCode ^
       archivedAt.hashCode ^
       assessment.hashCode;
 
@@ -323,6 +387,7 @@ class RecipeDto {
           instructions == other.instructions &&
           lines == other.lines &&
           provenance == other.provenance &&
+          components == other.components &&
           archivedAt == other.archivedAt &&
           assessment == other.assessment;
 }

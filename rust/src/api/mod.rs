@@ -9,6 +9,7 @@ pub mod planner;
 pub mod planning;
 pub mod planning_drafts;
 pub mod recipe;
+pub mod recipe_import;
 pub mod restrictions;
 pub mod shopping;
 pub mod starter;

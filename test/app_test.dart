@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -9,6 +10,7 @@ import 'package:meal_mate/app/app.dart';
 import 'package:meal_mate/app/appearance_provider.dart';
 import 'package:meal_mate/app/font_licenses.dart';
 import 'package:meal_mate/app/router.dart';
+import 'package:meal_mate/app/share_channel.dart';
 import 'package:meal_mate/app/theme.dart';
 import 'package:meal_mate/features/household/household_provider.dart';
 import 'package:meal_mate/features/household/household_screen.dart';
@@ -23,7 +25,9 @@ import 'package:meal_mate/features/planning/planner_provider.dart';
 import 'package:meal_mate/features/planning/planning_cycle.dart';
 import 'package:meal_mate/features/planning/planning_provider.dart';
 import 'package:meal_mate/src/rust/api/planned_meals.dart';
+import 'package:meal_mate/features/recipes/import_controller.dart';
 import 'package:meal_mate/features/recipes/recipes_provider.dart';
+import 'package:meal_mate/src/rust/api/recipe_import.dart';
 import 'package:meal_mate/features/recipes/restriction_warnings.dart';
 import 'package:meal_mate/features/pantry/pantry_copy.dart';
 import 'package:meal_mate/features/pantry/pantry_provider.dart';
@@ -107,6 +111,7 @@ const okRecipe = RecipeDto(
   ],
   provenance: RecipeProvenanceDto(kind: 'authored'),
   assessment: emptyAssessment,
+  components: [],
 );
 
 /// Every field the edit form does not render, populated, so `_validate` has something to lose
@@ -156,6 +161,7 @@ const fullyPopulatedRecipe = RecipeDto(
   // form is really handed.
   archivedAt: '2026-09-01',
   assessment: emptyAssessment,
+  components: [],
 );
 
 /// What a read-back reports with no restrictions stored: checked nothing, found nothing.
@@ -230,6 +236,7 @@ const recipeWithResolvedLine = RecipeDto(
   ],
   provenance: RecipeProvenanceDto(kind: 'authored'),
   assessment: emptyAssessment,
+  components: [],
 );
 
 /// `okRecipe` with no prep estimate, for the absence case.
@@ -242,6 +249,7 @@ final okRecipeNoPrep = RecipeDto(
   lines: okRecipe.lines,
   provenance: okRecipe.provenance,
   assessment: okRecipe.assessment,
+  components: const [],
 );
 
 /// `okRecipe` with two conflicts — one known kind, one wording-only `Other` — and the
@@ -290,6 +298,7 @@ const okRecipeWithConflicts = RecipeDto(
     ],
     wordingOnly: ['something'],
   ),
+  components: [],
 );
 const okCycle = PlanningCycleDto(
   householdId: 'h-1',
@@ -516,6 +525,47 @@ class _FakeRecipeLibraryNotifier extends RecipeLibraryNotifier {
     ref.invalidateSelf();
     ref.invalidate(archivedRecipesProvider);
     return stored;
+  }
+}
+
+/// Records what the app asks of the Android share channel, and lets a test deliver a share.
+class FakeShareChannel extends ShareChannel {
+  FakeShareChannel({this.coldStart});
+
+  /// What `takeSharedText` hands over once, as a share-started launch would.
+  String? coldStart;
+  void Function(String)? _onShared;
+  final opened = <String>[];
+
+  @override
+  Future<String?> takeSharedText() async {
+    final text = coldStart;
+    coldStart = null;
+    return text;
+  }
+
+  @override
+  void listen(void Function(String text) onShared) => _onShared = onShared;
+
+  @override
+  Future<void> openUrl(String url) async => opened.add(url);
+
+  /// A share arriving while the app runs (`onNewIntent`).
+  void send(String text) => _onShared!(text);
+}
+
+class _FakeImportController extends ImportController {
+  _FakeImportController(this._fetch);
+
+  final Future<ImportResultDto> Function(String url)? _fetch;
+
+  @override
+  Future<ImportResultDto> fetch(String householdId, String url) {
+    final fake = _fetch;
+    if (fake == null) {
+      throw StateError('this test imports without an `importFetch:` hook');
+    }
+    return fake(url);
   }
 }
 
@@ -1152,8 +1202,17 @@ Widget harness({
   FutureOr<List<MealExclusionDto>> Function()? mealExclusions,
   Future<MealExclusionOutcomeDto> Function(RemoveMealExclusionDto)? removeRule,
   BackupActions? backup,
+  Future<ImportResultDto> Function(String url)? importFetch,
+  FakeShareChannel? share,
 }) => ProviderScope(
   overrides: [
+    // Unconditional: `App` reads the share channel on its first frame, and the real one
+    // talks to a platform channel `flutter test` does not have.
+    shareChannelProvider.overrideWithValue(share ?? FakeShareChannel()),
+    // Unconditional, like the other bridge seams: no test may reach the real import.
+    importControllerProvider.overrideWith(
+      () => _FakeImportController(importFetch),
+    ),
     appearanceProvider.overrideWith(() => _FakeAppearanceNotifier(appearance)),
     // Unconditional, like the planner's: the Cover route is reachable from Plan, and an
     // un-overridden provider would reach the real bridge.
@@ -1607,6 +1666,8 @@ void useTallView(WidgetTester tester) {
 }
 
 void main() {
+  importTests();
+
   // `?offset=` is the only place a String becomes a cycle offset, and the value crosses to
   // Rust as an i32: `sse_encode_i_32` is `putInt32`, which keeps the low 32 bits silently.
   // Saturating is what stops an out-of-range deep link from previewing an unrelated window.
@@ -4921,6 +4982,7 @@ void main() {
           lines: [],
           provenance: RecipeProvenanceDto(kind: 'authored'),
           assessment: checkedCleanAssessment,
+          components: [],
         ),
       ),
     );
@@ -5075,6 +5137,7 @@ void main() {
           lines: [],
           provenance: RecipeProvenanceDto(kind: 'authored'),
           archivedAt: '2026-08-29',
+          components: [],
         ),
         restoreRecipe: (household, id) async {
           restored.add('$household/$id');
@@ -10804,4 +10867,782 @@ class _FakeBackupActions extends BackupActions {
     freshes++;
     return (onStartFresh ?? () async => okReport)();
   }
+}
+
+// --- OPT-001: recipe import from a link ----------------------------------------------------
+
+const _importUrl = 'https://example.com/shawarma';
+
+RecipeComponentDto _component(
+  int position,
+  String status, {
+  String title = 'Lemon yogurt sauce',
+  List<String> links = const [],
+  String instructions = '',
+}) => RecipeComponentDto(
+  position: position,
+  title: title,
+  replacedText: '1 batch $title',
+  status: status,
+  links: links,
+  instructions: instructions,
+  scaleNumer: status == 'expanded' ? 1 : null,
+  scaleDenom: status == 'expanded' ? 1 : null,
+);
+
+IngredientLineDto _text(String text, [int? component]) => IngredientLineDto(
+  originalText: text,
+  name: text,
+  quantity: const QuantityDto.unknown(),
+  unit: const UnitDto.none(),
+  optional: false,
+  component: component,
+);
+
+/// Shawarma with an expanded sauce (lines 1–2), an unresolved crust and an alternative pesto.
+final _importedRecipe = RecipeDto(
+  id: '',
+  householdId: 'h-1',
+  title: 'Shawarma',
+  servings: 4,
+  instructions: '1. Grill.',
+  lines: [
+    _text('1 kg chicken'),
+    _text('1 cup yogurt', 0),
+    _text('1 lemon', 0),
+    _text('1 batch Pie crust', 1),
+    _text('1 cup pesto (or homemade)', 2),
+  ],
+  provenance: const RecipeProvenanceDto(
+    kind: 'imported',
+    sourceUrl: _importUrl,
+    sourceName: 'Test Kitchen',
+  ),
+  components: [
+    _component(0, 'expanded', instructions: '1. Whisk.'),
+    _component(
+      1,
+      'unresolved',
+      title: 'Pie crust',
+      links: ['https://example.com/crust'],
+    ),
+    _component(
+      2,
+      'alternative',
+      title: 'pesto',
+      links: ['https://example.com/pesto'],
+    ),
+  ],
+);
+
+ImportDraftDto _draft({
+  RecipeDto? recipe,
+  String? notice,
+  List<int> inline = const [],
+}) => ImportDraftDto(
+  recipe: recipe ?? _importedRecipe,
+  notice: notice,
+  inlineLines: Uint32List.fromList(inline),
+);
+
+ImportResultDto _result({
+  List<ImportDraftDto>? drafts,
+  ExistingRecipeDto? existing,
+}) => ImportResultDto(drafts: drafts ?? [_draft()], existing: existing);
+
+RecipeDto _stored(RecipeDto sent) => RecipeDto(
+  id: 'r-new',
+  householdId: sent.householdId,
+  title: sent.title,
+  instructions: sent.instructions,
+  lines: sent.lines,
+  provenance: sent.provenance,
+  components: sent.components,
+);
+
+void importTests() {
+  Finder field(String label, [int index = 0]) =>
+      find.widgetWithText(TextField, label).at(index);
+
+  Future<void> tapVisible(WidgetTester tester, Finder finder) async {
+    FocusManager.instance.primaryFocus?.unfocus();
+    await tester.pump();
+    await tester.ensureVisible(finder);
+    await tester.pumpAndSettle();
+    await tester.tap(finder);
+    await tester.pumpAndSettle();
+  }
+
+  void clipboard(WidgetTester tester, String? text) {
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      SystemChannels.platform,
+      (call) async => call.method == 'Clipboard.getData' && text != null
+          ? <String, dynamic>{'text': text}
+          : null,
+    );
+    addTearDown(
+      () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        null,
+      ),
+    );
+  }
+
+  Future<void> importLink(
+    WidgetTester tester, [
+    String url = _importUrl,
+  ]) async {
+    await tester.enterText(field('Recipe link'), url);
+    await tester.pump();
+    await tester.tap(find.widgetWithText(FilledButton, 'Import'));
+    await tester.pumpAndSettle();
+  }
+
+  group('recipe import', () {
+    testWidgets(
+      'Paste link opens the import and a fetched draft opens the review',
+      (tester) async {
+        useTallView(tester);
+        clipboard(tester, null);
+        RecipeDto? sent;
+        final asked = <String>[];
+        await tester.pumpWidget(
+          harness(
+            initial: '/recipes',
+            importFetch: (url) async {
+              asked.add(url);
+              return _result();
+            },
+            saveRecipe: (r) async {
+              sent = r;
+              return _stored(r);
+            },
+            recipe: (id) => id == 'r-new' ? _stored(sent!) : null,
+          ),
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(find.byTooltip('Paste link'));
+        await tester.pumpAndSettle();
+        await importLink(tester);
+        expect(asked, [_importUrl]);
+        expect(find.text('Review recipe'), findsOneWidget);
+        expect(
+          tester.widget<TextField>(field('Title')).controller!.text,
+          'Shawarma',
+        );
+        await tapVisible(tester, find.text('Save recipe'));
+        expect(sent!.id, '');
+        expect(sent!.provenance.kind, 'imported');
+        expect(sent!.provenance.sourceUrl, _importUrl);
+        expect(sent!.components, _importedRecipe.components);
+        expect(sent!.lines.map((l) => l.component), [null, 0, 0, 1, 2]);
+        expect(
+          sent!.lines.map((l) => l.originalText),
+          _importedRecipe.lines.map((l) => l.originalText),
+        );
+        // Lands on the saved recipe, not back in the import.
+        expect(find.text('From Test Kitchen'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'one notice for every unresolved part, and Save stays enabled',
+      (tester) async {
+        useTallView(tester);
+        clipboard(tester, null);
+        RecipeDto? sent;
+        await tester.pumpWidget(
+          harness(
+            initial: '/recipes/import',
+            importFetch: (_) async => _result(
+              drafts: [
+                _draft(notice: '2 part(s) of this recipe couldn\'t be added'),
+              ],
+            ),
+            saveRecipe: (r) async => _stored(sent = r),
+          ),
+        );
+        await tester.pumpAndSettle();
+        await importLink(tester);
+        expect(
+          find.text("2 part(s) of this recipe couldn't be added"),
+          findsOneWidget,
+        );
+        expect(find.text('Pie crust'), findsOneWidget);
+        expect(
+          find.text("Couldn't be added automatically — kept as written"),
+          findsOneWidget,
+        );
+        expect(find.text('Has a linked homemade alternative'), findsOneWidget);
+        final save = find.widgetWithText(FilledButton, 'Save recipe');
+        await tester.ensureVisible(save);
+        expect(tester.widget<FilledButton>(save).onPressed, isNotNull);
+        await tapVisible(tester, save);
+        expect(sent, isNotNull);
+      },
+    );
+
+    testWidgets('an edited sub-recipe line keeps its component', (
+      tester,
+    ) async {
+      useTallView(tester);
+      clipboard(tester, null);
+      RecipeDto? sent;
+      await tester.pumpWidget(
+        harness(
+          initial: '/recipes/import',
+          importFetch: (_) async => _result(),
+          saveRecipe: (r) async => _stored(sent = r),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await importLink(tester);
+      await tester.enterText(field('Name', 1), 'Greek yogurt');
+      await tapVisible(tester, find.text('Save recipe'));
+      expect(sent!.lines[1].name, 'Greek yogurt');
+      expect(sent!.lines[1].component, 0);
+      expect(sent!.components.length, 3);
+    });
+
+    testWidgets("removing a sub-recipe's last line asks, then drops it", (
+      tester,
+    ) async {
+      useTallView(tester);
+      clipboard(tester, null);
+      RecipeDto? sent;
+      await tester.pumpWidget(
+        harness(
+          initial: '/recipes/import',
+          importFetch: (_) async => _result(),
+          saveRecipe: (r) async => _stored(sent = r),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await importLink(tester);
+      await tapVisible(tester, find.byTooltip('Remove ingredient 2'));
+      expect(
+        find.byType(AlertDialog),
+        findsNothing,
+        reason: 'not the last line yet',
+      );
+      await tapVisible(tester, find.byTooltip('Remove ingredient 2'));
+      expect(
+        find.text('Remove the Lemon yogurt sauce section and its steps?'),
+        findsOneWidget,
+      );
+      await tester.tap(find.text('Remove'));
+      await tester.pumpAndSettle();
+      await tapVisible(tester, find.text('Save recipe'));
+      expect(sent!.components.map((c) => c.position), [1, 2]);
+      expect(sent!.lines.map((l) => l.component), [null, 1, 2]);
+    });
+
+    testWidgets('blanking an unresolved line saves without its component', (
+      tester,
+    ) async {
+      useTallView(tester);
+      clipboard(tester, null);
+      RecipeDto? sent;
+      await tester.pumpWidget(
+        harness(
+          initial: '/recipes/import',
+          importFetch: (_) async => _result(),
+          saveRecipe: (r) async => _stored(sent = r),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await importLink(tester);
+      await tester.enterText(field('Name', 3), '');
+      await tapVisible(tester, find.text('Save recipe'));
+      expect(sent!.components.map((c) => c.position), [0, 2]);
+      expect(sent!.lines.map((l) => l.component), [null, 0, 0, 2]);
+    });
+
+    testWidgets('an inline sub-recipe line carries the delete hint', (
+      tester,
+    ) async {
+      useTallView(tester);
+      clipboard(tester, null);
+      await tester.pumpWidget(
+        harness(
+          initial: '/recipes/import',
+          importFetch: (_) async => _result(
+            drafts: [
+              _draft(inline: [0]),
+            ],
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await importLink(tester);
+      expect(
+        find.textContaining('This line names a sauce whose ingredients'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('Edit section renames the steps and refuses a blank title', (
+      tester,
+    ) async {
+      useTallView(tester);
+      clipboard(tester, null);
+      RecipeDto? sent;
+      await tester.pumpWidget(
+        harness(
+          initial: '/recipes/import',
+          importFetch: (_) async => _result(),
+          saveRecipe: (r) async => _stored(sent = r),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await importLink(tester);
+      await tapVisible(tester, find.text('Edit section: Lemon yogurt sauce'));
+      await tester.enterText(field('Section title'), ' ');
+      await tester.pump();
+      final save = find.widgetWithText(TextButton, 'Save section');
+      expect(tester.widget<TextButton>(save).onPressed, isNull);
+      await tester.enterText(field('Section title'), 'Garlic sauce');
+      await tester.enterText(field('Steps'), '1. Stir.');
+      await tester.pump();
+      await tester.tap(save);
+      await tester.pumpAndSettle();
+      await tapVisible(tester, find.text('Save recipe'));
+      expect(sent!.components[0].title, 'Garlic sauce');
+      expect(sent!.components[0].instructions, '1. Stir.');
+    });
+
+    testWidgets('editing a saved recipe keeps its components untouched', (
+      tester,
+    ) async {
+      useTallView(tester);
+      final saved = _stored(_importedRecipe);
+      RecipeDto? sent;
+      await tester.pumpWidget(
+        harness(
+          initial: '/recipes/r-new/edit',
+          recipe: (id) => id == 'r-new' ? saved : null,
+          saveRecipe: (r) async => sent = r,
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Edit recipe'), findsOneWidget);
+      await tapVisible(tester, find.text('Save recipe'));
+      expect(sent!.components, saved.components);
+      expect(sent!.lines.map((l) => l.component), [null, 0, 0, 1, 2]);
+      expect(sent!.provenance.kind, 'imported');
+    });
+
+    testWidgets('the detail shows the source and the kept links, which open', (
+      tester,
+    ) async {
+      useTallView(tester);
+      final share = FakeShareChannel();
+      await tester.pumpWidget(
+        harness(
+          initial: '/recipes/r-new',
+          share: share,
+          recipe: (id) => _stored(_importedRecipe),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('From Test Kitchen'), findsOneWidget);
+      expect(find.text('Pie crust: not added automatically'), findsOneWidget);
+      expect(find.text('pesto: homemade alternative'), findsOneWidget);
+      expect(find.text('Lemon yogurt sauce'), findsOneWidget);
+      expect(find.text('1. Whisk.'), findsOneWidget);
+      await tapVisible(tester, find.text('From Test Kitchen'));
+      await tapVisible(tester, find.text('Open example.com').first);
+      expect(share.opened, [_importUrl, 'https://example.com/crust']);
+    });
+
+    testWidgets('an authored recipe shows no source or component links', (
+      tester,
+    ) async {
+      useTallView(tester);
+      await tester.pumpWidget(harness(initial: '/recipes/r-1'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('From '), findsNothing);
+      expect(find.byIcon(Icons.open_in_new), findsNothing);
+    });
+
+    testWidgets('only a link on the clipboard prefills the field', (
+      tester,
+    ) async {
+      clipboard(tester, 'see https://example.com/pie. so good');
+      await tester.pumpWidget(harness(initial: '/recipes/import'));
+      await tester.pumpAndSettle();
+      expect(
+        tester.widget<TextField>(field('Recipe link')).controller!.text,
+        'https://example.com/pie',
+      );
+    });
+
+    testWidgets('a clipboard without a link leaves the field empty', (
+      tester,
+    ) async {
+      clipboard(tester, 'chicken, rice, lemons');
+      await tester.pumpWidget(harness(initial: '/recipes/import'));
+      await tester.pumpAndSettle();
+      expect(
+        tester.widget<TextField>(field('Recipe link')).controller!.text,
+        '',
+      );
+      final import = find.widgetWithText(FilledButton, 'Import');
+      expect(tester.widget<FilledButton>(import).onPressed, isNull);
+    });
+
+    testWidgets('a page with several recipes asks which one', (tester) async {
+      useTallView(tester);
+      clipboard(tester, null);
+      RecipeDto? sent;
+      final soup = RecipeDto(
+        id: '',
+        householdId: 'h-1',
+        title: 'Soup',
+        instructions: '',
+        lines: [_text('1 onion')],
+        provenance: const RecipeProvenanceDto(kind: 'imported'),
+        components: const [],
+      );
+      await tester.pumpWidget(
+        harness(
+          initial: '/recipes/import',
+          importFetch: (_) async => _result(
+            drafts: [
+              _draft(),
+              _draft(recipe: soup),
+            ],
+          ),
+          saveRecipe: (r) async => _stored(sent = r),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await importLink(tester);
+      expect(find.text('This page has 2 recipes. Which one?'), findsOneWidget);
+      await tester.tap(find.text('Soup'));
+      await tester.pumpAndSettle();
+      await tapVisible(tester, find.text('Save recipe'));
+      expect(sent!.title, 'Soup');
+    });
+
+    testWidgets('an already-saved link opens the saved recipe by default', (
+      tester,
+    ) async {
+      useTallView(tester);
+      clipboard(tester, null);
+      await tester.pumpWidget(
+        harness(
+          initial: '/recipes/import',
+          importFetch: (_) async => _result(
+            existing: const ExistingRecipeDto(id: 'r-1', archived: false),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await importLink(tester);
+      expect(find.text('You already saved this recipe'), findsOneWidget);
+      await tester.tap(find.widgetWithText(FilledButton, 'Open'));
+      await tester.pumpAndSettle();
+      expect(find.text(okRecipe.title), findsWidgets);
+      expect(find.text('Review recipe'), findsNothing);
+    });
+
+    testWidgets('Import another copy reviews the page anyway', (tester) async {
+      useTallView(tester);
+      clipboard(tester, null);
+      await tester.pumpWidget(
+        harness(
+          initial: '/recipes/import',
+          importFetch: (_) async => _result(
+            existing: const ExistingRecipeDto(id: 'r-1', archived: false),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await importLink(tester);
+      await tester.tap(find.text('Import another copy'));
+      await tester.pumpAndSettle();
+      expect(find.text('Review recipe'), findsOneWidget);
+    });
+
+    testWidgets('an archived match is restored, then opened', (tester) async {
+      useTallView(tester);
+      clipboard(tester, null);
+      final restored = <String>[];
+      await tester.pumpWidget(
+        harness(
+          initial: '/recipes/import',
+          importFetch: (_) async => _result(
+            existing: const ExistingRecipeDto(id: 'r-1', archived: true),
+          ),
+          restoreRecipe: (h, id) async {
+            restored.add(id);
+            return okRecipe;
+          },
+        ),
+      );
+      await tester.pumpAndSettle();
+      await importLink(tester);
+      await tester.tap(find.widgetWithText(FilledButton, 'Restore it'));
+      await tester.pumpAndSettle();
+      expect(restored, ['r-1']);
+      expect(find.text('You already saved this recipe'), findsNothing);
+    });
+
+    testWidgets('every failure says what happened and saves nothing', (
+      tester,
+    ) async {
+      useTallView(tester);
+      clipboard(tester, null);
+      final cases = {
+        ImportErrorKind.offline: (
+          "You're offline or the site can't be reached.",
+          true,
+        ),
+        ImportErrorKind.timeout: ('The site took too long.', true),
+        ImportErrorKind.refused: (
+          "This site didn't let Kimatta read the page.",
+          false,
+        ),
+        ImportErrorKind.blocked: ("That link can't be imported.", false),
+        ImportErrorKind.unreadable: (
+          "This page isn't a recipe Kimatta can read.",
+          false,
+        ),
+      };
+      expect(cases, isNotEmpty);
+      for (final MapEntry(key: kind, value: (message, retry))
+          in cases.entries) {
+        // A fresh scope per kind: a keyed subtree, since a live scope's overrides are fixed.
+        await tester.pumpWidget(
+          KeyedSubtree(
+            key: ValueKey(kind),
+            child: harness(
+              initial: '/recipes/import',
+              importFetch: (_) async => throw KimattaError.import_(kind: kind),
+              saveRecipe: (_) => throw StateError('nothing may be saved'),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        await importLink(tester);
+        expect(find.text(message), findsOneWidget, reason: '$kind');
+        expect(
+          find.widgetWithText(FilledButton, 'Retry'),
+          retry ? findsOneWidget : findsNothing,
+          reason: '$kind',
+        );
+      }
+    });
+
+    testWidgets('a page without recipe data can still be added by hand', (
+      tester,
+    ) async {
+      useTallView(tester);
+      clipboard(tester, null);
+      RecipeDto? sent;
+      await tester.pumpWidget(
+        harness(
+          initial: '/recipes/import',
+          importFetch: (_) async => throw const KimattaError.import_(
+            kind: ImportErrorKind.noRecipe,
+            url: 'https://example.com/about',
+          ),
+          saveRecipe: (r) async => _stored(sent = r),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await importLink(tester);
+      expect(
+        find.text("This page isn't a recipe Kimatta can read."),
+        findsOneWidget,
+      );
+      await tester.tap(find.text('You can still add it by hand'));
+      await tester.pumpAndSettle();
+      expect(find.text('Review recipe'), findsOneWidget);
+      await tester.enterText(field('Title'), 'Grandma pie');
+      await tapVisible(tester, find.text('Save recipe'));
+      expect(sent!.provenance.kind, 'imported');
+      expect(sent!.provenance.sourceUrl, 'https://example.com/about');
+      expect(sent!.lines, isEmpty);
+    });
+
+    testWidgets('a fetch that finishes after Cancel is dropped', (
+      tester,
+    ) async {
+      useTallView(tester);
+      clipboard(tester, null);
+      final pending = Completer<ImportResultDto>();
+      await tester.pumpWidget(
+        harness(initial: '/recipes/import', importFetch: (_) => pending.future),
+      );
+      await tester.pumpAndSettle();
+      await tester.enterText(field('Recipe link'), _importUrl);
+      await tester.pump();
+      await tester.tap(find.widgetWithText(FilledButton, 'Import'));
+      await tester.pump();
+      expect(find.text('Reading the page…'), findsOneWidget);
+      await tester.tap(find.text('Cancel'));
+      await tester.pump();
+      pending.complete(_result());
+      await tester.pumpAndSettle();
+      expect(find.text('Review recipe'), findsNothing);
+      expect(field('Recipe link'), findsOneWidget);
+    });
+
+    testWidgets('a restored review route with no draft returns to the link', (
+      tester,
+    ) async {
+      clipboard(tester, null);
+      await tester.pumpWidget(harness(initial: '/recipes/import/review'));
+      await tester.pumpAndSettle();
+      expect(field('Recipe link'), findsOneWidget);
+      expect(find.text('Review recipe'), findsNothing);
+    });
+
+    testWidgets('a cold-start share opens the import of its link', (
+      tester,
+    ) async {
+      useTallView(tester);
+      clipboard(tester, null);
+      final asked = <String>[];
+      await tester.pumpWidget(
+        harness(
+          share: FakeShareChannel(coldStart: 'Look: $_importUrl!'),
+          importFetch: (url) async {
+            asked.add(url);
+            return _result();
+          },
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(asked, [_importUrl]);
+      expect(find.text('Review recipe'), findsOneWidget);
+    });
+
+    testWidgets('a share with no link says so', (tester) async {
+      final share = FakeShareChannel();
+      await tester.pumpWidget(harness(share: share));
+      await tester.pumpAndSettle();
+      share.send('just some text');
+      await tester.pumpAndSettle();
+      expect(
+        find.text('No recipe link found in what was shared'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('a share during a review asks before replacing it', (
+      tester,
+    ) async {
+      useTallView(tester);
+      clipboard(tester, null);
+      final share = FakeShareChannel();
+      final asked = <String>[];
+      await tester.pumpWidget(
+        harness(
+          initial: '/recipes/import',
+          share: share,
+          importFetch: (url) async {
+            asked.add(url);
+            return _result();
+          },
+        ),
+      );
+      await tester.pumpAndSettle();
+      await importLink(tester);
+      share.send('https://example.com/other');
+      await tester.pumpAndSettle();
+      expect(find.text("Replace the recipe you're reviewing?"), findsOneWidget);
+      await tester.tap(find.text('Keep reviewing'));
+      await tester.pumpAndSettle();
+      expect(asked, [_importUrl]);
+      expect(find.text('Review recipe'), findsOneWidget);
+      share.send('https://example.com/other');
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Replace'));
+      await tester.pumpAndSettle();
+      expect(asked, [_importUrl, 'https://example.com/other']);
+      expect(find.text('Review recipe'), findsOneWidget);
+    });
+
+    testWidgets('a share during a fetch restarts it with the new link', (
+      tester,
+    ) async {
+      useTallView(tester);
+      clipboard(tester, null);
+      final share = FakeShareChannel();
+      final first = Completer<ImportResultDto>();
+      final asked = <String>[];
+      await tester.pumpWidget(
+        harness(
+          initial: '/recipes/import',
+          share: share,
+          importFetch: (url) {
+            asked.add(url);
+            return url == _importUrl
+                ? first.future
+                : Future.value(
+                    _result(
+                      drafts: [
+                        _draft(
+                          recipe: RecipeDto(
+                            id: '',
+                            householdId: 'h-1',
+                            title: 'Other',
+                            instructions: '',
+                            lines: const [],
+                            provenance: const RecipeProvenanceDto(
+                              kind: 'imported',
+                            ),
+                            components: const [],
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+          },
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.enterText(field('Recipe link'), _importUrl);
+      await tester.pump();
+      await tester.tap(find.widgetWithText(FilledButton, 'Import'));
+      await tester.pump();
+      share.send('https://example.com/other');
+      await tester.pumpAndSettle();
+      first.complete(_result());
+      await tester.pumpAndSettle();
+      expect(asked, [_importUrl, 'https://example.com/other']);
+      expect(
+        tester.widget<TextField>(field('Title')).controller!.text,
+        'Other',
+      );
+    });
+
+    testWidgets('after a save, the next share does not ask about a review', (
+      tester,
+    ) async {
+      useTallView(tester);
+      clipboard(tester, null);
+      final share = FakeShareChannel();
+      RecipeDto? sent;
+      await tester.pumpWidget(
+        harness(
+          initial: '/recipes/import',
+          share: share,
+          importFetch: (_) async => _result(),
+          saveRecipe: (r) async => _stored(sent = r),
+          recipe: (id) => id == 'r-new' ? _stored(sent!) : null,
+        ),
+      );
+      await tester.pumpAndSettle();
+      await importLink(tester);
+      await tapVisible(tester, find.text('Save recipe'));
+      share.send(_importUrl);
+      await tester.pumpAndSettle();
+      expect(find.text("Replace the recipe you're reviewing?"), findsNothing);
+      expect(find.text('Review recipe'), findsOneWidget);
+    });
+  });
 }

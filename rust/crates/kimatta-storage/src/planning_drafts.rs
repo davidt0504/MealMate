@@ -787,7 +787,7 @@ mod tests {
         };
         assert!(meals[0].locked());
         let conn = open(&path).unwrap();
-        assert_eq!(crate::schema_version(&conn).unwrap(), 16);
+        assert_eq!(crate::schema_version(&conn).unwrap(), 17);
         assert_eq!(
             list_planned_meals(&conn, &hid("h"), from, to).unwrap(),
             meals

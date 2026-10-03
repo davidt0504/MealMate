@@ -92,7 +92,7 @@ An ingredient is never silently omitted.
   - print, save, jump and `javascript:` links;
   - cross-site links (products, affiliates, tools);
   - a link that appears only inside a parenthetical remark.
-- **Optional alternative:** the source explicitly offers a choice ("or", "optional", "store-bought"). The line is kept as written, the link is kept as an alternative, nothing is fetched, and nothing homemade is forced. "Homemade" alone does not make a line optional.
+- **Optional alternative:** the source explicitly offers a choice ("or", "optional", "store-bought"). The line is kept as written, the link is kept as an alternative, nothing is fetched, and nothing homemade is forced. *(Plan review 2026-10-02, owner decision 5: the line becomes an `alternative` component that owns that one line and keeps ≥1 same-site link; it is not counted in the notice.)* "Homemade" alone does not make a line optional.
 - **Required component, expandable** only when all of these hold:
   - exactly one linked child on the line;
   - the amount is an explicit `1 batch` (or `1 recipe`);
@@ -107,8 +107,9 @@ An ingredient is never silently omitted.
   - a modified amount;
   - an incomplete child;
   - a fetch failure.
+- **Fetch planning (plan review 2026-10-02):** only targets with at least one 1x, unmodified, depth-0 use are fetched, in document order, at most 3; a 4th becomes unresolved ("too many components"). Unresolved components take their title from the anchor text, else the line text; an expanded component takes the child's `name`, and a child with no `name` counts as incomplete.
 - **Multiple uses of the same child:** one fetch, but each ingredient occurrence is resolved separately. A 1x use expands; a ½ use stays unresolved. Uses are never collapsed.
-- **Purchased alternatives in notes:** a note that mentions the component and offers a purchased alternative is kept as an alternative on that component, and the default relationship stays.
+- **Purchased alternatives in notes:** a note that mentions the component and offers a purchased alternative is kept as an alternative on that component, and the default relationship stays. *(Plan review 2026-10-02, owner decision 5: notes-only purchased alternatives are not imported; the default relationship still stays.)*
 
 **Expansion.** The parent placeholder line is replaced, in place, by the child's lines. Each child line records its source URL, component and scale, and the placeholder text is stored on the component (§5). The child's instructions become a separate titled section.
 
@@ -119,7 +120,7 @@ This assumes Open decision 2's recommended option: recipe-owned component metada
 **Domain.** In `rust/crates/food-domain/src/recipe.rs`:
 - New type:
   ```rust
-  pub struct RecipeComponent { position: u32, title: String, source_url: Option<String>, scale: Option<Rational>, replaced_text: String, status: ComponentStatus /* Expanded | Unresolved */, links: Vec<String>, instructions: String }
+  pub struct RecipeComponent { position: u32, title: String, source_url: Option<String>, scale: Option<Rational>, replaced_text: String, status: ComponentStatus /* Expanded | Unresolved | Alternative */, links: Vec<String>, instructions: String }
   ```
 - `Recipe` (`:663`) gains `components: Vec<RecipeComponent>`.
 - `IngredientLine` (`:592`) gains `component: Option<u32>`, holding the position of a component. `None` means main.
@@ -178,7 +179,7 @@ start(url) ──► fetch_page(url) ─► FetchedPage{final_url, html} | Fetch
 review (Dart, in memory) ─► user edits ─► save_recipe(RecipeDto)  [existing atomic save]
 ```
 
-- **FRB surface:** `import_recipe_from_url(url: String) -> Result<ImportDraftDto, ImportErrorDto>`. It runs on the FRB worker, and a cancellation token is checked between stages. `resolve` is pure: it does no I/O and is unit-tested with fixtures.
+- **FRB surface:** `import_recipe_from_url(url: String) -> Result<ImportDraftDto, ImportErrorDto>`. It runs on the FRB worker. *(Implementation plan 2026-10-02: the signature is `import_recipe_from_url(household_id, url) -> Result<ImportResultDto, KimattaError>`, and there is no Rust cancellation token. Dart drops stale results with a generation counter, and every fetch is bounded by one deadline across its redirect hops plus a DNS timeout.)* `resolve` is pure: it does no I/O and is unit-tested with fixtures.
 - **What the draft carries:**
   - `provenance.kind = "imported"`. `ProvenanceKind::Imported` exists (`recipe.rs:190`), and no code creates it yet.
   - `source_url`, `source_name` and `source_author`.
@@ -216,6 +217,8 @@ Duplicate behavior follows Open decision 3. Under the recommendation, Kimatta op
 | Not HTML, too large, malformed | "This page isn't a recipe Kimatta can read." |
 | No Recipe JSON-LD | Same as above, plus "You can still add it by hand" → blank form with `source_url` prefilled |
 | Child fetch fails | Main draft continues; component unresolved (§7) |
+| 404, 410, other 4xx (plan review 2026-10-02) | Same as "Not HTML, too large, malformed" |
+| 5xx (plan review 2026-10-02) | Same as offline: "the site can't be reached", Retry |
 
 ## 9. Tests and acceptance
 

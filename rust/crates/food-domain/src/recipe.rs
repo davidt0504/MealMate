@@ -35,6 +35,10 @@ pub enum RecipeError {
     ZeroPrepMinutes,
     #[error("unknown store category {0:?}")]
     UnknownStoreCategory(String),
+    #[error("invalid recipe component: {0}")]
+    InvalidComponent(&'static str),
+    #[error("unknown component status {0:?}")]
+    UnknownComponentStatus(String),
 }
 
 // Own copy of `household-core`'s macro: it is private there, and exporting a macro across
@@ -597,6 +601,9 @@ pub struct IngredientLine {
     unit: Unit,
     preparation: Option<String>,
     optional: bool,
+    /// Position of the `RecipeComponent` this line belongs to; `None` is the main recipe.
+    /// Set only through `Recipe::with_components`, so it always names a real component.
+    component: Option<u32>,
 }
 
 impl IngredientLine {
@@ -627,6 +634,7 @@ impl IngredientLine {
                 .map(|p| non_blank(p, "preparation"))
                 .transpose()?,
             optional,
+            component: None,
         })
     }
 
@@ -657,6 +665,157 @@ impl IngredientLine {
     pub fn optional(&self) -> bool {
         self.optional
     }
+
+    pub fn component(&self) -> Option<u32> {
+        self.component
+    }
+}
+
+/// How an imported sub-recipe ended up (OPT-001 owner decisions 2 and 5).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ComponentStatus {
+    /// The child's lines replaced the placeholder line; owns at least one line.
+    Expanded,
+    /// Could not be added safely; owns exactly its one original line.
+    Unresolved,
+    /// The source offered a linked homemade alternative; owns its one line, keeps the links.
+    Alternative,
+}
+
+impl ComponentStatus {
+    pub const ALL: [Self; 3] = [Self::Expanded, Self::Unresolved, Self::Alternative];
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Expanded => "expanded",
+            Self::Unresolved => "unresolved",
+            Self::Alternative => "alternative",
+        }
+    }
+
+    pub fn parse(raw: &str) -> Result<Self, RecipeError> {
+        Self::ALL
+            .into_iter()
+            .find(|status| status.as_str() == raw)
+            .ok_or_else(|| RecipeError::UnknownComponentStatus(raw.to_owned()))
+    }
+}
+
+/// Recipe-owned sub-recipe metadata: boundaries, source and scale are kept for later
+/// changes, with no link to any other recipe (no synchronisation, OPT-001 decision 2).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RecipeComponent {
+    position: u32,
+    title: String,
+    source_url: Option<String>,
+    scale: Option<Rational>,
+    replaced_text: String,
+    status: ComponentStatus,
+    links: Vec<String>,
+    instructions: String,
+}
+
+impl RecipeComponent {
+    #[allow(clippy::too_many_arguments)]
+    pub fn new(
+        position: u32,
+        title: impl Into<String>,
+        source_url: Option<String>,
+        scale: Option<Rational>,
+        replaced_text: impl Into<String>,
+        status: ComponentStatus,
+        links: Vec<String>,
+        instructions: impl Into<String>,
+    ) -> Result<Self, RecipeError> {
+        Ok(Self {
+            position,
+            title: non_blank(title.into(), "component title")?,
+            source_url: source_url
+                .map(|u| non_blank(u, "component source_url"))
+                .transpose()?,
+            scale,
+            replaced_text: non_blank(replaced_text.into(), "component replaced_text")?,
+            status,
+            links,
+            instructions: instructions.into(),
+        })
+    }
+
+    pub fn position(&self) -> u32 {
+        self.position
+    }
+
+    pub fn title(&self) -> &str {
+        &self.title
+    }
+
+    pub fn source_url(&self) -> Option<&str> {
+        self.source_url.as_deref()
+    }
+
+    pub fn scale(&self) -> Option<Rational> {
+        self.scale
+    }
+
+    pub fn replaced_text(&self) -> &str {
+        &self.replaced_text
+    }
+
+    pub fn status(&self) -> ComponentStatus {
+        self.status
+    }
+
+    pub fn links(&self) -> &[String] {
+        &self.links
+    }
+
+    pub fn instructions(&self) -> &str {
+        &self.instructions
+    }
+}
+
+/// The component invariants, shared by `Recipe::new` (no components) and `with_components`.
+fn validate_components(
+    lines: &[IngredientLine],
+    components: &[RecipeComponent],
+) -> Result<(), RecipeError> {
+    let mut positions: Vec<u32> = components.iter().map(RecipeComponent::position).collect();
+    positions.sort_unstable();
+    if positions.windows(2).any(|w| w[0] == w[1]) {
+        return Err(RecipeError::InvalidComponent(
+            "duplicate component position",
+        ));
+    }
+    if lines
+        .iter()
+        .filter_map(IngredientLine::component)
+        .any(|c| positions.binary_search(&c).is_err())
+    {
+        return Err(RecipeError::InvalidComponent(
+            "a line names a component that does not exist",
+        ));
+    }
+    for component in components {
+        let owned = lines
+            .iter()
+            .filter(|l| l.component == Some(component.position))
+            .count();
+        let ok = match component.status {
+            ComponentStatus::Expanded => owned >= 1,
+            ComponentStatus::Unresolved => owned == 1,
+            ComponentStatus::Alternative => owned == 1 && !component.links.is_empty(),
+        };
+        if !ok {
+            return Err(RecipeError::InvalidComponent(match component.status {
+                ComponentStatus::Expanded => "an expanded component must own at least one line",
+                ComponentStatus::Unresolved => "an unresolved component must own exactly one line",
+                ComponentStatus::Alternative => {
+                    "an alternative component must own exactly one line and keep a link"
+                }
+            }));
+        }
+    }
+    Ok(())
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -669,6 +828,7 @@ pub struct Recipe {
     instructions: String,
     lines: Vec<IngredientLine>,
     provenance: RecipeProvenance,
+    components: Vec<RecipeComponent>,
 }
 
 impl Recipe {
@@ -700,6 +860,7 @@ impl Recipe {
         if prep_minutes == Some(0) {
             return Err(RecipeError::ZeroPrepMinutes);
         }
+        validate_components(&lines, &[])?;
         Ok(Self {
             id,
             household_id,
@@ -709,7 +870,29 @@ impl Recipe {
             instructions: instructions.into(),
             lines,
             provenance,
+            components: Vec::new(),
         })
+    }
+
+    /// Attaches sub-recipe components; `line_components[i]` is line `i`'s component. A
+    /// builder rather than a ninth `new` argument so the existing call sites stay untouched,
+    /// and assignment plus validation happen in one step so no invalid `Recipe` escapes.
+    pub fn with_components(
+        mut self,
+        components: Vec<RecipeComponent>,
+        line_components: &[Option<u32>],
+    ) -> Result<Self, RecipeError> {
+        if line_components.len() != self.lines.len() {
+            return Err(RecipeError::InvalidComponent(
+                "one component slot is needed per line",
+            ));
+        }
+        for (line, component) in self.lines.iter_mut().zip(line_components) {
+            line.component = *component;
+        }
+        validate_components(&self.lines, &components)?;
+        self.components = components;
+        Ok(self)
     }
 
     pub fn id(&self) -> &RecipeId {
@@ -743,6 +926,10 @@ impl Recipe {
     pub fn provenance(&self) -> &RecipeProvenance {
         &self.provenance
     }
+
+    pub fn components(&self) -> &[RecipeComponent] {
+        &self.components
+    }
 }
 
 #[cfg(test)]
@@ -774,6 +961,201 @@ mod tests {
             false,
         )
         .unwrap()
+    }
+
+    // --- OPT-001: recipe components ---------------------------------------------------------
+
+    fn component(position: u32, status: ComponentStatus, links: &[&str]) -> RecipeComponent {
+        RecipeComponent::new(
+            position,
+            "Lemon yogurt sauce",
+            Some("https://example.com/sauce".into()),
+            Some(r(1, 1)),
+            "1 batch Lemon yogurt sauce",
+            status,
+            links.iter().map(|l| (*l).to_owned()).collect(),
+            "Mix.",
+        )
+        .unwrap()
+    }
+
+    fn base_recipe(lines: Vec<IngredientLine>) -> Recipe {
+        Recipe::new(
+            RecipeId::new("r-1").unwrap(),
+            hid("h-1"),
+            "Shawarma",
+            None,
+            None,
+            "",
+            lines,
+            provenance(),
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn a_recipe_holds_one_component_of_each_kind() {
+        let recipe = base_recipe(vec![
+            line("1 cup yogurt", "yogurt"),
+            line("1 lemon", "lemon"),
+            line("1/2 batch Green sauce", "Green sauce"),
+            line("1 cup pesto (or homemade)", "pesto"),
+            line("2 eggs", "eggs"),
+        ])
+        .with_components(
+            vec![
+                component(0, ComponentStatus::Expanded, &[]),
+                component(
+                    1,
+                    ComponentStatus::Unresolved,
+                    &["https://example.com/green"],
+                ),
+                component(
+                    2,
+                    ComponentStatus::Alternative,
+                    &["https://example.com/pesto"],
+                ),
+            ],
+            &[Some(0), Some(0), Some(1), Some(2), None],
+        )
+        .unwrap();
+        assert_eq!(recipe.components().len(), 3);
+        let owners: Vec<_> = recipe
+            .lines()
+            .iter()
+            .map(IngredientLine::component)
+            .collect();
+        assert_eq!(owners, [Some(0), Some(0), Some(1), Some(2), None]);
+        assert_eq!(
+            recipe.components()[1].links(),
+            ["https://example.com/green"]
+        );
+    }
+
+    #[test]
+    fn a_recipe_without_components_is_unchanged() {
+        // Expected-to-pass pin: existing recipes carry no components and no line owners.
+        let recipe = base_recipe(vec![line("2 eggs", "eggs")]);
+        assert!(recipe.components().is_empty());
+        assert_eq!(recipe.lines()[0].component(), None);
+        let same = recipe.clone().with_components(vec![], &[None]).unwrap();
+        assert_eq!(same, recipe);
+    }
+
+    #[test]
+    fn component_status_round_trips_and_rejects_unknown() {
+        for status in ComponentStatus::ALL {
+            assert_eq!(ComponentStatus::parse(status.as_str()).unwrap(), status);
+        }
+        assert_eq!(
+            ComponentStatus::parse("Expanded").unwrap_err(),
+            RecipeError::UnknownComponentStatus("Expanded".into())
+        );
+    }
+
+    #[test]
+    fn invalid_component_sets_are_rejected() {
+        let two = || vec![line("1 cup yogurt", "yogurt"), line("1 lemon", "lemon")];
+        let msg = |e: RecipeError| e.to_string();
+        // (components, each line's owner, expected error text)
+        type Case = (Vec<RecipeComponent>, Vec<Option<u32>>, &'static str);
+        let cases: Vec<Case> = vec![
+            (vec![], vec![Some(0), None], "does not exist"),
+            (
+                vec![component(
+                    0,
+                    ComponentStatus::Unresolved,
+                    &["https://x.test/a"],
+                )],
+                vec![Some(0), Some(0)],
+                "unresolved component must own exactly one line",
+            ),
+            (
+                vec![component(0, ComponentStatus::Expanded, &[])],
+                vec![None, None],
+                "expanded component must own at least one line",
+            ),
+            (
+                vec![
+                    component(0, ComponentStatus::Expanded, &[]),
+                    component(0, ComponentStatus::Expanded, &[]),
+                ],
+                vec![Some(0), Some(0)],
+                "duplicate component position",
+            ),
+            (
+                vec![component(0, ComponentStatus::Alternative, &[])],
+                vec![Some(0), None],
+                "alternative component must own exactly one line and keep a link",
+            ),
+            (vec![], vec![None], "one component slot is needed per line"),
+        ];
+        assert!(!cases.is_empty());
+        for (components, owners, expected) in cases {
+            let err = base_recipe(two())
+                .with_components(components, &owners)
+                .unwrap_err();
+            let text = msg(err);
+            assert!(text.contains(expected), "{text} vs {expected}");
+        }
+    }
+
+    #[test]
+    fn component_fields_reject_blank_text() {
+        let blank_title = RecipeComponent::new(
+            0,
+            " ",
+            None,
+            None,
+            "1 batch sauce",
+            ComponentStatus::Expanded,
+            vec![],
+            "",
+        );
+        assert_eq!(
+            blank_title.unwrap_err(),
+            RecipeError::Empty {
+                field: "component title"
+            }
+        );
+        let blank_replaced = RecipeComponent::new(
+            0,
+            "Sauce",
+            None,
+            None,
+            "\t",
+            ComponentStatus::Expanded,
+            vec![],
+            "",
+        );
+        assert_eq!(
+            blank_replaced.unwrap_err(),
+            RecipeError::Empty {
+                field: "component replaced_text"
+            }
+        );
+    }
+
+    #[test]
+    fn lines_carrying_components_cannot_bypass_with_components() {
+        let with = base_recipe(vec![line("1 cup yogurt", "yogurt")])
+            .with_components(
+                vec![component(0, ComponentStatus::Expanded, &[])],
+                &[Some(0)],
+            )
+            .unwrap();
+        let err = Recipe::new(
+            RecipeId::new("r-2").unwrap(),
+            hid("h-1"),
+            "Copy",
+            None,
+            None,
+            "",
+            with.lines().to_vec(),
+            provenance(),
+        )
+        .unwrap_err();
+        assert!(matches!(err, RecipeError::InvalidComponent(_)));
     }
 
     // --- Step 1: ids, Ingredient, CustomIngredient, RecipeProvenance ---------------------

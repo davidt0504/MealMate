@@ -14,6 +14,7 @@ import 'api/planner.dart';
 import 'api/planning.dart';
 import 'api/planning_drafts.dart';
 import 'api/recipe.dart';
+import 'api/recipe_import.dart';
 import 'api/restrictions.dart';
 import 'api/shopping.dart';
 import 'api/starter.dart';
@@ -91,6 +92,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   DraftViewDto dco_decode_box_autoadd_draft_view_dto(dynamic raw);
+
+  @protected
+  ExistingRecipeDto dco_decode_box_autoadd_existing_recipe_dto(dynamic raw);
 
   @protected
   ExperimentEventDto dco_decode_box_autoadd_experiment_event_dto(dynamic raw);
@@ -200,6 +204,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   DraftViewDto dco_decode_draft_view_dto(dynamic raw);
 
   @protected
+  ExistingRecipeDto dco_decode_existing_recipe_dto(dynamic raw);
+
+  @protected
   ExperimentEventDto dco_decode_experiment_event_dto(dynamic raw);
 
   @protected
@@ -231,6 +238,15 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   PlatformInt64 dco_decode_i_64(dynamic raw);
+
+  @protected
+  ImportDraftDto dco_decode_import_draft_dto(dynamic raw);
+
+  @protected
+  ImportErrorKind dco_decode_import_error_kind(dynamic raw);
+
+  @protected
+  ImportResultDto dco_decode_import_result_dto(dynamic raw);
 
   @protected
   IngredientLineDto dco_decode_ingredient_line_dto(dynamic raw);
@@ -273,6 +289,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   List<ExpiredDraftDto> dco_decode_list_expired_draft_dto(dynamic raw);
 
   @protected
+  List<ImportDraftDto> dco_decode_list_import_draft_dto(dynamic raw);
+
+  @protected
   List<IngredientLineDto> dco_decode_list_ingredient_line_dto(dynamic raw);
 
   @protected
@@ -300,10 +319,16 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   Int64List dco_decode_list_prim_i_64_strict(dynamic raw);
 
   @protected
+  Uint32List dco_decode_list_prim_u_32_strict(dynamic raw);
+
+  @protected
   Uint8List dco_decode_list_prim_u_8_strict(dynamic raw);
 
   @protected
   List<ProposedMealDto> dco_decode_list_proposed_meal_dto(dynamic raw);
+
+  @protected
+  List<RecipeComponentDto> dco_decode_list_recipe_component_dto(dynamic raw);
 
   @protected
   List<RecipeSummaryDto> dco_decode_list_recipe_summary_dto(dynamic raw);
@@ -385,6 +410,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   DraftViewDto? dco_decode_opt_box_autoadd_draft_view_dto(dynamic raw);
 
   @protected
+  ExistingRecipeDto? dco_decode_opt_box_autoadd_existing_recipe_dto(
+    dynamic raw,
+  );
+
+  @protected
   IngredientRefDto? dco_decode_opt_box_autoadd_ingredient_ref_dto(dynamic raw);
 
   @protected
@@ -446,6 +476,9 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   QuantityDto dco_decode_quantity_dto(dynamic raw);
+
+  @protected
+  RecipeComponentDto dco_decode_recipe_component_dto(dynamic raw);
 
   @protected
   RecipeDto dco_decode_recipe_dto(dynamic raw);
@@ -624,6 +657,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  ExistingRecipeDto sse_decode_box_autoadd_existing_recipe_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   ExperimentEventDto sse_decode_box_autoadd_experiment_event_dto(
     SseDeserializer deserializer,
   );
@@ -757,6 +795,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   DraftViewDto sse_decode_draft_view_dto(SseDeserializer deserializer);
 
   @protected
+  ExistingRecipeDto sse_decode_existing_recipe_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   ExperimentEventDto sse_decode_experiment_event_dto(
     SseDeserializer deserializer,
   );
@@ -798,6 +841,15 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   PlatformInt64 sse_decode_i_64(SseDeserializer deserializer);
+
+  @protected
+  ImportDraftDto sse_decode_import_draft_dto(SseDeserializer deserializer);
+
+  @protected
+  ImportErrorKind sse_decode_import_error_kind(SseDeserializer deserializer);
+
+  @protected
+  ImportResultDto sse_decode_import_result_dto(SseDeserializer deserializer);
 
   @protected
   IngredientLineDto sse_decode_ingredient_line_dto(
@@ -858,6 +910,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  List<ImportDraftDto> sse_decode_list_import_draft_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   List<IngredientLineDto> sse_decode_list_ingredient_line_dto(
     SseDeserializer deserializer,
   );
@@ -897,10 +954,18 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   Int64List sse_decode_list_prim_i_64_strict(SseDeserializer deserializer);
 
   @protected
+  Uint32List sse_decode_list_prim_u_32_strict(SseDeserializer deserializer);
+
+  @protected
   Uint8List sse_decode_list_prim_u_8_strict(SseDeserializer deserializer);
 
   @protected
   List<ProposedMealDto> sse_decode_list_proposed_meal_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
+  List<RecipeComponentDto> sse_decode_list_recipe_component_dto(
     SseDeserializer deserializer,
   );
 
@@ -1008,6 +1073,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  ExistingRecipeDto? sse_decode_opt_box_autoadd_existing_recipe_dto(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   IngredientRefDto? sse_decode_opt_box_autoadd_ingredient_ref_dto(
     SseDeserializer deserializer,
   );
@@ -1089,6 +1159,11 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   QuantityDto sse_decode_quantity_dto(SseDeserializer deserializer);
+
+  @protected
+  RecipeComponentDto sse_decode_recipe_component_dto(
+    SseDeserializer deserializer,
+  );
 
   @protected
   RecipeDto sse_decode_recipe_dto(SseDeserializer deserializer);
@@ -1305,6 +1380,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_box_autoadd_existing_recipe_dto(
+    ExistingRecipeDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_box_autoadd_experiment_event_dto(
     ExperimentEventDto self,
     SseSerializer serializer,
@@ -1479,6 +1560,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   void sse_encode_draft_view_dto(DraftViewDto self, SseSerializer serializer);
 
   @protected
+  void sse_encode_existing_recipe_dto(
+    ExistingRecipeDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_experiment_event_dto(
     ExperimentEventDto self,
     SseSerializer serializer,
@@ -1528,6 +1615,24 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_i_64(PlatformInt64 self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_import_draft_dto(
+    ImportDraftDto self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_import_error_kind(
+    ImportErrorKind self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_import_result_dto(
+    ImportResultDto self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_ingredient_line_dto(
@@ -1602,6 +1707,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_list_import_draft_dto(
+    List<ImportDraftDto> self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_list_ingredient_line_dto(
     List<IngredientLineDto> self,
     SseSerializer serializer,
@@ -1656,6 +1767,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_list_prim_u_32_strict(
+    Uint32List self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_list_prim_u_8_strict(
     Uint8List self,
     SseSerializer serializer,
@@ -1664,6 +1781,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void sse_encode_list_proposed_meal_dto(
     List<ProposedMealDto> self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_list_recipe_component_dto(
+    List<RecipeComponentDto> self,
     SseSerializer serializer,
   );
 
@@ -1794,6 +1917,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_opt_box_autoadd_existing_recipe_dto(
+    ExistingRecipeDto? self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_opt_box_autoadd_ingredient_ref_dto(
     IngredientRefDto? self,
     SseSerializer serializer,
@@ -1906,6 +2035,12 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   void sse_encode_quantity_dto(QuantityDto self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_recipe_component_dto(
+    RecipeComponentDto self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_recipe_dto(RecipeDto self, SseSerializer serializer);
