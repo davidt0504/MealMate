@@ -423,3 +423,61 @@ Full review: ~/.claude/reviews/redteam-impl-handoff-orch-39-2026-09-03T0012-89d3
 - **Failed `pre_journal` removal mispairs the kept generation** (`rust/src/api/health.rs:136`) -- the `exists` branch renames `db_path` onto `pre` before removing `{pre}-journal`; a non-`NotFound` failure there leaves generation N's database beside generation N-1's journal, which `recover_original`'s unconditional put-back (line 183) then moves next to the restored database (R0). Fix: remove `{pre}-journal` before the rename, so a failure aborts with nothing moved.
   Full review: ~/.claude/reviews/redteam-impl-handoff-orch-39-2026-09-03T0012-89d3.md
   **Status:** RESOLVED 2026-09-03 -- not by that reorder, which plan review showed destroys the kept generation's journal when the rename then fails. Instead each `{pre}` sidecar is replaced-or-removed *after* the rename (its database is gone by then), and `recover_original` puts back only the sidecars this restore moved, so a foreign journal cannot reach the restored original; pinned by `a_foreign_pre_journal_is_not_carried_back_to_the_original`.
+
+## Archived 2026-09-27
+
+### master -- 2026-09-06
+
+Source: /home/davidlinux/.claude/reviews/impl-handoff-mvp032-owner-recipes-2026-09-06T1644-18f1.md
+Full review: /home/davidlinux/.claude/reviews/redteam-mvp032-owner-recipes-2026-09-06T1653-4415.md
+
+#### LOW
+
+- **Four orphan catalog ids left by the two dropped federal recipes still seed every device** (`docs/research/MVP-032_STARTER_PROVENANCE_MANIFEST.json`) -- `ing-turkey`, `ing-marjoram`, `ing-tarragon` and `ing-red-beans` are referenced by no authored entry; they trace to Homemade Turkey Soup and New Orleans Red Beans, dropped at the 2026-09-06 roster review. The catalog is never filtered, so all four install and sit as unusable rows on the eager Pantry list. `every_catalog_reference_resolves` only checks the forward direction. Fix: delete the four entries and add the reverse assertion beside it, so the next content drop cannot leave the same residue.
+  Full review: /home/davidlinux/.claude/reviews/redteam-mvp032-owner-recipes-2026-09-06T1653-4415.md
+  **Status:** RESOLVED 2026-09-06 -- the four entries are deleted (catalog 164 -> 160) and the
+  reverse assertion `every_catalog_id_is_referenced_by_some_entry` is in `starter.rs` beside
+  `every_catalog_reference_resolves`. It runs over `all_starter_content()` on purpose: against the
+  shipped subset it would fail on the eight ids the ten unshipped Kimatta entries legitimately
+  hold, which are noted under the `MVP-011` AC-3 entry in `KNOWN_ISSUES.md` instead.
+
+- **`okStarterReport`'s values and its docstring describe three different rosters** (`test/app_test.dart:47`) -- the fixture says `installed: 24, catalogInstalled: 131`, its docstring claims "the 131-entry catalog seeds and the 24 federal entries install", and the new library-invalidation test at `:5376` says it "models 26"; the shipped roster is 49 recipes and 164 catalog entries. Only `pendingCookReview: 10` is current. The widget logic reads the fields as `> 0`, so nothing fails and the drift repeats at `MVP-033`. Fix: set 49/164/49/10 and correct both docstrings, or drop the counts from the prose.
+  Full review: /home/davidlinux/.claude/reviews/redteam-mvp032-owner-recipes-2026-09-06T1653-4415.md
+  **Status:** RESOLVED 2026-09-06 -- fixture set to 49 / 160 / 49 / 10 and both docstrings rewritten
+  to say what the numbers are, including the `models 26` claim at `test/app_test.dart:5378`.
+  **Revised 2026-09-09 (D-043):** rights quarantine leaves a 31 / 125 / 31 / 10 first-install
+  fixture (six cleared federal + 25 owner recipes); the test fixture and its prose were updated.
+
+## Archived 2026-10-04
+
+### master -- 2026-09-15
+
+Source: /home/davidlinux/.claude/reviews/impl-handoff-fix-001-beta-feedback-fixes-2026-09-15T0935-d846.md
+Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-fix-001-beta-feedback-fixes-2026-09-15t0935-d846-2026-09-15T0946-49c0.md
+
+#### LOW
+
+- **Row menu actions ignore the per-key busy guard that swipe and checkbox honour** (`lib/features/shopping/shopping_screen.dart:582`) -- `onSelected` runs while the row's write is in flight; a Skip during a pending check writes the pre-check state and can overwrite the check. Fix: `enabled: !busy` on the `PopupMenuButton`.
+  Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-fix-001-beta-feedback-fixes-2026-09-15t0935-d846-2026-09-15T0946-49c0.md
+  **Status:** RESOLVED 2026-09-15 -- the row `PopupMenuButton` now takes `enabled: !busy`, so the explain sheet it opens is gated too; pinned by `the line menu is disabled while that row's write is in flight` (`test/app_test.dart`).
+
+- **No test covers Accept returning after a later decision** (`lib/features/planning/cover_screen.dart:87`) -- `showAccept` keys on `outcome.applied`; no test pins true→false after a swap/veto, so a regression hiding Accept on a changed unwritten plan would pass. Fix: widget test accept → decide → Accept visible, confirmation gone.
+  Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-fix-001-beta-feedback-fixes-2026-09-15t0935-d846-2026-09-15T0946-49c0.md
+  **Status:** RESOLVED 2026-09-15 -- pinned by `a decision after accept brings Accept back and drops the confirmation` (`test/app_test.dart`), which passed on first run: no production change was needed.
+
+## Archived 2026-10-11
+
+### feature/opt-006 -- 2026-09-26 (skip-uniformity handoff redteam)
+
+Source: /home/davidlinux/.claude/reviews/impl-handoff-feature-opt-006-skip-uniformity-2026-09-26T1142-3a2d.md
+Full review: /home/davidlinux/.claude/reviews/redteam-opt-006-skip-uniformity-2026-09-26T1201-864e.md
+
+#### LOW
+
+- **The four blank-name/blank-id list tests assert over an empty `missing_category` vector** (`rust/crates/kimatta-storage/src/lib.rs:9851`, `:9874`, `:9897`, `:9923`) -- `seed_for_shopping` seeds only `c-h`, whose helper hard-codes `store_category: "pantry"`, so `list_custom_ingredients_missing_category` returns `[]` and every `missing.iter().all(...)` passes vacuously; a read that returned nothing unconditionally would leave all four green. Distinct from the marked/flagged entry above (different reads, different lines). Fix: seed one valid uncategorised sibling and assert `missing` contains exactly it.
+  Full review: /home/davidlinux/.claude/reviews/redteam-opt-006-skip-uniformity-2026-09-26T1201-864e.md
+  **Status:** RESOLVED 2026-09-26 -- each test seeds a valid uncategorised sibling (`c-legacy`) and asserts `missing` equals exactly it; a mutant returning `[]` fails all four.
+
+- **`SHOPPING_ALGORITHM_VERSION` 3 records no derivation rule row** (`rust/crates/food-domain/src/shopping.rs:18`) -- OPT-006's Scope requires the OPT-003 rule table be extended alongside any bump; the bump landed, the row did not, so nothing records which rule changed at 3. No runtime effect: the shopping version is never persisted and every assertion now reads the constant. Fix: one row saying a synthesized restock line's `status` follows the pantry mark from version 3.
+  Full review: /home/davidlinux/.claude/reviews/redteam-opt-006-skip-uniformity-2026-09-26T1201-864e.md
+  **Status:** RESOLVED 2026-09-26 -- recorded as the gate-1 "Amended 2026-09-26" paragraph in `docs/task/optional/OPT-006_PANTRY_REDESIGN.md`.

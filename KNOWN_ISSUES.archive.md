@@ -138,3 +138,24 @@ Full review: ~/.claude/reviews/redteam-impl-handoff-orch-39-2026-09-03T0012-89d3
 - **No guard against two concurrent restores sharing one staging path** (`rust/src/api/health.rs:71`) -- `{db_path}.restore-staging` is a fixed path and everything before `db::swap` runs outside the `DB` mutex, so a double tap on Restore (the button is never disabled in flight) lets one call's `fs::copy` truncate a staged file another call already verified and is about to commit. Fix: unique per-call staging name, or hold the mutex for all of `restore_database`.
   Full review: ~/.claude/reviews/redteam-impl-handoff-orch-39-2026-09-03T0012-89d3.md
   **Status:** RESOLVED 2026-09-03 -- the whole of `restore_database` runs inside `crate::db::swap`, and both destructive buttons are disabled while an operation is in flight (`BackupBusy`): serialising alone would still let a second confirmed restore overwrite the single kept generation with the first restore's result.
+
+## Archived 2026-10-04
+
+### orch/31 -- 2026-08-29
+
+Full review: `~/.claude/reviews/redteam-impl-handoff-orch-31-2026-08-29T2331-d2ca.md`
+
+#### MEDIUM
+
+- **A pantry mark re-applied after being removed does not re-hide a line the user previously restored** (`lib/features/shopping/shopping_screen.dart:161`, cf. `lib/features/shopping/shopping_copy.dart:175`) -- residual of the `restored`-flag finding fixed in the same pass. `_setLine` now clamps `restored` to `false` unless the line's status is `omittedPantryMarked`, so an inert flag is dropped by the next write to that line; but the sequence *Add anyway → unmark the ingredient in Pantry → re-mark it* performs no line-state write between the unmark and the re-mark, so the clamp never fires and the stored `restored: true` still routes the line to **To buy** via `sectionFor`. The user sees a pantry mark that appears to have had no effect; the explain sheet's "Back to pantry" does render in that state and clears it. Closing it properly needs the pantry write path to clear `restored` for the ingredient's `m:` line keys — a cross-feature write into `shopping_line_state` coupled to the MVP-015 key format, on a card already approved Done — or a mark-generation stamp on the overlay row. It is also a defensible product reading that "Add anyway" is a durable statement of intent that a later mark should not silently overturn; that question should be settled before either implementation. Full review: `~/.claude/reviews/redteam-impl-handoff-orch-31-2026-08-29T2331-d2ca.md`
+  **Status:** RESOLVED 2026-09-13 (FIX-001 item 2) — AC-2 settled the product reading: "Add anyway" holds against the mark it overrode, and a newly set mark re-hides. `set_pantry_mark_in` (`rust/crates/kimatta-storage/src/lib.rs`) now clears `restored` on the identity's `m:` overlay rows in every window whenever a mark is newly set, using `food_domain::line_key_prefix`, which `GroupKey::line_key` also builds from. Known limit: overflow-fallback `s:` lines carry no identity in their key and are not cleared.
+
+### master -- 2026-09-15
+
+Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-master-2026-09-15t0923-9f58-2026-09-15T0937-445b.md
+
+#### MEDIUM
+
+- **CI APK signing root cause unresolved; diagnostic in place** (`.github/workflows/release-apk.yml:96`) -- run 34869565167 signed with `3e98ef16…` instead of the pinned `f0d66349…`. The secret was re-issued from the local key as `SIGNING_KEYSTORE_B64`, and the install step now checks its fingerprint and prints `ANDROID_*`. If the verify step still fails, AGP reads another keystore location. The first green build must show `publish` skipped before `PUBLISH_APK` is set.
+  Full review: /home/davidlinux/.claude/reviews/redteam-impl-handoff-master-2026-09-15t0923-9f58-2026-09-15T0937-445b.md
+  **Status:** RESOLVED 2026-09-15 — root cause was the template default `signingConfig = signingConfigs.getByName("debug")` in `android/app/build.gradle.kts`: AGP resolves the debug keystore on its own search path and silently generates one where it finds none, which is also why v1.0.0–v1.0.3 each shipped under a different certificate. Release now uses an explicit `signingConfigs.create("release")` fed by `android/key.properties` locally and `MEALMATE_*` environment variables in CI, with the keystore decoded into `$RUNNER_TEMP` rather than `~/.android`, so no search path and no generated key remain. The project moved to a dedicated release keystore; the expected digest is the `SIGNING_CERT_SHA256` repository variable.

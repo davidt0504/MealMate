@@ -59,7 +59,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .map_err(Into::into)
         })
         .collect::<Result<_, Box<dyn std::error::Error>>>()?;
+    // `install_starter_content` is a latest-schema writer: since migration 17 it clears and
+    // writes `recipe_component` and `component_position`, which a v12 database lacks. The two
+    // are added for the install and dropped again, as `save_recipe_any_version` does in the
+    // storage tests, so the device still meets the exact v12 schema.
+    conn.execute_batch(
+        "CREATE TABLE recipe_component (recipe_id TEXT, position INTEGER, title TEXT,
+             source_url TEXT, scale_numer INTEGER, scale_denom INTEGER,
+             replaced_text TEXT, status TEXT, links TEXT, instructions TEXT);
+         ALTER TABLE recipe_ingredient_line ADD COLUMN component_position INTEGER;",
+    )?;
     let report = install_starter_content(&mut conn, &household.id, &catalog, &recipes)?;
+    conn.execute_batch(
+        "DROP TABLE recipe_component;
+         ALTER TABLE recipe_ingredient_line DROP COLUMN component_position;",
+    )?;
 
     // Exactly the three things migration v13 does, undone.
     conn.execute_batch(

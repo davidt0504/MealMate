@@ -49,6 +49,28 @@ scaffold therefore carries a deliberately temporary development identity — And
 production application ID, and must replace this identity before `MVP-018`, `MVP-021`, or
 `MVP-022` binds an identifier to Firebase, App Links, signing, or Play.
 
+## GUI checks before a release
+
+```bash
+bash tools/gui_check.sh journeys   # 11 scripted user journeys on the real core, ~3-5 min
+bash tools/gui_check.sh monkey     # 3 seeds x 1500 random events on the debug app, ~3 min
+```
+
+Both run on the emulator only and refuse a phone: the journeys delete the app's database
+before each one, and monkey can tap Restore or Start fresh. Start the emulator with
+`bash tools/emulator.sh up` first. Logs land in `build/gui_check/`.
+
+- `GUI_ONLY=J4` runs one journey; `GUI_TIMEOUT` (seconds, default 2100) bounds the run.
+- `GUI_SEEDS` (default `"101 202 303"`) and `GUI_EVENTS` (default 1500) shape monkey; a
+  failing seed is printed so the run can be repeated with `GUI_SEEDS=<seed>`.
+- A journey that finds a real app bug is not loosened to pass. The bug gets a
+  `KNOWN_ISSUES.md` entry and the journey a `ki: '<entry title>'` argument, which skips it
+  and is counted as a skip in the verdict.
+
+After `journeys`, `app-debug.apk` and the emulator both hold the test harness: opening the
+app, or `bash tools/emulator.sh seed`, runs the suite and wipes its data. Run
+`flutter build apk --debug` before using either (`monkey` does this itself).
+
 ## Installing on a phone
 
 The app is local-only — no backend, and the release manifest carries no `INTERNET`
