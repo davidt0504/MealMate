@@ -16,7 +16,7 @@
 
 set -euo pipefail
 
-ROOT=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
+ROOT=$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 APP_ID=dev.mealmate.temp
 TEST_FILE=integration_test/journeys_test.dart
 APK=build/app/outputs/flutter-apk/app-debug.apk

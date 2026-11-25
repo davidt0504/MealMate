@@ -221,7 +221,7 @@ cmd_seed() {
   port_open || { fail "bridge is down — run 'tools/emulator.sh up' first"; return 1; }
   # cwd-independent like every other command here: the APK is located from the script,
   # not from wherever the caller happens to be standing.
-  local root; root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd) \
+  local root; root=$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd) \
     || { fail "cannot resolve the repo root from ${BASH_SOURCE[0]}"; return 1; }
   local apk="$root/build/app/outputs/flutter-apk/app-debug.apk"
   [ -f "$apk" ] || { fail "no debug APK at $apk — run 'flutter build apk --debug' first"; return 1; }

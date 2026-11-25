@@ -118,7 +118,7 @@ jobs:
 
       # Stale .so = false pass, so the Rust build always precedes the tests.
       - name: Run tests
-        run: (cd rust && cargo test --workspace && cargo build --release) && flutter test
+        run: bash tools/run_tests.sh
 
       # Its own step so a formatting failure reads as one, rather than as a test failure; after
       # the tests so a cosmetic hunk never preempts a real signal, and before the build so it

@@ -17,7 +17,7 @@
 
 set -euo pipefail
 
-ROOT=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
+ROOT=$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 APP_ID=dev.mealmate.temp
 FIXTURE_NAME=v12_pre_fix001.db
 FIXTURE="$ROOT/build/ac1/$FIXTURE_NAME"

@@ -30,7 +30,7 @@
 set -euo pipefail
 
 # Guarded exactly as emulator.sh:224-225 guards the byte-identical expression.
-ROOT=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd) \
+ROOT=$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd) \
   || { printf '  FAIL  cannot resolve the repo root from %s\n' "${BASH_SOURCE[0]}" >&2; exit 1; }
 APK="$ROOT/build/app/outputs/flutter-apk/app-release.apk"
 APP_ID=dev.mealmate.temp                    # temporary applicationId pending DEC-004

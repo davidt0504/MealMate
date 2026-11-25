@@ -35,8 +35,8 @@ rustup component add --toolchain 1.98.0 rustfmt clippy
 cargo install flutter_rust_bridge_codegen --version 2.13.0 --locked
 
 flutter_rust_bridge_codegen generate       # after any change under rust/src/api
-(cd rust && cargo fmt --all --check && cargo clippy --workspace --all-targets -- -D warnings && cargo test --workspace)
-(cd rust && cargo build --release) && flutter test   # stale .so = false pass; never run alone
+(cd rust && cargo fmt --all --check && cargo clippy --workspace --all-targets -- -D warnings)
+bash tools/run_tests.sh
 flutter build apk --debug
 flutter build apk --release                # ships libkimatta_bridge.so for arm64-v8a, armeabi-v7a, x86_64
 ```
@@ -48,6 +48,15 @@ scaffold therefore carries a deliberately temporary development identity — And
 `meal_mate` — chosen so it is unmistakably disposable. `DEC-004` decides the real name and
 production application ID, and must replace this identity before `MVP-018`, `MVP-021`, or
 `MVP-022` binds an identifier to Firebase, App Links, signing, or Play.
+
+`bash tools/run_tests.sh` runs Rust workspace tests for the native host target,
+builds the release bridge under `rust/target/<host-triple>/release/`, and
+points Flutter at the rebuilt library.
+Use `bash tools/run_tests.sh test/bridge_native_test.dart` to focus the Flutter
+phase. Use `(cd rust && cargo test --workspace)` for Rust-only work. The
+emulator checks below remain a separate release check.
+`tools/run_tests.sh`-only changes are verified locally with the Rust and
+Flutter versions pinned in the APK workflow.
 
 ## GUI checks before a release
 
